@@ -18,7 +18,7 @@
 #
 # Shows how to set up a simulation of a rigid-body quadruped articulation
 # from a URDF using the newton.ModelBuilder() and render it using a
-# custom raytracer with Matplotlib.
+# custom raytracer with Pyglet.
 # Note this example does not include a trained policy.
 #
 ###########################################################################
@@ -34,7 +34,7 @@ import newton.core.articulation
 import newton.examples
 import newton.utils
 from newton.utils.raytrace import render_model_shapes
-import matplotlib.pyplot as plt
+import pyglet
 
 
 class Example:
@@ -85,12 +85,11 @@ class Example:
             #        articulation_builder.joint_target_ke[i] = 200.0
             #        articulation_builder.joint_target_kd[i] = 20.0
 
-
         # --- Main Scene Builder ---
         builder = newton.ModelBuilder()
 
         self.sim_time = 0.0
-        fps = 30
+        fps = 30  # Target FPS for simulation steps and rendering
         self.frame_dt = 1.0 / fps
         self.sim_substeps = 10
         self.sim_dt = self.frame_dt / self.sim_substeps
@@ -118,7 +117,6 @@ class Example:
             self.cam_pos_arr[2] += scene_center_offset / 2.0
             self.cam_pos_arr[1] += (grid_side_len - 1) * 0.5  # Move up a bit
 
-
         # --- Environment Instantiation ---
         offsets = newton.examples.compute_env_offsets(self.num_envs)
         for i in range(self.num_envs):
@@ -131,10 +129,17 @@ class Example:
 
         self.solver = newton.solvers.XPBDSolver(self.model)
 
-        # --- Matplotlib Setup ---
-        plt.ion()
-        self.fig, self.ax = plt.subplots()
-        self.img_display = None
+        # --- Pyglet Window Setup ---
+        self.window = pyglet.window.Window(
+            width=self.image_width,
+            height=self.image_height,
+            caption=f"Newton Quadruped Raytraced (Pyglet) - Envs: {self.num_envs}"
+        )
+        self.pyglet_image_data = None
+
+        @self.window.event
+        def on_close():
+            pyglet.app.exit()
 
         self.state_0 = self.model.state()
         self.state_1 = self.model.state()
@@ -175,20 +180,22 @@ class Example:
         self.sim_time += self.frame_dt
 
     def render(self):
-        if not plt.fignum_exists(self.fig.number):
+        if self.window.has_exit:
             return
 
         with wp.ScopedTimer("render_raytrace_frame"):
-            device_name = "cuda"
-            render_device_str = "cuda"
-            if "cuda" in device_name.lower():
+            # Determine device for raytracer (prefers CUDA if model is on CUDA)
+            render_device_str = "cpu"
+            if self.model.device.is_cuda:
                 render_device_str = "cuda"
-            elif "cpu" in device_name.lower():
-                render_device_str = "cpu"
+            elif self.model.device.is_cpu:
+                 render_device_str = "cpu"
             else:
+                # Fallback if model device is not explicitly CUDA or CPU (e.g. Taichi).
+                # Defaulting to CPU, but user might need to specify for other backends.
                 print(
-                    f"Warning: Unknown device {device_name} for raytracer, "
-                    f"defaulting to cpu"
+                    f"Warning: Model device {self.model.device} is not explicitly CUDA/CPU. "
+                    f"Raytracer defaulting to cpu. May be slow or incompatible."
                 )
 
             pixels_output_numpy = render_model_shapes(
@@ -200,20 +207,20 @@ class Example:
                 device=render_device_str
             )
 
-        with wp.ScopedTimer("render_matplotlib_update"):
-            if self.img_display is None:
-                self.img_display = self.ax.imshow(
-                    np.clip(pixels_output_numpy, 0, 1), origin="lower"
-                )
-                self.ax.set_title(
-                    f"Newton Quadruped Raytraced (Envs: {self.num_envs})"
-                )
-            else:
-                self.img_display.set_data(
-                    np.clip(pixels_output_numpy, 0, 1)
-                )
-            self.fig.canvas.draw_idle()
-            plt.pause(0.0001)
+        with wp.ScopedTimer("render_pyglet_update"):
+            pixels_uint8 = (np.clip(pixels_output_numpy, 0, 1) * 255).astype(np.uint8)
+            # Flip vertically for Pyglet (origin is bottom-left)
+            pixels_uint8_flipped = np.flipud(pixels_uint8)
+            image_data_bytes = pixels_uint8_flipped.tobytes()
+
+            self.pyglet_image_data = pyglet.image.ImageData(
+                self.image_width,
+                self.image_height,
+                'RGB',  # Raytracer produces RGB
+                image_data_bytes,
+                pitch=self.image_width * 3  # Bytes per row
+            )
+            # Drawing is handled in the main loop's on_draw or direct draw call
 
 
 if __name__ == "__main__":
@@ -243,20 +250,46 @@ if __name__ == "__main__":
         print(f"Running example on device: {wp.get_device()}")
         example = Example(num_envs=args.num_envs)
 
-        for frame_num in range(args.num_frames):
-            example.step()
-            example.render()
-            if not plt.fignum_exists(example.fig.number):
-                print("Matplotlib window closed, exiting.")
+        frame_num = 0
+        while frame_num < args.num_frames and not example.window.has_exit:
+            pyglet.clock.tick()  # Process clock and other scheduled events
+
+            # Process window events (like close button). crucial for responsiveness.
+            example.window.dispatch_events()
+
+            if example.window.has_exit: # Check again after dispatching
+                print("Pyglet window closed by user.")
                 break
-            if (frame_num + 1) % 10 == 0:  # Print progress every 10 frames
-                print(f"Simulated frame {frame_num + 1}/{args.num_frames}")
 
-        print("\nSimulation finished.")
+            example.step()
+            example.render() # This updates example.pyglet_image_data
 
-    plt.ioff()
-    if plt.fignum_exists(example.fig.number):
-        print("Close Matplotlib window to exit.")
-        plt.show()
-    else:
-        print("Exiting.") 
+            example.window.clear()
+            if example.pyglet_image_data:
+                example.pyglet_image_data.blit(0, 0)
+            example.window.flip()
+
+            frame_num += 1
+            if (frame_num % 10 == 0):
+                print(f"Simulated frame {frame_num}/{args.num_frames}")
+
+        if not example.window.has_exit:
+            print("\nSimulation finished. Close Pyglet window to exit.")
+            # Keep window open and responsive until user closes it
+            while not example.window.has_exit:
+                pyglet.clock.tick()
+                example.window.dispatch_events()
+                # Redraw the last frame or a static message
+                example.window.clear()
+                if example.pyglet_image_data:
+                    example.pyglet_image_data.blit(0, 0)
+                else:  # Should not happen if render was called at least once
+                    pass  # Or draw a placeholder / waiting message
+                example.window.flip()
+                # A small sleep can reduce CPU usage when idle here,
+                # but tick() should handle it.
+        else:
+            print("\nSimulation loop exited because window was closed.")
+
+    pyglet.app.exit()
+    print("Exiting application.") 
