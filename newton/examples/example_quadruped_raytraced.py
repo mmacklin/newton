@@ -41,7 +41,6 @@ import os
 # Modify the Example class definition:
 class Example:
     def __init__(self, num_envs=1, dump_frames=False):
-        ...
         self.dump_frames = dump_frames
         self.frame_num = 0
         # --- Articulation Setup ---
