@@ -36,9 +36,14 @@ import newton.utils
 from newton.utils.raytrace import RaytraceRendererPyglet
 import pyglet
 
+import os
 
+# Modify the Example class definition:
 class Example:
-    def __init__(self, num_envs=1):
+    def __init__(self, num_envs=1, dump_frames=False):
+        ...
+        self.dump_frames = dump_frames
+        self.frame_num = 0
         # --- Articulation Setup ---
         articulation_builder = newton.ModelBuilder()
         base_xform = wp.transform(
@@ -170,7 +175,15 @@ class Example:
     def render(self):
         if self.renderer and not self.renderer.has_exit():
             with wp.ScopedTimer("render_frame_call"):
-                 self.renderer.render_frame(self.state_0)
+                self.renderer.render_frame(self.state_0)
+
+                if self.dump_frames:
+                    buffer = pyglet.image.get_buffer_manager().get_color_buffer()
+                    os.makedirs("frames", exist_ok=True)
+                    filename = f"frames/frame_{self.frame_num:04d}.png"
+                    buffer.save(filename)
+                    print(f"Saved frame to {filename}")
+                    self.frame_num += 1                 
 
 
 if __name__ == "__main__":
@@ -192,13 +205,20 @@ if __name__ == "__main__":
         help="Total number of simulated environments (quadrupeds)."
     )
 
+    parser.add_argument(
+        "--dump_frames", action="store_true",
+        help="Dump each rendered frame as a PNG to disk."
+    )
+
     args = parser.parse_known_args()[0]
+
+    
 
     wp.init()
 
     with wp.ScopedDevice(args.device):
         print(f"Running example on device: {wp.get_device()}")
-        example = Example(num_envs=args.num_envs)
+        example = Example(num_envs=args.num_envs, dump_frames=args.dump_frames)
 
         frame_num = 0
         # Main loop using Pyglet window status

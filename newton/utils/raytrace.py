@@ -19,7 +19,9 @@ import numpy as np
 
 import warp as wp
 # import warp.sim # Replaced by Newton imports
-from newton.core.model import Model, ModelBuilder, Mesh
+from newton.core.model import Model
+from newton.core.builder import ModelBuilder
+from newton.core.types import Mesh
 from newton.core.state import State
 import pyglet # Added for the renderer class
 
