@@ -21,6 +21,7 @@ import warp as wp
 # import warp.sim # Replaced by Newton imports
 from newton.core.model import Model, ModelBuilder, Mesh
 from newton.core.state import State
+import pyglet # Added for the renderer class
 
 # Define geometry types
 GEO_SPHERE = wp.constant(0)
@@ -551,91 +552,131 @@ def render_model_shapes(
     return pixels_arr.numpy().reshape((img_height, img_width, 3))
 
 
+class RaytraceRendererPyglet:
+    def __init__(self, model: Model, image_width: int, image_height: int, title_prefix="Newton Raytraced"):
+        self.model = model
+        self.image_width = image_width
+        self.image_height = image_height
+
+        self.window = pyglet.window.Window(
+            width=self.image_width,
+            height=self.image_height,
+            caption=f"{title_prefix} - Model: {model.name if hasattr(model, 'name') else 'Untitled'}"
+        )
+        self.pyglet_image_data = None
+
+        @self.window.event
+        def on_close():
+            pyglet.app.exit()
+
+        # Default camera and light settings
+        self.cam_pos_arr = np.array([-2.5, 1.5, 3.0])
+        self.cam_look_at_arr = np.array([0.0, 0.5, 0.0])
+        self.cam_up_arr = np.array([0.0, 1.0, 0.0])
+        self.light_pos_arr = np.array([4.0, 5.0, 3.0])
+        self.fov_deg = 50.0
+
+    def set_camera(self, pos_np: np.ndarray, look_at_np: np.ndarray, up_np: np.ndarray, fov_deg: float = None):
+        self.cam_pos_arr = pos_np
+        self.cam_look_at_arr = look_at_np
+        self.cam_up_arr = up_np
+        if fov_deg is not None:
+            self.fov_deg = fov_deg
+
+    def set_light_pos(self, light_pos_np: np.ndarray):
+        self.light_pos_arr = light_pos_np
+
+    def _update_image_data(self, state: State):
+        render_device_str = "cpu"
+        if self.model.device.is_cuda:
+            render_device_str = "cuda"
+        elif self.model.device.is_cpu:
+            render_device_str = "cpu"
+        else:
+            print(
+                f"Warning: Model device {self.model.device} is not CUDA/CPU. "
+                f"Raytracer defaulting to cpu."
+            )
+
+        pixels_output_flat = render_model_shapes(
+            self.model, state,
+            self.cam_pos_arr, self.cam_look_at_arr, self.cam_up_arr,
+            self.image_width, self.image_height,
+            fov_deg=self.fov_deg,
+            light_pos_np=self.light_pos_arr,
+            device=render_device_str
+        )
+        pixels_output_numpy = pixels_output_flat.reshape((self.image_height, self.image_width, 3))
+
+        pixels_uint8 = (np.clip(pixels_output_numpy, 0, 1) * 255).astype(np.uint8)
+        image_data_bytes = pixels_uint8.tobytes()
+
+        self.pyglet_image_data = pyglet.image.ImageData(
+            self.image_width,
+            self.image_height,
+            'RGB',
+            image_data_bytes,
+            pitch=self.image_width * 3
+        )
+
+    def render_frame(self, state: State):
+        if self.window.has_exit:
+            return
+
+        self._update_image_data(state)
+
+        self.window.clear()
+        if self.pyglet_image_data:
+            self.pyglet_image_data.blit(0, 0)
+        self.window.flip()
+
+    def dispatch_events(self):
+        if not self.window.has_exit:
+            pyglet.app.platform_event_loop.dispatch_posted_events()
+            self.window.dispatch_events()
+
+    def has_exit(self) -> bool:
+        return self.window.has_exit
+
+    def close_window(self):
+        if not self.window.has_exit:
+            self.window.close()
+        # pyglet.app.exit() # Should be called by application after main loop
+
+
 if __name__ == "__main__":
-    wp.init()
+    # This section is for basic testing of the raytracer library itself.
+    print("Newton Raytracer Library (newton.utils.raytrace)")
+    print("Contains raytracing functions and Pyglet renderer for Newton models.")
+    print("This file is not intended to be run directly as a full example.")
 
-    builder = ModelBuilder()
-    builder.set_ground_plane(offset=0.0, mu=0.5)
+    # For a full example, see newton/examples/example_quadruped_raytraced.py
 
-    builder.add_shape_sphere(body=-1, pos=(0.0, 0.5, -1.0), rot=wp.quat(),
-                             radius=0.5, density=0, mu=0.5)
+    # --- Example of how to use RaytraceRendererPyglet for a quick self-test ---
+    # from newton.core.model import ModelBuilder, Mesh 
+    # wp.init()
+    # builder = ModelBuilder()
+    # builder.set_ground_plane(offset=0.0)
+    # builder.add_shape_sphere(body=-1, pos=(0,0.5,-2), rot=wp.quat(), radius=0.5)
+    # builder.add_shape_box(body=-1, pos=(1.5, 0.5, -2), rot=wp.quat(), hx=0.3,hy=0.3,hz=0.3)
+    # test_model = builder.finalize(device="cpu")
+    # test_state = test_model.state()
 
-    body1_idx = builder.add_body(
-        origin=wp.transform(pos=(1.2, 0.3, -0.5),
-                           rot=wp.quat_from_axis_angle(wp.vec3(0, 1, 1),
-                                                       math.pi / 3.0)),
-        mass=1.0
-    )
-    builder.add_shape_box(body=body1_idx, pos=(0, 0, 0), rot=wp.quat(),
-                          hx=0.3, hy=0.3, hz=0.3, density=1000.0, mu=0.5)
+    # renderer = RaytraceRendererPyglet(test_model, 320, 240, "Raytracer Self-Test")
+    # renderer.set_camera(
+    #     pos_np=np.array([0.0, 1.0, 2.0]),
+    #     look_at_np=np.array([0.0, 0.5, -2.0]),
+    #     up_np=np.array([0.0, 1.0, 0.0]),
+    #     fov_deg=60.0
+    # )
+    # renderer.set_light_pos(np.array([3.0, 3.0, 1.0]))
 
-    builder.add_shape_capsule(body=-1, pos=(-1.0, 0.65, -0.8), rot=wp.quat(),
-                              radius=0.25, half_height=0.4, density=0, mu=0.5)
-
-    builder.add_shape_plane(body=-1,
-                            pos=(-2.0, 1.0, -1.0),
-                            rot=wp.quat_from_axis_angle(wp.vec3(0, 0, 1),
-                                                        math.pi / 2.0),
-                            width=2.0,
-                            length=2.0,
-                            mu=0.5)
-
-    mesh_vertices_np = np.array([
-        [-0.5, -0.0, 0.0], [0.5, -0.0, 0.0], [0.0, 0.8, 0.0]
-    ], dtype=np.float32) * 0.7
-    mesh_indices_np = np.array([0, 1, 2], dtype=np.int32)
-
-    sim_mesh_obj = Mesh(vertices=mesh_vertices_np,
-                        indices=mesh_indices_np,
-                        compute_inertia=False)
-    builder.add_shape_mesh(
-        body=-1,
-        pos=(0.0, 1.5, -1.5),
-        rot=wp.quat_from_axis_angle(wp.vec3(1, 0.2, 0), math.pi / 6.0),
-        mesh=sim_mesh_obj,
-        scale=(1.0, 1.0, 1.0),
-        density=0, mu=0.5
-    )
-
-    device = "cuda" if wp.is_cuda_available() else "cpu"
-    print(f"Using device: {device}")
-
-    model = builder.finalize(device=device)
-    state = model.state()
-
-    cam_pos_arr = np.array([-2.0, 2.5, 3.5])
-    cam_look_at_arr = np.array([0.0, 0.5, 0.0])
-    cam_up_arr = np.array([0.0, 1.0, 0.0])
-    light_pos_arr = np.array([4.0, 5.0, 3.0])
-
-    image_width = 800
-    image_height = 600
-    field_of_view = 50.0
-
-    print("Rendering example scene with shadows...")
-    pixels_output_numpy = render_model_shapes(
-        model, state,
-        cam_pos_arr, cam_look_at_arr, cam_up_arr,
-        image_width, image_height,
-        fov_deg=field_of_view,
-        light_pos_np=light_pos_arr,
-        device=device
-    )
-    print("Render complete.")
-
-    try:
-        import matplotlib.pyplot as plt
-        plt.imshow(np.clip(pixels_output_numpy, 0, 1), origin="lower")
-        plt.title(f"Warp Sim Raytracer ({device}) - Shadows")
-        plt.show()
-    except ImportError:
-        print("Matplotlib not found. Cannot display image.")
-        try:
-            from PIL import Image
-            img_data_uint8 = (np.clip(pixels_output_numpy, 0, 1) * 255)\
-                .astype(np.uint8)
-            pil_img = Image.fromarray(img_data_uint8, 'RGB')
-            pil_img.save("raytraced_sim_model_shadows.png")
-            print("Saved image to raytraced_sim_model_shadows.png")
-        except ImportError:
-            print("Pillow not found. Cannot save image.")
+    # print("\nRunning Pyglet self-test render loop...")
+    # while not renderer.has_exit():
+    #     pyglet.clock.tick()
+    #     renderer.dispatch_events()
+    #     if renderer.has_exit():
+    #         break
+    #     renderer.render_frame(test_state) # Render the static scene
+    # pyglet.app.exit()
+    # print("Pyglet self-test finished.")

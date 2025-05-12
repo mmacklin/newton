@@ -33,12 +33,12 @@ import newton.collision
 import newton.core.articulation
 import newton.examples
 import newton.utils
-from newton.utils.raytrace import render_model_shapes
+from newton.utils.raytrace import RaytraceRendererPyglet
 import pyglet
 
 
 class Example:
-    def __init__(self, num_envs=1):  # Default to 1 env for raytracing
+    def __init__(self, num_envs=1):
         # --- Articulation Setup ---
         articulation_builder = newton.ModelBuilder()
         base_xform = wp.transform(
@@ -75,47 +75,20 @@ class Example:
                 len(articulation_builder.joint_axis_mode)
             )
             articulation_builder.joint_act[-12:] = initial_pose
-            # Ensure target_ke and target_kd are set for PD control
-            # parse_urdf with stiffness/damping should handle this.
-            # If specific values are needed per joint they can be set here.
-            # For example:
-            # for i in range(len(articulation_builder.joint_target_ke)):
-            #    if articulation_builder.joint_axis_mode[i] == \
-            #            newton.JOINT_MODE_TARGET_POSITION:
-            #        articulation_builder.joint_target_ke[i] = 200.0
-            #        articulation_builder.joint_target_kd[i] = 20.0
 
         # --- Main Scene Builder ---
         builder = newton.ModelBuilder()
 
         self.sim_time = 0.0
-        fps = 30  # Target FPS for simulation steps and rendering
+        fps = 30
         self.frame_dt = 1.0 / fps
         self.sim_substeps = 10
         self.sim_dt = self.frame_dt / self.sim_substeps
         self.num_envs = num_envs
 
-        # --- Camera and Light Setup for Raytracer ---
-        self.cam_pos_arr = np.array([-2.5, 1.5, 3.0])
-        self.cam_look_at_arr = np.array([0.0, 0.5, 0.0])
-        self.cam_up_arr = np.array([0.0, 1.0, 0.0])
-        self.light_pos_arr = np.array([4.0, 5.0, 3.0])
+        # --- Image dimensions (can be class attributes or passed to renderer) ---
         self.image_width = 1280
         self.image_height = 720
-        self.field_of_view = 50.0
-
-        if self.num_envs > 1:
-            # Adjust camera to try to view multiple environments
-            # This is a simple adjustment and might need tuning
-            # Based on compute_env_offsets placing items with approx 2.0 spacing
-            grid_side_len = math.ceil(math.sqrt(self.num_envs))
-            # Center x/z offset
-            scene_center_offset = (grid_side_len - 1) * 2.0 / 2.0
-            self.cam_look_at_arr[0] += scene_center_offset
-            self.cam_look_at_arr[2] += scene_center_offset / 2.0  # Pan a bit
-            self.cam_pos_arr[0] += scene_center_offset
-            self.cam_pos_arr[2] += scene_center_offset / 2.0
-            self.cam_pos_arr[1] += (grid_side_len - 1) * 0.5  # Move up a bit
 
         # --- Environment Instantiation ---
         offsets = newton.examples.compute_env_offsets(self.num_envs)
@@ -129,17 +102,32 @@ class Example:
 
         self.solver = newton.solvers.XPBDSolver(self.model)
 
-        # --- Pyglet Window Setup ---
-        self.window = pyglet.window.Window(
-            width=self.image_width,
-            height=self.image_height,
-            caption=f"Newton Quadruped Raytraced (Pyglet) - Envs: {self.num_envs}"
+        # --- Pyglet Raytrace Renderer Setup ---
+        self.renderer = RaytraceRendererPyglet(
+            self.model,
+            self.image_width,
+            self.image_height,
+            title_prefix=f"Quadruped (Pyglet Envs: {self.num_envs})"
         )
-        self.pyglet_image_data = None
 
-        @self.window.event
-        def on_close():
-            pyglet.app.exit()
+        # --- Adjust Camera for multiple environments if necessary ---
+        cam_pos_arr = np.array([-2.5, 1.5, 3.0])
+        cam_look_at_arr = np.array([0.0, 0.5, 0.0])
+        cam_up_arr = np.array([0.0, 1.0, 0.0])
+        fov_deg = 50.0
+
+        if self.num_envs > 1:
+            grid_side_len = math.ceil(math.sqrt(self.num_envs))
+            # Determine rough center of the environment grid
+            scene_center_offset = (grid_side_len - 1) * 2.0 / 2.0
+            cam_look_at_arr[0] += scene_center_offset
+            cam_look_at_arr[2] += scene_center_offset / 2.0
+            cam_pos_arr[0] += scene_center_offset
+            cam_pos_arr[2] += scene_center_offset / 2.0
+            cam_pos_arr[1] += (grid_side_len - 1) * 0.5
+        
+        self.renderer.set_camera(cam_pos_arr, cam_look_at_arr, cam_up_arr, fov_deg)
+        self.renderer.set_light_pos(np.array([4.0, 5.0, 3.0])) # Default light
 
         self.state_0 = self.model.state()
         self.state_1 = self.model.state()
@@ -180,45 +168,9 @@ class Example:
         self.sim_time += self.frame_dt
 
     def render(self):
-        if self.window.has_exit:
-            return
-
-        with wp.ScopedTimer("render_raytrace_frame"):
-            # Determine device for raytracer (prefers CUDA if model is on CUDA)
-            render_device_str = "cpu"
-            if self.model.device.is_cuda:
-                render_device_str = "cuda"
-            elif self.model.device.is_cpu:
-                render_device_str = "cpu"
-            else:
-                # Fallback if model device is not explicitly CUDA or CPU (e.g. Taichi).
-                # Defaulting to CPU; user might need to specify for other backends.
-                print(
-                    f"Warning: Model device {self.model.device} not CUDA/CPU. "
-                    f"Raytracer defaulting to cpu. May be slow/incompatible."
-                )
-
-            pixels_output_numpy = render_model_shapes(
-                self.model, self.state_0,
-                self.cam_pos_arr, self.cam_look_at_arr, self.cam_up_arr,
-                self.image_width, self.image_height,
-                fov_deg=self.field_of_view,
-                light_pos_np=self.light_pos_arr,
-                device=render_device_str
-            )
-
-        with wp.ScopedTimer("render_pyglet_update"):
-            pixels_uint8 = (np.clip(pixels_output_numpy, 0, 1) * 255).astype(np.uint8)
-            image_data_bytes = pixels_uint8.tobytes()
-
-            self.pyglet_image_data = pyglet.image.ImageData(
-                self.image_width,
-                self.image_height,
-                'RGB',  # Raytracer produces RGB
-                image_data_bytes,
-                pitch=self.image_width * 3  # Bytes per row
-            )
-            # Drawing is handled in the main loop's on_draw or direct draw call
+        if self.renderer and not self.renderer.has_exit():
+            with wp.ScopedTimer("render_frame_call"):
+                 self.renderer.render_frame(self.state_0)
 
 
 if __name__ == "__main__":
@@ -249,45 +201,36 @@ if __name__ == "__main__":
         example = Example(num_envs=args.num_envs)
 
         frame_num = 0
-        while frame_num < args.num_frames and not example.window.has_exit:
-            pyglet.clock.tick()  # Process clock and other scheduled events
+        # Main loop using Pyglet window status
+        while frame_num < args.num_frames and not example.renderer.has_exit():
+            pyglet.clock.tick() 
+            example.renderer.dispatch_events()
 
-            # Process window events (like close button). Crucial for responsiveness.
-            example.window.dispatch_events()
-
-            if example.window.has_exit:  # Check again after dispatching
+            if example.renderer.has_exit():
                 print("Pyglet window closed by user.")
                 break
 
             example.step()
-            example.render()  # This updates example.pyglet_image_data
-
-            example.window.clear()
-            if example.pyglet_image_data:
-                example.pyglet_image_data.blit(0, 0)
-            example.window.flip()
+            example.render() # This now calls renderer.render_frame()
 
             frame_num += 1
             if (frame_num % 10 == 0):
                 print(f"Simulated frame {frame_num}/{args.num_frames}")
 
-        if not example.window.has_exit:
+        if not example.renderer.has_exit():
             print("\nSimulation finished. Close Pyglet window to exit.")
             # Keep window open and responsive until user closes it
-            while not example.window.has_exit:
+            while not example.renderer.has_exit():
                 pyglet.clock.tick()
-                example.window.dispatch_events()
-                # Redraw the last frame or a static message
-                example.window.clear()
-                if example.pyglet_image_data:
-                    example.pyglet_image_data.blit(0, 0)
-                else:  # Should not happen if render was called at least once
-                    pass  # Or draw a placeholder / waiting message
-                example.window.flip()
-                # A small sleep can reduce CPU usage when idle here,
-                # but tick() should handle it.
+                example.renderer.dispatch_events()
+                # Re-render the last state or just ensure window stays active
+                example.renderer.render_frame(example.state_0) 
+                # A small sleep can reduce CPU usage if nothing is changing
+                # pyglet.clock.sleep(0.01) # Optional: if CPU usage is high when idle
         else:
             print("\nSimulation loop exited because window was closed.")
 
-    pyglet.app.exit()
+    if example.renderer: # Ensure renderer exists before trying to close
+        example.renderer.close_window() # Attempt to close pyglet window if not already
+    pyglet.app.exit() # Ensure pyglet app itself exits
     print("Exiting application.") 
