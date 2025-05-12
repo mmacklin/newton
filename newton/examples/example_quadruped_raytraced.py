@@ -100,8 +100,8 @@ class Example:
         self.cam_look_at_arr = np.array([0.0, 0.5, 0.0])
         self.cam_up_arr = np.array([0.0, 1.0, 0.0])
         self.light_pos_arr = np.array([4.0, 5.0, 3.0])
-        self.image_width = 400
-        self.image_height = 300
+        self.image_width = 1280
+        self.image_height = 720
         self.field_of_view = 50.0
 
         if self.num_envs > 1:
@@ -189,13 +189,13 @@ class Example:
             if self.model.device.is_cuda:
                 render_device_str = "cuda"
             elif self.model.device.is_cpu:
-                 render_device_str = "cpu"
+                render_device_str = "cpu"
             else:
                 # Fallback if model device is not explicitly CUDA or CPU (e.g. Taichi).
-                # Defaulting to CPU, but user might need to specify for other backends.
+                # Defaulting to CPU; user might need to specify for other backends.
                 print(
-                    f"Warning: Model device {self.model.device} is not explicitly CUDA/CPU. "
-                    f"Raytracer defaulting to cpu. May be slow or incompatible."
+                    f"Warning: Model device {self.model.device} not CUDA/CPU. "
+                    f"Raytracer defaulting to cpu. May be slow/incompatible."
                 )
 
             pixels_output_numpy = render_model_shapes(
@@ -209,9 +209,7 @@ class Example:
 
         with wp.ScopedTimer("render_pyglet_update"):
             pixels_uint8 = (np.clip(pixels_output_numpy, 0, 1) * 255).astype(np.uint8)
-            # Flip vertically for Pyglet (origin is bottom-left)
-            pixels_uint8_flipped = np.flipud(pixels_uint8)
-            image_data_bytes = pixels_uint8_flipped.tobytes()
+            image_data_bytes = pixels_uint8.tobytes()
 
             self.pyglet_image_data = pyglet.image.ImageData(
                 self.image_width,
@@ -254,15 +252,15 @@ if __name__ == "__main__":
         while frame_num < args.num_frames and not example.window.has_exit:
             pyglet.clock.tick()  # Process clock and other scheduled events
 
-            # Process window events (like close button). crucial for responsiveness.
+            # Process window events (like close button). Crucial for responsiveness.
             example.window.dispatch_events()
 
-            if example.window.has_exit: # Check again after dispatching
+            if example.window.has_exit:  # Check again after dispatching
                 print("Pyglet window closed by user.")
                 break
 
             example.step()
-            example.render() # This updates example.pyglet_image_data
+            example.render()  # This updates example.pyglet_image_data
 
             example.window.clear()
             if example.pyglet_image_data:
