@@ -1,3 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 The Newton Developers
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import math
 
 import numpy as np
@@ -408,6 +423,25 @@ def raytrace_kernel(
         hit_point_world = primary_ray_origin_world + \
                           primary_ray_dir_world * primary_hit_result.t
 
+        # Determine base color based on shape type
+        object_base_color = wp.vec3(0.7, 0.7, 0.7)  # Default gray
+        hit_shape_type = model_shape_geo_type[hit_shape_idx]
+
+        if hit_shape_type == GEO_PLANE:
+            object_base_color = wp.vec3(0.3, 0.6, 0.3)  # Greenish
+        elif hit_shape_type == GEO_SPHERE:
+            object_base_color = wp.vec3(0.8, 0.2, 0.2)  # Reddish
+        elif hit_shape_type == GEO_BOX:
+            object_base_color = wp.vec3(0.2, 0.3, 0.8)  # Bluish
+        elif hit_shape_type == GEO_CAPSULE:
+            object_base_color = wp.vec3(0.8, 0.8, 0.2)  # Yellowish
+        elif hit_shape_type == GEO_MESH:
+            object_base_color = wp.vec3(0.6, 0.2, 0.8)  # Purplish
+        elif hit_shape_type == GEO_CYLINDER:
+            object_base_color = wp.vec3(0.2, 0.8, 0.8)  # Cyanish
+        elif hit_shape_type == GEO_CONE:
+            object_base_color = wp.vec3(0.8, 0.5, 0.2)  # Orangish
+
         in_shadow = False
         shadow_ray_origin = hit_point_world + world_normal_of_hit * 1.0e-4
         shadow_ray_dir_to_light = wp.normalize(light_pos_world - shadow_ray_origin)
@@ -435,13 +469,10 @@ def raytrace_kernel(
         ambient_intensity = 0.2
 
         if in_shadow:
-            hit_color = wp.vec3(ambient_intensity, ambient_intensity, 
-                                ambient_intensity)
+            hit_color = object_base_color * ambient_intensity
         else:
             effective_diffuse = diffuse_intensity * (1.0 - ambient_intensity)
-            hit_color = wp.vec3(ambient_intensity + effective_diffuse,
-                                ambient_intensity + effective_diffuse,
-                                ambient_intensity + effective_diffuse)
+            hit_color = object_base_color * (ambient_intensity + effective_diffuse)
             hit_color = wp.min(hit_color, wp.vec3(1.0, 1.0, 1.0))
 
     pixels[tid] = hit_color

@@ -33,7 +33,7 @@ import newton.collision
 import newton.core.articulation
 import newton.examples
 import newton.utils
-from newton.raytrace import render_model_shapes
+from newton.utils.raytrace import render_model_shapes
 import matplotlib.pyplot as plt
 
 
@@ -52,8 +52,8 @@ class Example:
             floating=True,
             density=1000,
             armature=0.01,
-            stiffness=200.0, # This will set joint_target_ke
-            damping=10.0,   # This will set joint_target_kd
+            stiffness=200.0,  # This will set joint_target_ke
+            damping=10.0,     # This will set joint_target_kd
             contact_ke=1.0e4,
             contact_kd=1.0e2,
             contact_kf=1.0e2,
@@ -80,7 +80,8 @@ class Example:
             # If specific values are needed per joint they can be set here.
             # For example:
             # for i in range(len(articulation_builder.joint_target_ke)):
-            #    if articulation_builder.joint_axis_mode[i] == newton.JOINT_MODE_TARGET_POSITION:
+            #    if articulation_builder.joint_axis_mode[i] == \
+            #            newton.JOINT_MODE_TARGET_POSITION:
             #        articulation_builder.joint_target_ke[i] = 200.0
             #        articulation_builder.joint_target_kd[i] = 20.0
 
@@ -109,12 +110,13 @@ class Example:
             # This is a simple adjustment and might need tuning
             # Based on compute_env_offsets placing items with approx 2.0 spacing
             grid_side_len = math.ceil(math.sqrt(self.num_envs))
-            scene_center_offset = (grid_side_len -1) * 2.0 / 2.0 # rough center x/z
+            # Center x/z offset
+            scene_center_offset = (grid_side_len - 1) * 2.0 / 2.0
             self.cam_look_at_arr[0] += scene_center_offset
-            self.cam_look_at_arr[2] += scene_center_offset / 2.0 # Pan a bit
+            self.cam_look_at_arr[2] += scene_center_offset / 2.0  # Pan a bit
             self.cam_pos_arr[0] += scene_center_offset
             self.cam_pos_arr[2] += scene_center_offset / 2.0
-            self.cam_pos_arr[1] += (grid_side_len -1) * 0.5 # Move up a bit
+            self.cam_pos_arr[1] += (grid_side_len - 1) * 0.5  # Move up a bit
 
 
         # --- Environment Instantiation ---
@@ -247,8 +249,8 @@ if __name__ == "__main__":
             if not plt.fignum_exists(example.fig.number):
                 print("Matplotlib window closed, exiting.")
                 break
-            if (frame_num + 1) % 10 == 0: # Print progress every 10 frames
-                 print(f"Simulated frame {frame_num + 1}/{args.num_frames}")
+            if (frame_num + 1) % 10 == 0:  # Print progress every 10 frames
+                print(f"Simulated frame {frame_num + 1}/{args.num_frames}")
 
         print("\nSimulation finished.")
 
