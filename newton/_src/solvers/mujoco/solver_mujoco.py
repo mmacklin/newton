@@ -39,6 +39,7 @@ from ...sim import (
 )
 from ...utils import topological_sort
 from ...utils.benchmark import event_scope
+from ...utils.import_utils import parse_warp_value_from_string
 from ..flags import SolverNotifyFlags
 from ..solver import SolverBase
 from .kernels import (
@@ -196,6 +197,38 @@ class SolverMuJoCo(SolverBase):
                 ) from e
         return cls._mujoco, cls._mujoco_warp
 
+    @staticmethod
+    def _angle_value_transformer(value: str, context: dict[str, Any] | None) -> float:
+        """Transform angle values from MJCF, converting deg to rad for angular joints.
+
+        For attributes like springref and ref that represent angles,
+        parses the string value and multiplies by pi/180 when use_degrees=True and joint is angular.
+        """
+        parsed = parse_warp_value_from_string(value, wp.float32, 0.0)
+        if context is not None:
+            joint_type = context.get("joint_type")
+            use_degrees = context.get("use_degrees", False)
+            is_angular = joint_type in ["hinge", "ball"]
+            if is_angular and use_degrees:
+                return parsed * (np.pi / 180)
+        return parsed
+
+    @staticmethod
+    def _per_angle_value_transformer(value: str, context: dict[str, Any] | None) -> float:
+        """Transform per-angle values from MJCF, converting Nm/deg to Nm/rad for angular joints.
+
+        For attributes like stiffness (Nm/rad) and damping (Nm·s/rad) that have angle in the denominator,
+        parses the string value and multiplies by 180/pi when use_degrees=True and joint is angular.
+        """
+        parsed = parse_warp_value_from_string(value, wp.float32, 0.0)
+        if context is not None:
+            joint_type = context.get("joint_type")
+            use_degrees = context.get("use_degrees", False)
+            is_angular = joint_type in ["hinge", "ball"]
+            if is_angular and use_degrees:
+                return parsed * (180 / np.pi)
+        return parsed
+
     @override
     @classmethod
     def register_custom_attributes(cls, builder: ModelBuilder) -> None:
@@ -330,6 +363,7 @@ class SolverMuJoCo(SolverBase):
                 namespace="mujoco",
                 usd_attribute_name="mjc:stiffness",
                 mjcf_attribute_name="stiffness",
+                mjcf_value_transformer=cls._per_angle_value_transformer,
             )
         )
         builder.add_custom_attribute(
@@ -342,6 +376,7 @@ class SolverMuJoCo(SolverBase):
                 namespace="mujoco",
                 usd_attribute_name="mjc:damping",
                 mjcf_attribute_name="damping",
+                mjcf_value_transformer=cls._per_angle_value_transformer,
             )
         )
         builder.add_custom_attribute(
@@ -354,6 +389,7 @@ class SolverMuJoCo(SolverBase):
                 namespace="mujoco",
                 usd_attribute_name="mjc:springref",
                 mjcf_attribute_name="springref",
+                mjcf_value_transformer=cls._angle_value_transformer,
             )
         )
         builder.add_custom_attribute(
@@ -366,6 +402,7 @@ class SolverMuJoCo(SolverBase):
                 namespace="mujoco",
                 usd_attribute_name="mjc:ref",
                 mjcf_attribute_name="ref",
+                mjcf_value_transformer=cls._angle_value_transformer,
             )
         )
         builder.add_custom_attribute(
@@ -831,7 +868,7 @@ class SolverMuJoCo(SolverBase):
             )
         )
 
-        def parse_limited(value: str) -> int:
+        def parse_limited(value: str, context: dict[str, Any] | None = None) -> int:
             """Parse MuJoCo limited attribute: false=0, true=1, auto=2."""
             v = value.lower().strip()
             if v in ("false", "0"):
@@ -3003,9 +3040,9 @@ class SolverMuJoCo(SolverBase):
                     if joint_dof_limit_margin is not None:
                         joint_params["margin"] = joint_dof_limit_margin[ai]
                     if joint_stiffness is not None:
-                        joint_params["stiffness"] = joint_stiffness[ai]
+                        joint_params["stiffness"] = joint_stiffness[ai] * (np.pi / 180)
                     if joint_damping is not None:
-                        joint_params["damping"] = joint_damping[ai]
+                        joint_params["damping"] = joint_damping[ai] * (np.pi / 180)
                     if joint_actgravcomp is not None:
                         joint_params["actgravcomp"] = joint_actgravcomp[ai]
                     lower, upper = joint_limit_lower[ai], joint_limit_upper[ai]
@@ -3032,9 +3069,9 @@ class SolverMuJoCo(SolverBase):
                         joint_params["actfrcrange"] = (-effort_limit, effort_limit)
 
                     if joint_springref is not None:
-                        joint_params["springref"] = joint_springref[ai]
+                        joint_params["springref"] = np.rad2deg(joint_springref[ai])
                     if joint_ref is not None:
-                        joint_params["ref"] = joint_ref[ai]
+                        joint_params["ref"] = np.rad2deg(joint_ref[ai])
 
                     axname = name
                     if lin_axis_count > 1 or ang_axis_count > 1:
