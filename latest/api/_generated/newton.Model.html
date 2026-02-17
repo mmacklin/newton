@@ -971,7 +971,7 @@ should be indexed in relation to the model’s entities such as joints, bodies, 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="newton.Model.AttributeFrequency.WORLD">
 <span class="sig-name descname"><span class="pre">WORLD</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">15</span></em><a class="headerlink" href="#newton.Model.AttributeFrequency.WORLD" title="Link to this definition">#</a></dt>
-<dd><p>Attribute frequency follows the number of worlds (see <a class="reference internal" href="#newton.Model.num_worlds" title="newton.Model.num_worlds"><code class="xref py py-attr docutils literal notranslate"><span class="pre">num_worlds</span></code></a>).</p>
+<dd><p>Attribute frequency follows the number of worlds (see <a class="reference internal" href="#newton.Model.world_count" title="newton.Model.world_count"><code class="xref py py-attr docutils literal notranslate"><span class="pre">world_count</span></code></a>).</p>
 </dd></dl>
 
 </dd></dl>
@@ -1198,7 +1198,7 @@ If None, uses the model’s <a class="reference internal" href="#newton.Model.re
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>gravity</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>] </em><em>| </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em> | </em><a class="reference external" href="https://nvidia.github.io/warp/api_reference/_generated/warp.vec3f.html#warp.vec3f" title="(in Warp v1.11.1)"><em>vec3f</em></a><em> | </em><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)"><em>ndarray</em></a>) – Gravity vector (3,) or per-world array (num_worlds, 3).</p></li>
+<li><p><strong>gravity</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>] </em><em>| </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em> | </em><a class="reference external" href="https://nvidia.github.io/warp/api_reference/_generated/warp.vec3f.html#warp.vec3f" title="(in Warp v1.11.1)"><em>vec3f</em></a><em> | </em><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)"><em>ndarray</em></a>) – Gravity vector (3,) or per-world array (world_count, 3).</p></li>
 <li><p><strong>world</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> | </em><em>None</em>) – If provided, set gravity only for this world.</p></li>
 </ul>
 </dd>
@@ -1257,8 +1257,8 @@ If None, uses the model’s <a class="reference internal" href="#newton.Model.re
 <dl class="py attribute">
 <dt class="sig sig-object py" id="newton.Model.articulation_world_start">
 <span class="sig-name descname"><span class="pre">articulation_world_start</span></span><a class="headerlink" href="#newton.Model.articulation_world_start" title="Link to this definition">#</a></dt>
-<dd><p>Start index of the first articulation per world, shape [num_worlds + 2], int.</p>
-<p>The entries at indices <cite>0</cite> to <cite>num_worlds - 1</cite> store the start index of the articulations belonging to that world.
+<dd><p>Start index of the first articulation per world, shape [world_count + 2], int.</p>
+<p>The entries at indices <cite>0</cite> to <cite>world_count - 1</cite> store the start index of the articulations belonging to that world.
 The second-last element (accessible via index <cite>-2</cite>) stores the start index of the global articulations (i.e. with
 world index <cite>-1</cite>) added to the end of the model, and the last element stores the total articulation count.</p>
 <dl class="simple">
@@ -1364,8 +1364,8 @@ or custom frequencies for custom entity types (e.g., <code class="docutils liter
 <dl class="py attribute">
 <dt class="sig sig-object py" id="newton.Model.body_world_start">
 <span class="sig-name descname"><span class="pre">body_world_start</span></span><a class="headerlink" href="#newton.Model.body_world_start" title="Link to this definition">#</a></dt>
-<dd><p>Start index of the first body per world, shape [num_worlds + 2], int.</p>
-<p>The entries at indices <cite>0</cite> to <cite>num_worlds - 1</cite> store the start index of the bodies belonging to that world.
+<dd><p>Start index of the first body per world, shape [world_count + 2], int.</p>
+<p>The entries at indices <cite>0</cite> to <cite>world_count - 1</cite> store the start index of the bodies belonging to that world.
 The second-last element (accessible via index <cite>-2</cite>) stores the start index of the global bodies (i.e. with
 world index <cite>-1</cite>) added to the end of the model, and the last element stores the total body count.</p>
 <dl class="simple">
@@ -1553,8 +1553,8 @@ world index <cite>-1</cite>) added to the end of the model, and the last element
 <dl class="py attribute">
 <dt class="sig sig-object py" id="newton.Model.equality_constraint_world_start">
 <span class="sig-name descname"><span class="pre">equality_constraint_world_start</span></span><a class="headerlink" href="#newton.Model.equality_constraint_world_start" title="Link to this definition">#</a></dt>
-<dd><p>Start index of the first equality constraint per world, shape [num_worlds + 2], int.</p>
-<p>The entries at indices <cite>0</cite> to <cite>num_worlds - 1</cite> store the start index of the equality constraints belonging to that world.
+<dd><p>Start index of the first equality constraint per world, shape [world_count + 2], int.</p>
+<p>The entries at indices <cite>0</cite> to <cite>world_count - 1</cite> store the start index of the equality constraints belonging to that world.
 The second-last element (accessible via index <cite>-2</cite>) stores the start index of the global equality constraints (i.e. with
 world index <cite>-1</cite>) added to the end of the model, and the last element stores the total equality constraint count.</p>
 <dl class="simple">
@@ -1569,6 +1569,12 @@ world index <cite>-1</cite>) added to the end of the model, and the last element
 <dt class="sig sig-object py" id="newton.Model.gravity">
 <span class="sig-name descname"><span class="pre">gravity</span></span><a class="headerlink" href="#newton.Model.gravity" title="Link to this definition">#</a></dt>
 <dd><p>Gravity vector, shape [1], dtype vec3.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="newton.Model.heightfield_elevation_data">
+<span class="sig-name descname"><span class="pre">heightfield_elevation_data</span></span><a class="headerlink" href="#newton.Model.heightfield_elevation_data" title="Link to this definition">#</a></dt>
+<dd><p>Concatenated 1D elevation array for all heightfields. Kernels index via HeightfieldData.data_offset.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -1628,8 +1634,8 @@ world index <cite>-1</cite>) added to the end of the model, and the last element
 <dl class="py attribute">
 <dt class="sig sig-object py" id="newton.Model.joint_constraint_world_start">
 <span class="sig-name descname"><span class="pre">joint_constraint_world_start</span></span><a class="headerlink" href="#newton.Model.joint_constraint_world_start" title="Link to this definition">#</a></dt>
-<dd><p>Start index of the first joint constraint per world, shape [num_worlds + 2], int.</p>
-<p>The entries at indices <cite>0</cite> to <cite>num_worlds - 1</cite> store the start index of the joint constraints belonging to that world.
+<dd><p>Start index of the first joint constraint per world, shape [world_count + 2], int.</p>
+<p>The entries at indices <cite>0</cite> to <cite>world_count - 1</cite> store the start index of the joint constraints belonging to that world.
 The second-last element (accessible via index <cite>-2</cite>) stores the start index of the global joint constraints (i.e. with
 world index <cite>-1</cite>) added to the end of the model, and the last element stores the total joint constraint count.</p>
 <dl class="simple">
@@ -1649,8 +1655,8 @@ world index <cite>-1</cite>) added to the end of the model, and the last element
 <dl class="py attribute">
 <dt class="sig sig-object py" id="newton.Model.joint_coord_world_start">
 <span class="sig-name descname"><span class="pre">joint_coord_world_start</span></span><a class="headerlink" href="#newton.Model.joint_coord_world_start" title="Link to this definition">#</a></dt>
-<dd><p>Start index of the first joint coordinate per world, shape [num_worlds + 2], int.</p>
-<p>The entries at indices <cite>0</cite> to <cite>num_worlds - 1</cite> store the start index of the joint coordinates belonging to that world.
+<dd><p>Start index of the first joint coordinate per world, shape [world_count + 2], int.</p>
+<p>The entries at indices <cite>0</cite> to <cite>world_count - 1</cite> store the start index of the joint coordinates belonging to that world.
 The second-last element (accessible via index <cite>-2</cite>) stores the start index of the global joint coordinates (i.e. with
 world index <cite>-1</cite>) added to the end of the model, and the last element stores the total joint coordinate count.</p>
 <dl class="simple">
@@ -1682,8 +1688,8 @@ world index <cite>-1</cite>) added to the end of the model, and the last element
 <dl class="py attribute">
 <dt class="sig sig-object py" id="newton.Model.joint_dof_world_start">
 <span class="sig-name descname"><span class="pre">joint_dof_world_start</span></span><a class="headerlink" href="#newton.Model.joint_dof_world_start" title="Link to this definition">#</a></dt>
-<dd><p>Start index of the first joint degree of freedom per world, shape [num_worlds + 2], int.</p>
-<p>The entries at indices <cite>0</cite> to <cite>num_worlds - 1</cite> store the start index of the joint DOFs belonging to that world.
+<dd><p>Start index of the first joint degree of freedom per world, shape [world_count + 2], int.</p>
+<p>The entries at indices <cite>0</cite> to <cite>world_count - 1</cite> store the start index of the joint DOFs belonging to that world.
 The second-last element (accessible via index <cite>-2</cite>) stores the start index of the global joint DOFs (i.e. with
 world index <cite>-1</cite>) added to the end of the model, and the last element stores the total joint DOF count.</p>
 <dl class="simple">
@@ -1835,8 +1841,8 @@ world index <cite>-1</cite>) added to the end of the model, and the last element
 <dl class="py attribute">
 <dt class="sig sig-object py" id="newton.Model.joint_world_start">
 <span class="sig-name descname"><span class="pre">joint_world_start</span></span><a class="headerlink" href="#newton.Model.joint_world_start" title="Link to this definition">#</a></dt>
-<dd><p>Start index of the first joint per world, shape [num_worlds + 2], int.</p>
-<p>The entries at indices <cite>0</cite> to <cite>num_worlds - 1</cite> store the start index of the joints belonging to that world.
+<dd><p>Start index of the first joint per world, shape [world_count + 2], int.</p>
+<p>The entries at indices <cite>0</cite> to <cite>world_count - 1</cite> store the start index of the joints belonging to that world.
 The second-last element (accessible via index <cite>-2</cite>) stores the start index of the global joints (i.e. with
 world index <cite>-1</cite>) added to the end of the model, and the last element stores the total joint count.</p>
 <dl class="simple">
@@ -1893,12 +1899,6 @@ world index <cite>-1</cite>) added to the end of the model, and the last element
 <dt class="sig sig-object py" id="newton.Model.muscle_start">
 <span class="sig-name descname"><span class="pre">muscle_start</span></span><a class="headerlink" href="#newton.Model.muscle_start" title="Link to this definition">#</a></dt>
 <dd><p>Start index of the first muscle point per muscle, shape [muscle_count], int.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="newton.Model.num_worlds">
-<span class="sig-name descname"><span class="pre">num_worlds</span></span><a class="headerlink" href="#newton.Model.num_worlds" title="Link to this definition">#</a></dt>
-<dd><p>Number of worlds added to the ModelBuilder.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -2018,8 +2018,8 @@ world index <cite>-1</cite>) added to the end of the model, and the last element
 <dl class="py attribute">
 <dt class="sig sig-object py" id="newton.Model.particle_world_start">
 <span class="sig-name descname"><span class="pre">particle_world_start</span></span><a class="headerlink" href="#newton.Model.particle_world_start" title="Link to this definition">#</a></dt>
-<dd><p>Start index of the first particle per world, shape [num_worlds + 2], int.</p>
-<p>The entries at indices <cite>0</cite> to <cite>num_worlds - 1</cite> store the start index of the particles belonging to that world.
+<dd><p>Start index of the first particle per world, shape [world_count + 2], int.</p>
+<p>The entries at indices <cite>0</cite> to <cite>world_count - 1</cite> store the start index of the particles belonging to that world.
 The second-last element (accessible via index <cite>-2</cite>) stores the start index of the global particles (i.e. with
 world index <cite>-1</cite>) added to the end of the model, and the last element stores the total particle count.</p>
 <dl class="simple">
@@ -2105,6 +2105,12 @@ world index <cite>-1</cite>) added to the end of the model, and the last element
 <dt class="sig sig-object py" id="newton.Model.shape_flags">
 <span class="sig-name descname"><span class="pre">shape_flags</span></span><a class="headerlink" href="#newton.Model.shape_flags" title="Link to this definition">#</a></dt>
 <dd><p>Rigid shape flags, shape [shape_count], int.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="newton.Model.shape_heightfield_data">
+<span class="sig-name descname"><span class="pre">shape_heightfield_data</span></span><a class="headerlink" href="#newton.Model.shape_heightfield_data" title="Link to this definition">#</a></dt>
+<dd><p>Array of HeightfieldData structs, shape [shape_count]. Contains grid metadata for collision kernels.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -2258,8 +2264,8 @@ margin calculations). Used for voxel-based contact reduction.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="newton.Model.shape_world_start">
 <span class="sig-name descname"><span class="pre">shape_world_start</span></span><a class="headerlink" href="#newton.Model.shape_world_start" title="Link to this definition">#</a></dt>
-<dd><p>Start index of the first shape per world, shape [num_worlds + 2], int.</p>
-<p>The entries at indices <cite>0</cite> to <cite>num_worlds - 1</cite> store the start index of the shapes belonging to that world.
+<dd><p>Start index of the first shape per world, shape [world_count + 2], int.</p>
+<p>The entries at indices <cite>0</cite> to <cite>world_count - 1</cite> store the start index of the shapes belonging to that world.
 The second-last element (accessible via index <cite>-2</cite>) stores the start index of the global shapes (i.e. with
 world index <cite>-1</cite>) added to the end of the model, and the last element stores the total shape count.</p>
 <dl class="simple">
@@ -2419,6 +2425,12 @@ world index <cite>-1</cite>) added to the end of the model, and the last element
 </dl>
 </dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="newton.Model.world_count">
+<span class="sig-name descname"><span class="pre">world_count</span></span><a class="headerlink" href="#newton.Model.world_count" title="Link to this definition">#</a></dt>
+<dd><p>Number of worlds added to the ModelBuilder.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -2542,6 +2554,7 @@ world index <cite>-1</cite>) added to the end of the model, and the last element
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.equality_constraint_world"><code class="docutils literal notranslate"><span class="pre">Model.equality_constraint_world</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.equality_constraint_world_start"><code class="docutils literal notranslate"><span class="pre">Model.equality_constraint_world_start</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.gravity"><code class="docutils literal notranslate"><span class="pre">Model.gravity</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.heightfield_elevation_data"><code class="docutils literal notranslate"><span class="pre">Model.heightfield_elevation_data</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.joint_X_c"><code class="docutils literal notranslate"><span class="pre">Model.joint_X_c</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.joint_X_p"><code class="docutils literal notranslate"><span class="pre">Model.joint_X_p</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.joint_act_mode"><code class="docutils literal notranslate"><span class="pre">Model.joint_act_mode</span></code></a></li>
@@ -2590,7 +2603,6 @@ world index <cite>-1</cite>) added to the end of the model, and the last element
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.muscle_params"><code class="docutils literal notranslate"><span class="pre">Model.muscle_params</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.muscle_points"><code class="docutils literal notranslate"><span class="pre">Model.muscle_points</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.muscle_start"><code class="docutils literal notranslate"><span class="pre">Model.muscle_start</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.num_worlds"><code class="docutils literal notranslate"><span class="pre">Model.num_worlds</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.particle_adhesion"><code class="docutils literal notranslate"><span class="pre">Model.particle_adhesion</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.particle_cohesion"><code class="docutils literal notranslate"><span class="pre">Model.particle_cohesion</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.particle_color_groups"><code class="docutils literal notranslate"><span class="pre">Model.particle_color_groups</span></code></a></li>
@@ -2623,6 +2635,7 @@ world index <cite>-1</cite>) added to the end of the model, and the last element
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_count"><code class="docutils literal notranslate"><span class="pre">Model.shape_count</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_filter"><code class="docutils literal notranslate"><span class="pre">Model.shape_filter</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_flags"><code class="docutils literal notranslate"><span class="pre">Model.shape_flags</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_heightfield_data"><code class="docutils literal notranslate"><span class="pre">Model.shape_heightfield_data</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_is_solid"><code class="docutils literal notranslate"><span class="pre">Model.shape_is_solid</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_key"><code class="docutils literal notranslate"><span class="pre">Model.shape_key</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_local_aabb_lower"><code class="docutils literal notranslate"><span class="pre">Model.shape_local_aabb_lower</span></code></a></li>
@@ -2672,6 +2685,7 @@ world index <cite>-1</cite>) added to the end of the model, and the last element
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.tri_materials"><code class="docutils literal notranslate"><span class="pre">Model.tri_materials</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.tri_poses"><code class="docutils literal notranslate"><span class="pre">Model.tri_poses</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.up_axis"><code class="docutils literal notranslate"><span class="pre">Model.up_axis</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.world_count"><code class="docutils literal notranslate"><span class="pre">Model.world_count</span></code></a></li>
 </ul>
 </li>
 </ul>
