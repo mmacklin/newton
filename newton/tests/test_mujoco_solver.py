@@ -4164,14 +4164,8 @@ class TestMuJoCoConversion(unittest.TestCase):
             self.skipTest(f"MuJoCo or deps not installed. Skipping test: {e}")
             return
 
-        # Run forward kinematics using mujoco_warp (skip if not available)
-        try:
-            import mujoco_warp
-
-            mujoco_warp.kinematics(solver.mjw_model, solver.mjw_data)
-        except ImportError as e:
-            self.skipTest(f"mujoco_warp not installed. Skipping test: {e}")
-            return
+        # Run forward kinematics using mujoco_warp
+        solver._mujoco_warp.kinematics(solver.mjw_model, solver.mjw_data)
 
         # Extract computed positions and orientations from MuJoCo data
         parent_pos = solver.mjw_data.xpos.numpy()[0, 1]
@@ -4454,7 +4448,7 @@ class TestMuJoCoConversion(unittest.TestCase):
 
         # Create shapes for world 1 at normal scale
         env1 = newton.ModelBuilder()
-        body1 = env1.add_body(key="body1", mass=1.0)  # Add mass to make it dynamic
+        body1 = env1.add_body(label="body1", mass=1.0)  # Add mass to make it dynamic
 
         # Add two spheres - one at origin, one offset
         env1.add_shape_sphere(
@@ -4473,7 +4467,7 @@ class TestMuJoCoConversion(unittest.TestCase):
 
         # Create shapes for world 2 at 0.5x scale
         env2 = newton.ModelBuilder()
-        body2 = env2.add_body(key="body2", mass=1.0)  # Add mass to make it dynamic
+        body2 = env2.add_body(label="body2", mass=1.0)  # Add mass to make it dynamic
 
         # Add two spheres with manually scaled properties
         env2.add_shape_sphere(
@@ -4603,7 +4597,7 @@ class TestMuJoCoConversion(unittest.TestCase):
 
         # Create shapes for world 0
         env1 = newton.ModelBuilder()
-        body1 = env1.add_body(key="mesh_body1", mass=1.0)
+        body1 = env1.add_body(label="mesh_body1", mass=1.0)
 
         # Add mesh shape at specific position
         env1.add_shape_mesh(
@@ -4617,7 +4611,7 @@ class TestMuJoCoConversion(unittest.TestCase):
 
         # Create shapes for world 1
         env2 = newton.ModelBuilder()
-        body2 = env2.add_body(key="mesh_body2", mass=1.0)
+        body2 = env2.add_body(label="mesh_body2", mass=1.0)
 
         # Add mesh shape at different position
         env2.add_shape_mesh(
@@ -5085,6 +5079,41 @@ class TestMuJoCoAttributes(unittest.TestCase):
         solver._update_mjc_data(solver.mjw_data, model, state)
         qpos = solver.mjw_data.qpos.numpy()
         np.testing.assert_allclose(qpos[0, 0], np.pi / 2, atol=1e-5, err_msg="joint_q=0 should map to qpos=ref")
+
+        solver._mujoco_warp.kinematics(solver.mjw_model, solver.mjw_data)
+
+        # Use _update_newton_state to get body transforms from MuJoCo
+        solver._update_newton_state(model, state, solver.mjw_data)
+
+        # Compare Newton's body_q (now from MuJoCo) with MuJoCo's xpos/xquat
+        newton_body_q = state.body_q.numpy()
+        mjc_body_to_newton = solver.mjc_body_to_newton.numpy()
+
+        for body_name in ["child"]:
+            newton_body_idx = next(
+                (i for i, lbl in enumerate(model.body_label) if lbl.endswith(f"/{body_name}")),
+                None,
+            )
+            self.assertIsNotNone(newton_body_idx, f"Expected a body with '{body_name}' in its label")
+            mjc_body_idx = np.where(mjc_body_to_newton[0] == newton_body_idx)[0][0]
+
+            # Get Newton body position and quaternion (populated from MuJoCo via update_newton_state)
+            newton_pos = newton_body_q[newton_body_idx, 0:3]
+            newton_quat = newton_body_q[newton_body_idx, 3:7]  # [x, y, z, w]
+
+            # Get MuJoCo Warp body position and quaternion
+            mj_pos = solver.mjw_data.xpos.numpy()[0, mjc_body_idx]
+            mj_quat_wxyz = solver.mjw_data.xquat.numpy()[0, mjc_body_idx]  # MuJoCo uses [w, x, y, z]
+            mj_quat = np.array([mj_quat_wxyz[1], mj_quat_wxyz[2], mj_quat_wxyz[3], mj_quat_wxyz[0]])
+
+            # Compare positions
+            assert np.allclose(newton_pos, mj_pos, atol=0.01), (
+                f"Position mismatch for {body_name}: Newton={newton_pos}, MuJoCo={mj_pos}"
+            )
+
+            # Compare quaternions (sign-invariant since q and -q represent the same rotation)
+            quat_dist = min(np.linalg.norm(newton_quat - mj_quat), np.linalg.norm(newton_quat + mj_quat))
+            assert quat_dist < 0.01, f"Quaternion mismatch for {body_name}: Newton={newton_quat}, MuJoCo={mj_quat}"
 
 
 class TestMuJoCoOptions(unittest.TestCase):
@@ -6480,7 +6509,11 @@ class TestMuJoCoSolverQpos0(unittest.TestCase):
         mj_xpos = solver.mjw_data.xpos.numpy()
 
         for name in body_names:
-            newton_idx = model.body_key.index(name)
+            newton_idx = next(
+                (i for i, lbl in enumerate(model.body_label) if lbl.endswith(f"/{name}")),
+                None,
+            )
+            assert newton_idx is not None, f"Body '{name}' not found in model.body_label"
             mjc_idx = np.where(mjc_body_to_newton[0] == newton_idx)[0][0]
             newton_pos = newton_body_q[newton_idx, :3]
             mj_pos = mj_xpos[0, mjc_idx]

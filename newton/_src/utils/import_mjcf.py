@@ -542,7 +542,9 @@ def parse_mjcf(
             return wp.quat_from_matrix(wp.mat33(rot_matrix))
         return wp.quat_identity()
 
-    def parse_shapes(defaults, body_name, link, geoms, density, visible=True, just_visual=False, incoming_xform=None):
+    def parse_shapes(
+        defaults, body_name, link, geoms, density, visible=True, just_visual=False, incoming_xform=None, label_prefix=""
+    ):
         shapes = []
         for geo_count, geom in enumerate(geoms):
             geom_defaults = defaults
@@ -621,8 +623,9 @@ def parse_mjcf(
                 shape_cfg.thickness = float(geom_attrib["margin"]) * scale
 
             custom_attributes = parse_custom_attributes(geom_attrib, builder_custom_attr_shape, parsing_mode="mjcf")
+            shape_label = f"{label_prefix}/{geom_name}" if label_prefix else geom_name
             shape_kwargs = {
-                "key": geom_name,
+                "label": shape_label,
                 "body": link,
                 "cfg": shape_cfg,
                 "custom_attributes": custom_attributes,
@@ -826,7 +829,7 @@ def parse_mjcf(
 
         return shapes
 
-    def _parse_sites_impl(defaults, body_name, link, sites, incoming_xform=None):
+    def _parse_sites_impl(defaults, body_name, link, sites, incoming_xform=None, label_prefix=""):
         """Parse site elements from MJCF."""
         from ..geometry import GeoType  # noqa: PLC0415
 
@@ -906,15 +909,17 @@ def parse_mjcf(
                 site_size = wp.vec3(radius, half_height, 0.0)
 
             # Add site using builder.add_site()
+            site_label = f"{label_prefix}/{site_name}" if label_prefix else site_name
             s = builder.add_site(
                 body=link,
                 xform=site_xform,
                 type=geo_type,
                 scale=site_size,
-                key=site_name,
+                label=site_label,
                 visible=visible,
             )
             site_shapes.append(s)
+            site_name_to_idx[site_name] = s
 
         return site_shapes
 
@@ -930,6 +935,7 @@ def parse_mjcf(
         body_name: str,
         link: int,
         incoming_xform: wp.transform | None = None,
+        label_prefix: str = "",
     ) -> list:
         """Process geoms for a body, partitioning into visuals and colliders.
 
@@ -942,6 +948,7 @@ def parse_mjcf(
             body_name: Name of the parent body (for naming).
             link: The body index.
             incoming_xform: Optional transform to apply to geoms.
+            label_prefix: Hierarchical label prefix for shape labels.
 
         Returns:
             List of visual shape indices (if parse_visuals is True).
@@ -1014,6 +1021,7 @@ def parse_mjcf(
                 just_visual=True,
                 visible=not hide_visuals,
                 incoming_xform=incoming_xform,
+                label_prefix=label_prefix,
             )
             visual_shape_indices.extend(s)
 
@@ -1032,6 +1040,7 @@ def parse_mjcf(
             density=default_shape_density,
             visible=show_colliders,
             incoming_xform=incoming_xform,
+            label_prefix=label_prefix,
         )
 
         return visual_shape_indices
@@ -1043,6 +1052,7 @@ def parse_mjcf(
         childclass: str | None,
         world_xform: wp.transform,
         body_relative_xform: wp.transform | None = None,
+        label_prefix: str = "",
     ):
         """Process frame elements, composing transforms with children.
 
@@ -1056,6 +1066,7 @@ def parse_mjcf(
             world_xform: World transform for positioning child bodies.
             body_relative_xform: Body-relative transform for geoms/sites. If None, uses world_xform
                 (appropriate for static geoms at worldbody level).
+            label_prefix: Hierarchical label prefix for child entity labels.
         """
         # Stack entries: (frame, world_xform, body_relative_xform, frame_defaults, frame_childclass)
         # For worldbody frames, body_relative equals world (static geoms use world coords)
@@ -1087,19 +1098,21 @@ def parse_mjcf(
                     _defaults,
                     childclass=_childclass,
                     incoming_xform=composed_world,
+                    parent_label_path=label_prefix,
                 )
 
             # Process child geoms (need body-relative transform)
             # Use the same visual/collider partitioning logic as parse_body
             child_geoms = frame.findall("geom")
             if child_geoms:
-                body_name = "world" if parent_body == -1 else builder.body_key[parent_body]
+                body_name = "world" if parent_body == -1 else builder.body_label[parent_body]
                 frame_visual_shapes = _process_body_geoms(
                     child_geoms,
                     _defaults,
                     body_name,
                     parent_body,
                     incoming_xform=composed_body_rel,
+                    label_prefix=label_prefix,
                 )
                 visual_shapes.extend(frame_visual_shapes)
 
@@ -1107,8 +1120,15 @@ def parse_mjcf(
             if parse_sites:
                 child_sites = frame.findall("site")
                 if child_sites:
-                    body_name = "world" if parent_body == -1 else builder.body_key[parent_body]
-                    _parse_sites_impl(_defaults, body_name, parent_body, child_sites, incoming_xform=composed_body_rel)
+                    body_name = "world" if parent_body == -1 else builder.body_label[parent_body]
+                    _parse_sites_impl(
+                        _defaults,
+                        body_name,
+                        parent_body,
+                        child_sites,
+                        incoming_xform=composed_body_rel,
+                        label_prefix=label_prefix,
+                    )
 
             # Add nested frames to stack with current defaults and childclass (in reverse to maintain order)
             frame_stack.extend(
@@ -1121,6 +1141,7 @@ def parse_mjcf(
         incoming_defaults: dict,
         childclass: str | None = None,
         incoming_xform: Transform | None = None,
+        parent_label_path: str = "",
     ):
         """Parse a body element from MJCF.
 
@@ -1132,6 +1153,7 @@ def parse_mjcf(
             incoming_defaults: Default attributes dictionary.
             childclass: Child class name for inheritance.
             incoming_xform: Accumulated transform from parent (may include frame offsets).
+            parent_label_path: The hierarchical label path of the parent body (XPath-style).
 
         Note:
             Root bodies (direct children of <worldbody>) are automatically detected by checking if
@@ -1156,6 +1178,8 @@ def parse_mjcf(
             body_attrib = body.attrib
         body_name = body_attrib.get("name", f"body_{builder.body_count}")
         body_name = sanitize_name(body_name)
+        # Build XPath-style hierarchical label path for this body
+        body_label_path = f"{parent_label_path}/{body_name}" if parent_label_path else body_name
         body_pos = parse_vec(body_attrib, "pos", (0.0, 0.0, 0.0))
         body_ori = parse_orientation(body_attrib)
 
@@ -1190,7 +1214,8 @@ def parse_mjcf(
         freejoint_tags = body.findall("freejoint")
         if len(freejoint_tags) > 0:
             joint_type = JointType.FREE
-            joint_name.append(freejoint_tags[0].attrib.get("name", f"{body_name}_freejoint"))
+            freejoint_name = sanitize_name(freejoint_tags[0].attrib.get("name", f"{body_name}_freejoint"))
+            joint_name.append(freejoint_name)
             joint_armature.append(0.0)
             joint_custom_attributes = parse_custom_attributes(
                 freejoint_tags[0].attrib, builder_custom_attr_joint, parsing_mode="mjcf"
@@ -1295,9 +1320,10 @@ def parse_mjcf(
         body_custom_attributes = parse_custom_attributes(body_attrib, builder_custom_attr_body, parsing_mode="mjcf")
         link = builder.add_link(
             xform=world_xform,  # Use the composed world transform
-            key=body_name,
+            label=body_label_path,
             custom_attributes=body_custom_attributes,
         )
+        body_name_to_idx[body_name] = link
 
         if joint_type is None:
             joint_type = JointType.D6
@@ -1348,7 +1374,7 @@ def parse_mjcf(
                     builder._add_base_joint(
                         child=link,
                         base_joint=base_joint,
-                        key="base_joint",
+                        label=f"{body_label_path}/base_joint",
                         parent_xform=base_parent_xform,
                         child_xform=base_child_xform,
                         parent=parent,
@@ -1357,14 +1383,20 @@ def parse_mjcf(
             elif floating is not None and floating and parent == -1:
                 # floating=True only makes sense when connecting to world
                 joint_indices.append(
-                    builder._add_base_joint(child=link, floating=True, key="floating_base", parent=parent)
+                    builder._add_base_joint(
+                        child=link, floating=True, label=f"{body_label_path}/floating_base", parent=parent
+                    )
                 )
             else:
                 # Fixed joint to world or to parent_body
                 # When parent_body is set, _xform is already relative to parent body (computed via effective_xform)
                 joint_indices.append(
                     builder._add_base_joint(
-                        child=link, floating=False, key="fixed_base", parent_xform=_xform, parent=parent
+                        child=link,
+                        floating=False,
+                        label=f"{body_label_path}/fixed_base",
+                        parent_xform=_xform,
+                        parent=parent,
                     )
                 )
 
@@ -1373,12 +1405,14 @@ def parse_mjcf(
             joint_pos = joint_pos[0] if len(joint_pos) > 0 else wp.vec3(0.0, 0.0, 0.0)
             if len(joint_name) == 0:
                 joint_name = [f"{body_name}_joint"]
+            joint_label_name = "_".join(joint_name)
+            joint_label = f"{body_label_path}/{joint_label_name}"
             if joint_type == JointType.FREE:
                 assert parent == -1, "Free joints must have the world body as parent"
                 joint_indices.append(
                     builder.add_joint_free(
                         link,
-                        key="_".join(joint_name),
+                        label=joint_label,
                         custom_attributes=joint_custom_attributes,
                     )
                 )
@@ -1397,7 +1431,7 @@ def parse_mjcf(
                     child=link,
                     linear_axes=linear_axes,
                     angular_axes=angular_axes,
-                    key="_".join(joint_name),
+                    label=joint_label,
                     parent_xform=parent_xform_for_joint,
                     child_xform=wp.transform(joint_pos, wp.quat_identity()),
                     custom_attributes=joint_custom_attributes | dof_custom_attributes,
@@ -1411,11 +1445,15 @@ def parse_mjcf(
                     for mjcf_name, dof_offset in mjcf_joint_dof_offsets:
                         mjcf_joint_name_to_dof[mjcf_name] = qd_start + dof_offset
 
+                # Map raw MJCF joint names to Newton joint index for tendon/actuator resolution
+                for jn in joint_name:
+                    joint_name_to_idx[jn] = joint_idx
+
         # -----------------
         # add shapes (using shared helper for visual/collider partitioning)
 
         geoms = body.findall("geom")
-        body_visual_shapes = _process_body_geoms(geoms, defaults, body_name, link)
+        body_visual_shapes = _process_body_geoms(geoms, defaults, body_name, link, label_prefix=body_label_path)
         visual_shapes.extend(body_visual_shapes)
 
         # Parse sites (non-colliding reference points)
@@ -1427,6 +1465,7 @@ def parse_mjcf(
                     body_name,
                     link,
                     sites=sites,
+                    label_prefix=body_label_path,
                 )
 
         m = builder.body_mass[link]
@@ -1487,7 +1526,14 @@ def parse_mjcf(
                 _incoming_defaults = defaults
             else:
                 _incoming_defaults = merge_attrib(defaults, class_defaults[_childclass])
-            parse_body(child, link, _incoming_defaults, childclass=_childclass, incoming_xform=world_xform)
+            parse_body(
+                child,
+                link,
+                _incoming_defaults,
+                childclass=_childclass,
+                incoming_xform=world_xform,
+                parent_label_path=body_label_path,
+            )
 
         # Process frame elements within this body
         # Use body's childclass if declared, otherwise inherit from parent
@@ -1502,6 +1548,7 @@ def parse_mjcf(
             childclass=frame_childclass,
             world_xform=world_xform,
             body_relative_xform=wp.transform_identity(),  # Geoms/sites need body-relative coords
+            label_prefix=body_label_path,
         )
 
     def parse_equality_constraints(equality):
@@ -1517,11 +1564,11 @@ def parse_mjcf(
             Returns:
                 Tuple of (body_idx, anchor_position) or None if site not found or not a site.
             """
-            if site_name not in builder.shape_key:
+            if site_name not in site_name_to_idx:
                 if verbose:
                     print(f"Warning: Site '{site_name}' not found")
                 return None
-            site_idx = builder.shape_key.index(site_name)
+            site_idx = site_name_to_idx[site_name]
             if not (builder.shape_flags[site_idx] & ShapeFlags.SITE):
                 if verbose:
                     print(f"Warning: Shape '{site_name}' is not a site")
@@ -1548,14 +1595,16 @@ def parse_mjcf(
 
                 anchor_vec = wp.vec3(*[float(x) * scale for x in anchor.split()]) if anchor else None
 
-                body1_idx = builder.body_key.index(body1_name) if body1_name and body1_name in builder.body_key else -1
-                body2_idx = builder.body_key.index(body2_name) if body2_name and body2_name in builder.body_key else -1
+                body1_idx = body_name_to_idx.get(body1_name, -1) if body1_name else -1
+                body2_idx = body_name_to_idx.get(body2_name, -1) if body2_name else -1
 
                 builder.add_equality_constraint_connect(
                     body1=body1_idx,
                     body2=body2_idx,
                     anchor=anchor_vec,
-                    key=common["name"],
+                    label=f"{articulation_label}/{common['name']}"
+                    if articulation_label and common["name"]
+                    else common["name"],
                     enabled=common["active"],
                     custom_attributes=custom_attrs,
                 )
@@ -1578,7 +1627,9 @@ def parse_mjcf(
                         body1=body1_idx,
                         body2=body2_idx,
                         anchor=anchor_vec,
-                        key=common["name"],
+                        label=f"{articulation_label}/{common['name']}"
+                        if articulation_label and common["name"]
+                        else common["name"],
                         enabled=common["active"],
                         custom_attributes=custom_attrs,
                     )
@@ -1606,8 +1657,8 @@ def parse_mjcf(
 
                 anchor_vec = wp.vec3(*[float(x) * scale for x in anchor.split()])
 
-                body1_idx = builder.body_key.index(body1_name) if body1_name and body1_name in builder.body_key else -1
-                body2_idx = builder.body_key.index(body2_name) if body2_name and body2_name in builder.body_key else -1
+                body1_idx = body_name_to_idx.get(body1_name, -1) if body1_name else -1
+                body2_idx = body_name_to_idx.get(body2_name, -1) if body2_name else -1
 
                 relpose_list = [float(x) for x in relpose.split()]
                 relpose_transform = wp.transform(
@@ -1621,7 +1672,9 @@ def parse_mjcf(
                     anchor=anchor_vec,
                     relpose=relpose_transform,
                     torquescale=torquescale,
-                    key=common["name"],
+                    label=f"{articulation_label}/{common['name']}"
+                    if articulation_label and common["name"]
+                    else common["name"],
                     enabled=common["active"],
                     custom_attributes=custom_attrs,
                 )
@@ -1649,7 +1702,9 @@ def parse_mjcf(
                         anchor=anchor_vec,
                         relpose=relpose_transform,
                         torquescale=torquescale,
-                        key=common["name"],
+                        label=f"{articulation_label}/{common['name']}"
+                        if articulation_label and common["name"]
+                        else common["name"],
                         enabled=common["active"],
                         custom_attributes=custom_attrs,
                     )
@@ -1671,18 +1726,16 @@ def parse_mjcf(
                 if verbose:
                     print(f"Joint constraint: {joint1_name} coupled to {joint2_name} with polycoef {polycoef}")
 
-                joint1_idx = (
-                    builder.joint_key.index(joint1_name) if joint1_name and joint1_name in builder.joint_key else -1
-                )
-                joint2_idx = (
-                    builder.joint_key.index(joint2_name) if joint2_name and joint2_name in builder.joint_key else -1
-                )
+                joint1_idx = joint_name_to_idx.get(joint1_name, -1) if joint1_name else -1
+                joint2_idx = joint_name_to_idx.get(joint2_name, -1) if joint2_name else -1
 
                 builder.add_equality_constraint_joint(
                     joint1=joint1_idx,
                     joint2=joint2_idx,
                     polycoef=[float(x) for x in polycoef.split()],
-                    key=common["name"],
+                    label=f"{articulation_label}/{common['name']}"
+                    if articulation_label and common["name"]
+                    else common["name"],
                     enabled=common["active"],
                     custom_attributes=custom_attrs,
                 )
@@ -1703,6 +1756,17 @@ def parse_mjcf(
     # Maps tendon names to their index in the tendon custom attributes.
     # Used to resolve actuators targeting tendons.
     tendon_name_to_idx: dict[str, int] = {}
+    # Maps raw MJCF body/site names to their builder indices.
+    # Used to resolve equality constraints and actuators that reference entities by their short name.
+    body_name_to_idx: dict[str, int] = {}
+    site_name_to_idx: dict[str, int] = {}
+    joint_name_to_idx: dict[str, int] = {}
+
+    # Extract articulation label early for hierarchical label construction
+    articulation_label = root.attrib.get("model")
+
+    # Build the root label path: "{model_name}/worldbody" or just "worldbody"
+    root_label_path = f"{articulation_label}/worldbody" if articulation_label else "worldbody"
 
     # Process all worldbody elements (MuJoCo allows multiple, e.g. from includes)
     for world in root.findall("worldbody"):
@@ -1723,7 +1787,13 @@ def parse_mjcf(
             effective_xform = xform
 
         for body in world.findall("body"):
-            parse_body(body, root_parent, world_defaults, incoming_xform=effective_xform)
+            parse_body(
+                body,
+                root_parent,
+                world_defaults,
+                incoming_xform=effective_xform,
+                parent_label_path=root_label_path,
+            )
 
         # -----------------
         # add static geoms
@@ -1735,6 +1805,7 @@ def parse_mjcf(
             geoms=world.findall("geom"),
             density=default_shape_density,
             incoming_xform=xform,
+            label_prefix=root_label_path,
         )
 
         if parse_sites:
@@ -1744,6 +1815,7 @@ def parse_mjcf(
                 link=-1,
                 sites=world.findall("site"),
                 incoming_xform=xform,
+                label_prefix=root_label_path,
             )
 
         # -----------------
@@ -1756,6 +1828,7 @@ def parse_mjcf(
             childclass=None,
             world_xform=effective_xform,
             body_relative_xform=None,  # Static geoms use world coords
+            label_prefix=root_label_path,
         )
 
     # -----------------
@@ -1781,6 +1854,15 @@ def parse_mjcf(
     # Only parse contact pairs if custom attributes are registered
     has_pair_attrs = "mujoco:pair_geom1" in builder.custom_attributes
     contact = root.find("contact")
+
+    def _find_shape_idx(name: str) -> int | None:
+        """Look up shape index by name, supporting hierarchical labels (e.g. "prefix/geom_name")."""
+        for idx in range(start_shape_count, len(builder.shape_label)):
+            label = builder.shape_label[idx]
+            if label == name or label.endswith(f"/{name}"):
+                return idx
+        return None
+
     if contact is not None and has_pair_attrs:
         # Parse <pair> elements - explicit contact pairs with custom properties
         for pair in contact.findall("pair"):
@@ -1792,17 +1874,14 @@ def parse_mjcf(
                     print("Warning: <pair> element missing geom1 or geom2 attribute, skipping")
                 continue
 
-            # Look up shape indices by geom name
-            try:
-                geom1_idx = builder.shape_key.index(geom1_name)
-            except ValueError:
+            geom1_idx = _find_shape_idx(geom1_name)
+            if geom1_idx is None:
                 if verbose:
                     print(f"Warning: <pair> references unknown geom '{geom1_name}', skipping")
                 continue
 
-            try:
-                geom2_idx = builder.shape_key.index(geom2_name)
-            except ValueError:
+            geom2_idx = _find_shape_idx(geom2_name)
+            if geom2_idx is None:
                 if verbose:
                     print(f"Warning: <pair> references unknown geom '{geom2_name}', skipping")
                 continue
@@ -1840,17 +1919,15 @@ def parse_mjcf(
             body1_name = body1_name.replace("-", "_")
             body2_name = body2_name.replace("-", "_")
 
-            # Look up body indices by body name
-            try:
-                body1_idx = builder.body_key.index(body1_name)
-            except ValueError:
+            # Look up body indices by raw MJCF name
+            body1_idx = body_name_to_idx.get(body1_name)
+            if body1_idx is None:
                 if verbose:
                     print(f"Warning: <exclude> references unknown body '{body1_name}', skipping")
                 continue
 
-            try:
-                body2_idx = builder.body_key.index(body2_name)
-            except ValueError:
+            body2_idx = body_name_to_idx.get(body2_name)
+            if body2_idx is None:
                 if verbose:
                     print(f"Warning: <exclude> references unknown body '{body2_name}', skipping")
                 continue
@@ -1904,9 +1981,8 @@ def parse_mjcf(
                     continue
 
                 # Look up joint index by name
-                try:
-                    joint_idx = builder.joint_key.index(joint_name)
-                except ValueError:
+                joint_idx = joint_name_to_idx.get(joint_name)
+                if joint_idx is None:
                     if verbose:
                         print(
                             f"Warning: Tendon '{tendon_name}' references unknown joint '{joint_name}', skipping joint"
@@ -1955,7 +2031,7 @@ def parse_mjcf(
                 tendon_name_to_idx[sanitize_name(tendon_name)] = tendon_idx
 
             if verbose:
-                joint_names_str = ", ".join(f"{builder.joint_key[j]}*{c}" for j, c in joint_entries)
+                joint_names_str = ", ".join(f"{builder.joint_label[j]}*{c}" for j, c in joint_entries)
                 print(f"Parsed fixed tendon: {tendon_name} ({joint_names_str})")
 
     # -----------------
@@ -2012,9 +2088,9 @@ def parse_mjcf(
                     target_idx = qd_start  # DOF index for joint actuators
                     target_name_for_log = joint_name
                     trntype = 0  # TrnType.JOINT
-                elif joint_name in builder.joint_key:
+                elif joint_name in joint_name_to_idx:
                     # Fallback: combined Newton joint (applies to all DOFs)
-                    joint_idx = builder.joint_key.index(joint_name)
+                    joint_idx = joint_name_to_idx[joint_name]
                     qd_start = builder.joint_qd_start[joint_idx]
                     lin_dofs, ang_dofs = builder.joint_dof_dim[joint_idx]
                     total_dofs = lin_dofs + ang_dofs
@@ -2027,11 +2103,11 @@ def parse_mjcf(
                     continue
             elif body_name:
                 # Body transmission (trntype=4)
-                if body_name not in builder.body_key:
+                body_idx = body_name_to_idx.get(body_name)
+                if body_idx is None:
                     if verbose:
                         print(f"Warning: {actuator_type} actuator references unknown body '{body_name}'")
                     continue
-                body_idx = builder.body_key.index(body_name)
                 target_idx = body_idx
                 target_name_for_log = body_name
                 trntype = 4  # TrnType.BODY
@@ -2193,11 +2269,10 @@ def parse_mjcf(
                 builder.add_shape_collision_filter_pair(i, j)
 
     # Create articulation from all collected joints
-    articulation_key = root.attrib.get("model")
     builder._finalize_imported_articulation(
         joint_indices=joint_indices,
         parent_body=parent_body,
-        articulation_key=articulation_key,
+        articulation_label=articulation_label,
     )
 
     if collapse_fixed_joints:

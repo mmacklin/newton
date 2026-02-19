@@ -1314,7 +1314,7 @@ class SolverMuJoCo(SolverBase):
         # Tendon names (string attribute - stored as list[str], not warp array)
         builder.add_custom_attribute(
             ModelBuilder.CustomAttribute(
-                name="tendon_key",
+                name="tendon_label",
                 frequency="tendon",
                 dtype=str,
                 default="",
@@ -1812,11 +1812,11 @@ class SolverMuJoCo(SolverBase):
                         print(f"Warning: MuJoCo actuator {mujoco_act_idx} references tendon {target_idx} not in MuJoCo")
                     continue
             elif trntype == 4:  # TrnType.BODY
-                if target_idx < 0 or target_idx >= len(model.body_key):
+                if target_idx < 0 or target_idx >= len(model.body_label):
                     if wp.config.verbose:
                         print(f"Warning: MuJoCo actuator {mujoco_act_idx} has invalid body target {target_idx}")
                     continue
-                target_name = model.body_key[target_idx]
+                target_name = model.body_label[target_idx].replace("/", "_")
             else:
                 # TODO: Support site, slidercrank, and jointinparent transmission types
                 if wp.config.verbose:
@@ -2505,7 +2505,7 @@ class SolverMuJoCo(SolverBase):
 
     @staticmethod
     def _color_collision_shapes(
-        model: Model, selected_shapes: nparray, visualize_graph: bool = False, shape_keys: list[str] | None = None
+        model: Model, selected_shapes: nparray, visualize_graph: bool = False, shape_labels: list[str] | None = None
     ) -> nparray:
         """
         Find a graph coloring of the collision filter pairs in the model.
@@ -2516,7 +2516,7 @@ class SolverMuJoCo(SolverBase):
             model (Model): The model to color the collision shapes of.
             selected_shapes (nparray): The indices of the collision shapes to color.
             visualize_graph (bool): Whether to visualize the graph coloring.
-            shape_keys (list[str]): The keys of the shapes, only used for visualization.
+            shape_labels (list[str]): The labels of the shapes, only used for visualization.
 
         Returns:
             nparray: An integer array of shape (num_shapes,), where each element is the color of the corresponding shape.
@@ -2557,7 +2557,7 @@ class SolverMuJoCo(SolverBase):
                 plot_graph(
                     vertices=np.arange(num_shapes),
                     edges=graph_edges,
-                    node_labels=[shape_keys[i] for i in selected_shapes] if shape_keys is not None else None,
+                    node_labels=[shape_labels[i] for i in selected_shapes] if shape_labels is not None else None,
                     node_colors=[shape_color[i] for i in selected_shapes],
                 )
 
@@ -3092,7 +3092,7 @@ class SolverMuJoCo(SolverBase):
         )
 
         shape_color = self._color_collision_shapes(
-            model, colliding_shapes, visualize_graph=False, shape_keys=model.shape_key
+            model, colliding_shapes, visualize_graph=False, shape_labels=model.shape_label
         )
 
         selected_shapes_set = set(selected_shapes)
@@ -3111,7 +3111,7 @@ class SolverMuJoCo(SolverBase):
                 if skip_visual_only_geoms and not is_site and not (shape_flags[shape] & ShapeFlags.COLLIDE_SHAPES):
                     continue
                 stype = shape_type[shape]
-                name = f"{model.shape_key[shape]}_{shape}"
+                name = f"{model.shape_label[shape]}_{shape}"
 
                 if is_site:
                     if not include_sites:
@@ -3172,7 +3172,7 @@ class SolverMuJoCo(SolverBase):
                     mj_size = (hfield_src.hx, hfield_src.hy, mj_size_z, eps)
                     elevation_data = hfield_src.data.flatten()
 
-                    hfield_name = f"{model.shape_key[shape]}_{shape}"
+                    hfield_name = f"{model.shape_label[shape].replace('/', '_')}_{shape}"
                     spec.add_hfield(
                         name=hfield_name,
                         nrow=hfield_src.nrow,
@@ -3307,7 +3307,7 @@ class SolverMuJoCo(SolverBase):
             joint_rot = child_xform.q
 
             # ensure unique body name
-            name = model.body_key[child]
+            name = model.body_label[child].replace("/", "_")
             if name not in body_name_counts:
                 body_name_counts[name] = 1
             else:
@@ -3342,7 +3342,7 @@ class SolverMuJoCo(SolverBase):
             # add joint
             j_type = joint_type[j]
             qd_start = joint_qd_start[j]
-            name = model.joint_key[j]
+            name = model.joint_label[j].replace("/", "_")
             if name not in joint_names:
                 joint_names[name] = 1
             else:
@@ -3659,7 +3659,7 @@ class SolverMuJoCo(SolverBase):
             """Get body name, handling world body (-1) correctly."""
             if body_idx == -1:
                 return "world"
-            return model.body_key[body_idx]
+            return model.body_label[body_idx].replace("/", "_")
 
         for i in selected_constraints:
             constraint_type = eq_constraint_type[i]
@@ -3677,8 +3677,10 @@ class SolverMuJoCo(SolverBase):
                 eq = spec.add_equality(objtype=mujoco.mjtObj.mjOBJ_JOINT)
                 eq.type = mujoco.mjtEq.mjEQ_JOINT
                 eq.active = eq_constraint_enabled[i]
-                eq.name1 = model.joint_key[eq_constraint_joint1[i]]
-                eq.name2 = model.joint_key[eq_constraint_joint2[i]]
+                j1_idx = int(eq_constraint_joint1[i])
+                j2_idx = int(eq_constraint_joint2[i])
+                eq.name1 = joint_mapping.get(j1_idx, model.joint_label[j1_idx].replace("/", "_"))
+                eq.name2 = joint_mapping.get(j2_idx, model.joint_label[j2_idx].replace("/", "_"))
                 eq.data[0:5] = eq_constraint_polycoef[i]
                 if eq_constraint_solref is not None:
                     eq.solref = eq_constraint_solref[i]
@@ -3704,16 +3706,16 @@ class SolverMuJoCo(SolverBase):
             eq = spec.add_equality(objtype=mujoco.mjtObj.mjOBJ_BODY)
             eq.type = mujoco.mjtEq.mjEQ_CONNECT
             eq.active = True
-            eq.name1 = model.body_key[joint_parent[j]]
-            eq.name2 = model.body_key[joint_child[j]]
+            eq.name1 = get_body_name(joint_parent[j])
+            eq.name2 = get_body_name(joint_child[j])
             eq.data[0:3] = joint_parent_xform[j][:3]
             mjc_eq_to_newton_jnt[eq.id] = j
 
             eq = spec.add_equality(objtype=mujoco.mjtObj.mjOBJ_BODY)
             eq.type = mujoco.mjtEq.mjEQ_CONNECT
             eq.active = True
-            eq.name1 = model.body_key[joint_child[j]]
-            eq.name2 = model.body_key[joint_parent[j]]
+            eq.name1 = get_body_name(joint_child[j])
+            eq.name2 = get_body_name(joint_parent[j])
             eq.data[0:3] = joint_child_xform[j][:3]
             mjc_eq_to_newton_jnt[eq.id] = j
 
@@ -4916,7 +4918,7 @@ class SolverMuJoCo(SolverBase):
         # No bodies in global world
         global_bodies = np.where(body_world == -1)[0]
         if len(global_bodies) > 0:
-            body_names = [model.body_key[i] for i in global_bodies[:3]]
+            body_names = [model.body_label[i] for i in global_bodies[:3]]
             msg = f"Global world (-1) cannot contain bodies. Found {len(global_bodies)} body(ies) with world == -1"
             if body_names:
                 msg += f": {body_names}"
@@ -4925,7 +4927,7 @@ class SolverMuJoCo(SolverBase):
         # No joints in global world
         global_joints = np.where(joint_world == -1)[0]
         if len(global_joints) > 0:
-            joint_names = [model.joint_key[i] for i in global_joints[:3]]
+            joint_names = [model.joint_label[i] for i in global_joints[:3]]
             msg = f"Global world (-1) cannot contain joints. Found {len(global_joints)} joint(s) with world == -1"
             if joint_names:
                 msg += f": {joint_names}"
