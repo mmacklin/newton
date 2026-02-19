@@ -4272,6 +4272,7 @@ class ModelBuilder:
             visited[parent_body] = True
             if visited[child_body] or child_body not in body_children:
                 return
+            visited[child_body] = True
             for child in body_children[child_body]:
                 if not visited[child]:
                     dfs(child_body, child, incoming_xform, last_dynamic_body)
@@ -4279,6 +4280,29 @@ class ModelBuilder:
         for body in body_children[-1]:
             if not visited[body]:
                 dfs(-1, body, wp.transform(), -1)
+
+        # Handle disconnected subtrees: bodies not reachable from world.
+        # This happens when joints only connect bodies to each other (no joint
+        # has parent == -1) and free joints to world were not auto-inserted
+        # (e.g. when no PhysicsArticulationRootAPI exists but joints are present).
+        children_in_joints = {c for p, cs in body_children.items() if p >= 0 for c in cs}
+
+        for body_id in range(self.body_count):
+            if visited[body_id]:
+                continue
+            if body_id in children_in_joints:
+                # Not a root — will be visited when its parent root is processed.
+                continue
+            # This body is a root of a disconnected subtree (or an isolated body).
+            new_id = len(retained_bodies)
+            body_data[body_id]["id"] = new_id
+            retained_bodies.append(body_id)
+            for shape in body_data[body_id]["shapes"]:
+                self.shape_body[shape] = new_id
+            visited[body_id] = True
+            for child in body_children[body_id]:
+                if not visited[child]:
+                    dfs(body_id, child, wp.transform(), body_id)
 
         # repopulate the model
         # save original body groups before clearing
