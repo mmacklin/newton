@@ -336,7 +336,7 @@ def parse_mjcf(
     )
     # MuJoCo actuator custom attributes (from "mujoco:actuator" frequency)
     builder_custom_attr_actuator: list[ModelBuilder.CustomAttribute] = [
-        attr for attr in builder.custom_attributes.values() if attr.frequency_key == "mujoco:actuator"
+        attr for attr in builder.custom_attributes.values() if attr.frequency == "mujoco:actuator"
     ]
 
     compiler = root.find("compiler")
@@ -1271,9 +1271,15 @@ def parse_mjcf(
                     if actuatorfrcrange is not None and len(actuatorfrcrange) == 2:
                         actuatorfrclimited = joint_attrib.get("actuatorfrclimited", "auto").lower()
                         autolimits_attr = builder.custom_attributes.get("mujoco:autolimits")
-                        autolimits_val = (
-                            autolimits_attr.values.get(0, autolimits_attr.default) if autolimits_attr else 1
-                        )
+                        autolimits_val = True
+                        if autolimits_attr is not None:
+                            autolimits_values = autolimits_attr.values
+                            autolimits_raw = (
+                                autolimits_values.get(0, autolimits_attr.default)
+                                if isinstance(autolimits_values, dict)
+                                else autolimits_attr.default
+                            )
+                            autolimits_val = bool(autolimits_raw)
                         if actuatorfrclimited == "true" or (actuatorfrclimited == "auto" and autolimits_val):
                             effort_limit = max(abs(actuatorfrcrange[0]), abs(actuatorfrcrange[1]))
                         elif verbose:
@@ -1846,7 +1852,7 @@ def parse_mjcf(
     builder_custom_attr_pair: list[ModelBuilder.CustomAttribute] = [
         attr
         for attr in builder.custom_attributes.values()
-        if isinstance(attr.frequency_key, str)
+        if isinstance(attr.frequency, str)
         and attr.name.startswith("pair_")
         and attr.name not in ("pair_geom1", "pair_geom2", "pair_world")
     ]
@@ -1950,12 +1956,12 @@ def parse_mjcf(
     # -----------------
     # Parse all fixed tendons in a single tendon section.
 
-    # Get variable-length custom attributes for tendon parsing (frequency="tendon")
+    # Get variable-length custom attributes for tendon parsing (frequency="mujoco:tendon")
     # Exclude tendon_world, tendon_joint_adr, tendon_joint_num as they're handled specially
     builder_custom_attr_tendon: list[ModelBuilder.CustomAttribute] = [
         attr
         for attr in builder.custom_attributes.values()
-        if isinstance(attr.frequency_key, str)
+        if isinstance(attr.frequency, str)
         and attr.name.startswith("tendon_")
         and attr.name not in ("tendon_world", "tendon_joint_adr", "tendon_joint_num", "tendon_joint", "tendon_coef")
     ]

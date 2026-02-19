@@ -4623,10 +4623,156 @@ def Xform "Articulation" (
 
 class TestImportSampleAssetsComposition(unittest.TestCase):
     @unittest.skipUnless(USD_AVAILABLE, "Requires usd-core")
-    def test_floating_true_creates_free_joint(self):
-        """Test that floating=True creates a free joint for the root body."""
+    def test_custom_frequency_usd_defaults_when_no_authored_attrs(self):
+        """Test that custom frequency counts increment for prims with no authored custom attributes.
+
+        Regression test: when a usd_prim_filter returns True for prims that have no authored custom attributes,
+        the frequency count should still increment for each prim, and default values should be applied.
+        """
         from pxr import Usd, UsdGeom, UsdPhysics
 
+        # Create a minimal USD stage with physics scene and two custom prims
+        stage = Usd.Stage.CreateInMemory()
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+        UsdPhysics.Scene.Define(stage, "/physicsScene")
+
+        # Define two Xform prims that will be matched by our custom filter
+        # These prims have NO authored custom attributes
+        UsdGeom.Xform.Define(stage, "/World/CustomItem0")
+        UsdGeom.Xform.Define(stage, "/World/CustomItem1")
+
+        # Define a prim filter that matches these custom items
+        def is_custom_item(prim, context):
+            return prim.GetPath().pathString.startswith("/World/CustomItem")
+
+        builder = newton.ModelBuilder()
+
+        # Register custom frequency with the prim filter
+        builder.add_custom_frequency(
+            newton.ModelBuilder.CustomFrequency(
+                name="item",
+                namespace="test",
+                usd_prim_filter=is_custom_item,
+            )
+        )
+
+        # Add a custom attribute with a non-zero default value
+        default_value = 42.0
+        builder.add_custom_attribute(
+            newton.ModelBuilder.CustomAttribute(
+                name="item_value",
+                frequency="test:item",
+                dtype=wp.float32,
+                default=default_value,
+                namespace="test",
+            )
+        )
+
+        # Parse the USD stage - this should find the 2 prims and increment count
+        builder.add_usd(stage)
+
+        # Finalize and verify
+        model = builder.finalize()
+
+        # Verify the custom frequency count equals the number of prims found
+        self.assertEqual(model.get_custom_frequency_count("test:item"), 2)
+
+        # Verify the attribute array has the correct length and default values
+        self.assertTrue(hasattr(model, "test"), "Model should have 'test' namespace")
+        self.assertTrue(hasattr(model.test, "item_value"), "Model should have 'item_value' attribute")
+
+        item_values = model.test.item_value.numpy()
+        self.assertEqual(len(item_values), 2)
+        self.assertAlmostEqual(item_values[0], default_value, places=5)
+        self.assertAlmostEqual(item_values[1], default_value, places=5)
+
+    @unittest.skipUnless(USD_AVAILABLE, "Requires usd-core")
+    def test_custom_frequency_instance_proxy_traversal(self):
+        """Test that custom frequency parsing traverses instance proxy prims.
+
+        Regression test: prims under instanceable prims should be visited during
+        custom frequency USD parsing via TraverseInstanceProxies predicate.
+        """
+
+    @unittest.skipUnless(USD_AVAILABLE, "Requires usd-core")
+    def test_floating_true_creates_free_joint(self):
+        """Test that floating=True creates a free joint for the root body."""
+        from pxr import Sdf, Usd, UsdGeom, UsdPhysics
+
+        stage = Usd.Stage.CreateInMemory()
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+        UsdPhysics.Scene.Define(stage, "/physicsScene")
+
+        # Create a prototype prim with a child that will be matched by our filter
+        _proto_root = UsdGeom.Xform.Define(stage, "/Prototypes/MyProto")
+        proto_child = UsdGeom.Xform.Define(stage, "/Prototypes/MyProto/CustomChild")
+        proto_child_prim = proto_child.GetPrim()
+        # Author a custom attribute on the prototype child
+        # The USD attribute name defaults to "newton:<namespace>:<name>" = "newton:test:child_value"
+        proto_child_prim.CreateAttribute("newton:test:child_value", Sdf.ValueTypeNames.Float).Set(99.0)
+
+        # Create two instanceable prims that reference the prototype
+        for i in range(2):
+            instance = UsdGeom.Xform.Define(stage, f"/World/Instance{i}")
+            instance_prim = instance.GetPrim()
+            instance_prim.GetReferences().AddInternalReference("/Prototypes/MyProto")
+            instance_prim.SetInstanceable(True)
+
+        # Define a filter that matches prims named "CustomChild" (excluding the prototype)
+        def is_custom_child(prim, context):
+            path = prim.GetPath().pathString
+            return prim.GetName() == "CustomChild" and not path.startswith("/Prototypes")
+
+        builder = newton.ModelBuilder()
+
+        # Register custom frequency with the prim filter
+        builder.add_custom_frequency(
+            newton.ModelBuilder.CustomFrequency(
+                name="child",
+                namespace="test",
+                usd_prim_filter=is_custom_child,
+            )
+        )
+
+        # Add a custom attribute
+        builder.add_custom_attribute(
+            newton.ModelBuilder.CustomAttribute(
+                name="child_value",
+                frequency="test:child",
+                dtype=wp.float32,
+                default=0.0,
+                namespace="test",
+            )
+        )
+
+        # Parse the USD stage - should find CustomChild under each instance proxy
+        builder.add_usd(stage)
+
+        # Finalize and verify
+        model = builder.finalize()
+
+        # Should have 2 entries (one per instance proxy)
+        self.assertEqual(model.get_custom_frequency_count("test:child"), 2)
+
+        child_values = model.test.child_value.numpy()
+        self.assertEqual(len(child_values), 2)
+        # Both should have the authored value from the prototype
+        self.assertAlmostEqual(child_values[0], 99.0, places=5)
+        self.assertAlmostEqual(child_values[1], 99.0, places=5)
+
+    @unittest.skipUnless(USD_AVAILABLE, "Requires usd-core")
+    def test_custom_frequency_wildcard_usd_attribute(self):
+        """Test that usd_attribute_name='*' calls the usd_value_transformer for every matching prim.
+
+        Registers a CustomFrequency that selects prims of a custom type, then uses
+        usd_attribute_name='*' with a usd_value_transformer to derive CustomAttribute
+        values from arbitrary prim data (not from a specific USD attribute).
+        """
+        from pxr import Usd, UsdGeom, UsdPhysics
+
+        # Create a USD stage with a physics scene and three "sensor" prims.
+        # Each sensor has a different "position" attribute that we will read
+        # through the wildcard transformer (not through the normal attribute path).
         stage = Usd.Stage.CreateInMemory()
         UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
         UsdPhysics.Scene.Define(stage, "/physicsScene")
@@ -4646,6 +4792,124 @@ class TestImportSampleAssetsComposition(unittest.TestCase):
     @unittest.skipUnless(USD_AVAILABLE, "Requires usd-core")
     def test_floating_false_creates_fixed_joint(self):
         """Test that floating=False creates a fixed joint for the root body."""
+        from pxr import Sdf, Usd, UsdGeom, UsdPhysics
+
+        stage = Usd.Stage.CreateInMemory()
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+        UsdPhysics.Scene.Define(stage, "/physicsScene")
+
+        sensor_positions = [(1.0, 2.0, 3.0), (4.0, 5.0, 6.0), (7.0, 8.0, 9.0)]
+        for i, pos in enumerate(sensor_positions):
+            xform = UsdGeom.Xform.Define(stage, f"/World/Sensor{i}")
+            prim = xform.GetPrim()
+            # Store the position as a custom (non-newton) attribute on the prim
+            attr = prim.CreateAttribute("sensor:position", Sdf.ValueTypeNames.Float3)
+            attr.Set(pos)
+
+        # Filter that matches our sensor prims
+        def is_sensor_prim(prim, context):
+            return prim.GetName().startswith("Sensor")
+
+        builder = newton.ModelBuilder()
+
+        # Register the custom frequency
+        builder.add_custom_frequency(
+            newton.ModelBuilder.CustomFrequency(
+                name="sensor",
+                namespace="test",
+                usd_prim_filter=is_sensor_prim,
+            )
+        )
+
+        # Transformer that reads the prim's "sensor:position" attribute and computes
+        # the Euclidean distance from the origin
+        def compute_distance_from_origin(value, context):
+            prim = context["prim"]
+            pos = prim.GetAttribute("sensor:position").Get()
+            return wp.float32(float(np.sqrt(pos[0] ** 2 + pos[1] ** 2 + pos[2] ** 2)))
+
+        # Register a wildcard custom attribute: no specific USD attribute name,
+        # the transformer is called for every prim matching this frequency
+        builder.add_custom_attribute(
+            newton.ModelBuilder.CustomAttribute(
+                name="distance",
+                frequency="test:sensor",
+                dtype=wp.float32,
+                default=0.0,
+                namespace="test",
+                usd_attribute_name="*",
+                usd_value_transformer=compute_distance_from_origin,
+            )
+        )
+
+        # Also add a second wildcard attribute that extracts the raw position
+        def extract_position(value, context):
+            prim = context["prim"]
+            pos = prim.GetAttribute("sensor:position").Get()
+            return wp.vec3(float(pos[0]), float(pos[1]), float(pos[2]))
+
+        builder.add_custom_attribute(
+            newton.ModelBuilder.CustomAttribute(
+                name="position",
+                frequency="test:sensor",
+                dtype=wp.vec3,
+                default=wp.vec3(0.0, 0.0, 0.0),
+                namespace="test",
+                usd_attribute_name="*",
+                usd_value_transformer=extract_position,
+            )
+        )
+
+        # Parse the USD stage
+        builder.add_usd(stage)
+
+        # Finalize and verify
+        model = builder.finalize()
+
+        # Should have found all 3 sensor prims
+        self.assertEqual(model.get_custom_frequency_count("test:sensor"), 3)
+
+        # Verify the distance attribute
+        distances = model.test.distance.numpy()
+        self.assertEqual(len(distances), 3)
+        for i, pos in enumerate(sensor_positions):
+            expected = np.sqrt(pos[0] ** 2 + pos[1] ** 2 + pos[2] ** 2)
+            self.assertAlmostEqual(float(distances[i]), expected, places=4)
+
+        # Verify the position attribute
+        positions = model.test.position.numpy()
+        self.assertEqual(len(positions), 3)
+        for i, pos in enumerate(sensor_positions):
+            assert_np_equal(positions[i], np.array(pos, dtype=np.float32), tol=1e-5)
+
+    def test_custom_frequency_wildcard_without_transformer_raises(self):
+        """Test that usd_attribute_name='*' without a usd_value_transformer raises ValueError."""
+        builder = newton.ModelBuilder()
+        builder.add_custom_frequency(
+            newton.ModelBuilder.CustomFrequency(
+                name="sensor",
+                namespace="test",
+            )
+        )
+
+        with self.assertRaises(ValueError) as ctx:
+            builder.add_custom_attribute(
+                newton.ModelBuilder.CustomAttribute(
+                    name="bad_attr",
+                    frequency="test:sensor",
+                    dtype=wp.float32,
+                    default=0.0,
+                    namespace="test",
+                    usd_attribute_name="*",
+                    # No usd_value_transformer provided
+                )
+            )
+        self.assertIn("usd_attribute_name='*'", str(ctx.exception))
+        self.assertIn("usd_value_transformer", str(ctx.exception))
+
+    @unittest.skipUnless(USD_AVAILABLE, "Requires usd-core")
+    def test_custom_frequency_usd_entry_expander_multiple_rows(self):
+        """Test that usd_entry_expander can emit multiple rows per matched prim."""
         from pxr import Usd, UsdGeom, UsdPhysics
 
         stage = Usd.Stage.CreateInMemory()
@@ -4777,6 +5041,54 @@ class TestImportSampleAssetsComposition(unittest.TestCase):
             - Position should reflect import position + rotated offset
             - Orientation should reflect import rotation
         """
+        from pxr import Sdf, Usd, UsdGeom, UsdPhysics
+
+        stage = Usd.Stage.CreateInMemory()
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+        UsdPhysics.Scene.Define(stage, "/physicsScene")
+
+        item_counts = [2, 1]
+        for i, count in enumerate(item_counts):
+            prim = UsdGeom.Xform.Define(stage, f"/World/Emitter{i}").GetPrim()
+            prim.CreateAttribute("test:count", Sdf.ValueTypeNames.Int).Set(count)
+
+        def is_emitter(prim, context):
+            return prim.GetPath().pathString.startswith("/World/Emitter")
+
+        def expand_rows(prim, context):
+            count = int(prim.GetAttribute("test:count").Get())
+            return [{"test:item_value": float(i + 1)} for i in range(count)]
+
+        builder = newton.ModelBuilder()
+        builder.add_custom_frequency(
+            newton.ModelBuilder.CustomFrequency(
+                name="item",
+                namespace="test",
+                usd_prim_filter=is_emitter,
+                usd_entry_expander=expand_rows,
+            )
+        )
+        builder.add_custom_attribute(
+            newton.ModelBuilder.CustomAttribute(
+                name="item_value",
+                frequency="test:item",
+                dtype=wp.float32,
+                default=0.0,
+                namespace="test",
+            )
+        )
+
+        builder.add_usd(stage)
+        model = builder.finalize()
+
+        self.assertEqual(model.get_custom_frequency_count("test:item"), sum(item_counts))
+        values = model.test.item_value.numpy()
+        self.assertEqual(len(values), 3)
+        assert_np_equal(values, np.array([1.0, 2.0, 1.0], dtype=np.float32), tol=1e-6)
+
+    @unittest.skipUnless(USD_AVAILABLE, "Requires usd-core")
+    def test_custom_frequency_usd_filter_and_expander_context_unified(self):
+        """Test that usd_prim_filter and usd_entry_expander receive the same context contract."""
         from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
         stage = Usd.Stage.CreateInMemory()
@@ -5333,11 +5645,136 @@ class TestImportSampleAssetsComposition(unittest.TestCase):
     @unittest.skipUnless(USD_AVAILABLE, "Requires usd-core")
     def test_base_joint_dict_conflicting_keys_fails(self):
         """Test that base_joint dict with conflicting keys raises ValueError."""
+        from pxr import Sdf, Usd, UsdGeom, UsdPhysics
+
+        stage = Usd.Stage.CreateInMemory()
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+        UsdPhysics.Scene.Define(stage, "/physicsScene")
+        prim = UsdGeom.Xform.Define(stage, "/World/Emitter0").GetPrim()
+        prim.CreateAttribute("test:count", Sdf.ValueTypeNames.Int).Set(1)
+
+        captured_filter_contexts = []
+        captured_expander_contexts = []
+
+        def is_emitter(prim, context):
+            if not prim.GetPath().pathString.startswith("/World/Emitter"):
+                return False
+            captured_filter_contexts.append(context)
+            return True
+
+        def expand_rows(prim, context):
+            captured_expander_contexts.append(context)
+            count = int(prim.GetAttribute("test:count").Get())
+            return [{"test:item_value": float(i + 1)} for i in range(count)]
+
+        builder = newton.ModelBuilder()
+        builder.add_custom_frequency(
+            newton.ModelBuilder.CustomFrequency(
+                name="item",
+                namespace="test",
+                usd_prim_filter=is_emitter,
+                usd_entry_expander=expand_rows,
+            )
+        )
+        builder.add_custom_attribute(
+            newton.ModelBuilder.CustomAttribute(
+                name="item_value",
+                frequency="test:item",
+                dtype=wp.float32,
+                default=0.0,
+                namespace="test",
+            )
+        )
+
+        import_result = builder.add_usd(stage)
+        model = builder.finalize()
+
+        self.assertEqual(model.get_custom_frequency_count("test:item"), 1)
+        self.assertEqual(len(captured_filter_contexts), 1)
+        self.assertEqual(len(captured_expander_contexts), 1)
+
+        filter_ctx = captured_filter_contexts[0]
+        expander_ctx = captured_expander_contexts[0]
+
+        self.assertIs(filter_ctx["builder"], builder)
+        self.assertIs(expander_ctx["builder"], builder)
+        self.assertIs(filter_ctx["result"], import_result)
+        self.assertIs(expander_ctx["result"], import_result)
+        self.assertEqual(filter_ctx["prim"].GetPath(), prim.GetPath())
+        self.assertEqual(expander_ctx["prim"].GetPath(), prim.GetPath())
+        self.assertEqual(set(filter_ctx.keys()), {"prim", "builder", "result"})
+        self.assertEqual(set(expander_ctx.keys()), {"prim", "builder", "result"})
+
+    @unittest.skipUnless(USD_AVAILABLE, "Requires usd-core")
+    def test_custom_frequency_usd_ordering_producer_before_consumer(self):
+        """Test deterministic custom-frequency ordering for producer/consumer dependencies."""
         from pxr import Usd, UsdGeom, UsdPhysics
 
         stage = Usd.Stage.CreateInMemory()
         UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
         UsdPhysics.Scene.Define(stage, "/physicsScene")
+        UsdGeom.Xform.Define(stage, "/World/Item0")
+        UsdGeom.Xform.Define(stage, "/World/Item1")
+        UsdGeom.Xform.Define(stage, "/World/Item2")
+
+        def is_item(prim, context):
+            return prim.GetPath().pathString.startswith("/World/Item")
+
+        def expand_producer_rows(prim, context):
+            return [{"test:producer_value": 1.0}]
+
+        def read_producer_count(_value, context):
+            builder = context["builder"]
+            producer_attr = builder.custom_attributes["test:producer_value"]
+            if not isinstance(producer_attr.values, list):
+                return 0
+            return int(len(producer_attr.values))
+
+        builder = newton.ModelBuilder()
+        builder.add_custom_frequency(
+            newton.ModelBuilder.CustomFrequency(
+                name="producer",
+                namespace="test",
+                usd_prim_filter=is_item,
+                usd_entry_expander=expand_producer_rows,
+            )
+        )
+        builder.add_custom_frequency(
+            newton.ModelBuilder.CustomFrequency(
+                name="consumer",
+                namespace="test",
+                usd_prim_filter=is_item,
+            )
+        )
+
+        builder.add_custom_attribute(
+            newton.ModelBuilder.CustomAttribute(
+                name="producer_value",
+                frequency="test:producer",
+                dtype=wp.float32,
+                default=0.0,
+                namespace="test",
+            )
+        )
+        builder.add_custom_attribute(
+            newton.ModelBuilder.CustomAttribute(
+                name="consumer_seen_producer_count",
+                frequency="test:consumer",
+                dtype=wp.int32,
+                default=0,
+                namespace="test",
+                usd_attribute_name="*",
+                usd_value_transformer=read_producer_count,
+            )
+        )
+
+        builder.add_usd(stage)
+        model = builder.finalize()
+
+        self.assertEqual(model.get_custom_frequency_count("test:producer"), 3)
+        self.assertEqual(model.get_custom_frequency_count("test:consumer"), 3)
+        seen_counts = model.test.consumer_seen_producer_count.numpy()
+        assert_np_equal(seen_counts, np.array([1, 2, 3], dtype=np.int32), tol=0)
 
         body = UsdGeom.Cube.Define(stage, "/Body")
         body_prim = body.GetPrim()
