@@ -15,9 +15,11 @@
 
 import io
 import os
+import struct
 import sys
 import tempfile
 import unittest
+import zlib
 
 import numpy as np
 import warp as wp
@@ -26,6 +28,7 @@ import newton
 import newton.examples
 from newton._src.geometry.types import GeoType
 from newton._src.sim.builder import ShapeFlags
+from newton._src.utils.import_mjcf import _load_and_expand_mjcf
 from newton.solvers import SolverMuJoCo
 
 
@@ -6383,3 +6386,344 @@ class TestZeroMassBodies(unittest.TestCase):
 
         empty_idx = next(i for i in range(builder.body_count) if builder.body_key[i] == "empty_body")
         self.assertEqual(builder.body_mass[empty_idx], 0.0)
+
+
+class TestMjcfIncludeMeshdir(unittest.TestCase):
+    """Tests for meshdir/texturedir resolution in included MJCF files."""
+
+    def _create_cube_stl(self, path):
+        """Write a minimal binary STL cube to the given path.
+
+        Args:
+            path: Filesystem path for the STL output.
+        """
+
+        vertices = [
+            ((-1, -1, -1), (-1, -1, 1), (-1, 1, 1)),
+            ((-1, -1, -1), (-1, 1, 1), (-1, 1, -1)),
+            ((1, -1, -1), (1, 1, 1), (1, -1, 1)),
+            ((1, -1, -1), (1, 1, -1), (1, 1, 1)),
+            ((-1, -1, -1), (1, -1, 1), (-1, -1, 1)),
+            ((-1, -1, -1), (1, -1, -1), (1, -1, 1)),
+            ((-1, 1, -1), (-1, 1, 1), (1, 1, 1)),
+            ((-1, 1, -1), (1, 1, 1), (1, 1, -1)),
+            ((-1, -1, -1), (-1, 1, -1), (1, 1, -1)),
+            ((-1, -1, -1), (1, 1, -1), (1, -1, -1)),
+            ((-1, -1, 1), (1, -1, 1), (1, 1, 1)),
+            ((-1, -1, 1), (1, 1, 1), (-1, 1, 1)),
+        ]
+        with open(path, "wb") as f:
+            f.write(b"\0" * 80)  # header
+            f.write(struct.pack("<I", len(vertices)))
+            for tri in vertices:
+                f.write(struct.pack("<fff", 0, 0, 0))  # normal
+                for v in tri:
+                    f.write(struct.pack("<fff", *v))
+                f.write(struct.pack("<H", 0))  # attribute
+
+    def test_include_with_meshdir(self):
+        """Test that meshdir in included file is used to resolve mesh paths."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create assets subdirectory with a mesh
+            assets_dir = os.path.join(tmpdir, "assets")
+            os.makedirs(assets_dir)
+            self._create_cube_stl(os.path.join(assets_dir, "cube.stl"))
+
+            # Included file has <compiler meshdir="assets"/>
+            included_content = """\
+<mujoco>
+    <compiler meshdir="assets"/>
+    <asset>
+        <mesh name="cube" file="cube.stl"/>
+    </asset>
+    <worldbody>
+        <body name="robot">
+            <inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/>
+            <geom type="mesh" mesh="cube"/>
+        </body>
+    </worldbody>
+</mujoco>"""
+            with open(os.path.join(tmpdir, "robot.xml"), "w") as f:
+                f.write(included_content)
+
+            # Main file includes robot.xml (no meshdir of its own)
+            main_content = """\
+<mujoco model="test">
+    <include file="robot.xml"/>
+</mujoco>"""
+            main_path = os.path.join(tmpdir, "main.xml")
+            with open(main_path, "w") as f:
+                f.write(main_content)
+
+            # Should succeed - mesh resolved via included file's meshdir
+            builder = newton.ModelBuilder()
+            builder.add_mjcf(main_path)
+            self.assertEqual(builder.body_count, 1)
+            self.assertGreater(builder.shape_count, 0)
+
+    def test_include_with_meshdir_nested_subdir(self):
+        """Test meshdir with included file in a subdirectory."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Structure: tmpdir/models/robot.xml with meshdir="meshes"
+            #            tmpdir/models/meshes/cube.stl
+            models_dir = os.path.join(tmpdir, "models")
+            meshes_dir = os.path.join(models_dir, "meshes")
+            os.makedirs(meshes_dir)
+            self._create_cube_stl(os.path.join(meshes_dir, "cube.stl"))
+
+            included_content = """\
+<mujoco>
+    <compiler meshdir="meshes"/>
+    <asset>
+        <mesh name="cube" file="cube.stl"/>
+    </asset>
+    <worldbody>
+        <body name="robot">
+            <inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/>
+            <geom type="mesh" mesh="cube"/>
+        </body>
+    </worldbody>
+</mujoco>"""
+            with open(os.path.join(models_dir, "robot.xml"), "w") as f:
+                f.write(included_content)
+
+            main_content = """\
+<mujoco model="test">
+    <include file="models/robot.xml"/>
+</mujoco>"""
+            main_path = os.path.join(tmpdir, "main.xml")
+            with open(main_path, "w") as f:
+                f.write(main_content)
+
+            builder = newton.ModelBuilder()
+            builder.add_mjcf(main_path)
+            self.assertEqual(builder.body_count, 1)
+
+    def test_include_without_meshdir_still_works(self):
+        """Test that includes without meshdir resolve relative to included file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Mesh is in the same directory as the included file (no meshdir needed)
+            self._create_cube_stl(os.path.join(tmpdir, "cube.stl"))
+
+            included_content = """\
+<mujoco>
+    <asset>
+        <mesh name="cube" file="cube.stl"/>
+    </asset>
+    <worldbody>
+        <body name="robot">
+            <inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/>
+            <geom type="mesh" mesh="cube"/>
+        </body>
+    </worldbody>
+</mujoco>"""
+            with open(os.path.join(tmpdir, "robot.xml"), "w") as f:
+                f.write(included_content)
+
+            main_content = """\
+<mujoco model="test">
+    <include file="robot.xml"/>
+</mujoco>"""
+            main_path = os.path.join(tmpdir, "main.xml")
+            with open(main_path, "w") as f:
+                f.write(main_content)
+
+            builder = newton.ModelBuilder()
+            builder.add_mjcf(main_path)
+            self.assertEqual(builder.body_count, 1)
+
+    def test_include_with_texturedir(self):
+        """Test that texturedir in included file is used for texture paths."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create texture directory with a dummy PNG
+            tex_dir = os.path.join(tmpdir, "textures")
+            os.makedirs(tex_dir)
+            # Minimal 1x1 PNG
+
+            def _make_png(path):
+                """Write a minimal 1x1 PNG image.
+
+                Args:
+                    path: Filesystem path for the PNG output.
+                """
+                sig = b"\x89PNG\r\n\x1a\n"
+                ihdr_data = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+                ihdr_crc = zlib.crc32(b"IHDR" + ihdr_data)
+                ihdr = struct.pack(">I", 13) + b"IHDR" + ihdr_data + struct.pack(">I", ihdr_crc)
+                raw = zlib.compress(b"\x00\xff\x00\x00")
+                idat_crc = zlib.crc32(b"IDAT" + raw)
+                idat = struct.pack(">I", len(raw)) + b"IDAT" + raw + struct.pack(">I", idat_crc)
+                iend_crc = zlib.crc32(b"IEND")
+                iend = struct.pack(">I", 0) + b"IEND" + struct.pack(">I", iend_crc)
+                with open(path, "wb") as f:
+                    f.write(sig + ihdr + idat + iend)
+
+            _make_png(os.path.join(tex_dir, "checker.png"))
+            self._create_cube_stl(os.path.join(tmpdir, "cube.stl"))
+
+            included_content = """\
+<mujoco>
+    <compiler texturedir="textures"/>
+    <asset>
+        <mesh name="cube" file="cube.stl"/>
+        <texture name="checker" file="checker.png" type="2d"/>
+        <material name="mat" texture="checker"/>
+    </asset>
+    <worldbody>
+        <body name="robot">
+            <inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/>
+            <geom type="mesh" mesh="cube" material="mat"/>
+        </body>
+    </worldbody>
+</mujoco>"""
+            with open(os.path.join(tmpdir, "robot.xml"), "w") as f:
+                f.write(included_content)
+
+            main_content = """\
+<mujoco model="test">
+    <include file="robot.xml"/>
+</mujoco>"""
+            main_path = os.path.join(tmpdir, "main.xml")
+            with open(main_path, "w") as f:
+                f.write(main_content)
+
+            # Verify the expanded MJCF has the texture file path rewritten to absolute
+            root, _ = _load_and_expand_mjcf(main_path)
+            tex_elem = root.find(".//texture[@name='checker']")
+            self.assertIsNotNone(tex_elem, "texture element not found after include expansion")
+            expanded_path = tex_elem.get("file")
+            expected_path = os.path.join(tmpdir, "textures", "checker.png")
+            self.assertEqual(expanded_path, expected_path)
+
+            # Also verify full import succeeds
+            builder = newton.ModelBuilder()
+            builder.add_mjcf(main_path, parse_visuals=True)
+
+    def test_included_meshdir_does_not_leak_to_main_assets(self):
+        """Included file's meshdir must not affect main file's asset resolution."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Main file has a mesh in its own directory (no meshdir needed)
+            self._create_cube_stl(os.path.join(tmpdir, "main_cube.stl"))
+
+            # Included file uses meshdir="robot_meshes" for its own mesh
+            robot_meshes = os.path.join(tmpdir, "robot_meshes")
+            os.makedirs(robot_meshes)
+            self._create_cube_stl(os.path.join(robot_meshes, "robot.stl"))
+
+            included_content = """\
+<mujoco>
+    <compiler meshdir="robot_meshes"/>
+    <asset>
+        <mesh name="robot_mesh" file="robot.stl"/>
+    </asset>
+    <worldbody>
+        <body name="robot">
+            <inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/>
+            <geom type="mesh" mesh="robot_mesh"/>
+        </body>
+    </worldbody>
+</mujoco>"""
+            with open(os.path.join(tmpdir, "robot.xml"), "w") as f:
+                f.write(included_content)
+
+            # Main file includes robot.xml AND has its own mesh with a relative path.
+            # The included meshdir="robot_meshes" must NOT affect main_cube.stl resolution.
+            main_content = """\
+<mujoco model="test">
+    <include file="robot.xml"/>
+    <asset>
+        <mesh name="main_cube" file="main_cube.stl"/>
+    </asset>
+    <worldbody>
+        <body name="main_body">
+            <inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/>
+            <geom type="mesh" mesh="main_cube"/>
+        </body>
+    </worldbody>
+</mujoco>"""
+            main_path = os.path.join(tmpdir, "main.xml")
+            with open(main_path, "w") as f:
+                f.write(main_content)
+
+            # Should succeed — main_cube.stl resolved relative to main file dir,
+            # not affected by included file's meshdir="robot_meshes"
+            builder = newton.ModelBuilder()
+            builder.add_mjcf(main_path)
+            self.assertEqual(builder.body_count, 2)
+
+    def test_include_before_compiler_with_nested_includes(self):
+        """Compiler lookup must use THIS file's compiler, not a nested include's stripped compiler.
+
+        When a file lists <include> before <compiler>, expanding the nested
+        include strips ITS compiler's meshdir.  A naive find("compiler") would
+        return that stripped compiler instead of the current file's own.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # arm.xml: has its own meshdir and a mesh
+            arm_meshes = os.path.join(tmpdir, "arm_meshes")
+            os.makedirs(arm_meshes)
+            self._create_cube_stl(os.path.join(arm_meshes, "arm.stl"))
+            arm_xml = """\
+<mujoco>
+    <compiler meshdir="arm_meshes"/>
+    <asset>
+        <mesh name="arm_mesh" file="arm.stl"/>
+    </asset>
+    <worldbody>
+        <body name="arm">
+            <inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/>
+            <geom type="mesh" mesh="arm_mesh"/>
+        </body>
+    </worldbody>
+</mujoco>"""
+            with open(os.path.join(tmpdir, "arm.xml"), "w") as f:
+                f.write(arm_xml)
+
+            # robot.xml: <include> BEFORE <compiler> — the order that triggers the bug
+            robot_meshes = os.path.join(tmpdir, "robot_meshes")
+            os.makedirs(robot_meshes)
+            self._create_cube_stl(os.path.join(robot_meshes, "body.stl"))
+            robot_xml = """\
+<mujoco>
+    <include file="arm.xml"/>
+    <compiler meshdir="robot_meshes"/>
+    <asset>
+        <mesh name="body_mesh" file="body.stl"/>
+    </asset>
+    <worldbody>
+        <body name="robot_body">
+            <inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/>
+            <geom type="mesh" mesh="body_mesh"/>
+        </body>
+    </worldbody>
+</mujoco>"""
+            with open(os.path.join(tmpdir, "robot.xml"), "w") as f:
+                f.write(robot_xml)
+
+            # main.xml includes robot.xml
+            main_xml = """\
+<mujoco model="test">
+    <include file="robot.xml"/>
+</mujoco>"""
+            main_path = os.path.join(tmpdir, "main.xml")
+            with open(main_path, "w") as f:
+                f.write(main_xml)
+
+            # Verify expanded paths at the XML level
+            root, _ = _load_and_expand_mjcf(main_path)
+            body_mesh = root.find(".//mesh[@name='body_mesh']")
+            self.assertIsNotNone(body_mesh)
+            body_path = body_mesh.get("file")
+            expected = os.path.join(tmpdir, "robot_meshes", "body.stl")
+            self.assertEqual(body_path, expected, f"body.stl should resolve via robot_meshes, got {body_path}")
+
+            arm_mesh = root.find(".//mesh[@name='arm_mesh']")
+            self.assertIsNotNone(arm_mesh)
+            arm_path = arm_mesh.get("file")
+            expected_arm = os.path.join(tmpdir, "arm_meshes", "arm.stl")
+            self.assertEqual(arm_path, expected_arm, f"arm.stl should resolve via arm_meshes, got {arm_path}")
+
+            # Full import should succeed
+            builder = newton.ModelBuilder()
+            builder.add_mjcf(main_path)
+            self.assertEqual(builder.body_count, 2)

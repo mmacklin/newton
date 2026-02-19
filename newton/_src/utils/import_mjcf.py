@@ -54,7 +54,7 @@ def _default_path_resolver(base_dir: str | None, file_path: str) -> str:
     if os.path.isabs(file_path):
         return os.path.normpath(file_path)
     elif base_dir:
-        return os.path.normpath(os.path.join(base_dir, file_path))
+        return os.path.abspath(os.path.join(base_dir, file_path))
     else:
         raise ValueError(f"Cannot resolve relative path '{file_path}' without base directory")
 
@@ -92,6 +92,18 @@ def _load_and_expand_mjcf(
         base_dir = os.path.dirname(source) or "."
         root = ET.parse(source).getroot()
 
+    # Extract this file's own <compiler> meshdir/texturedir BEFORE expanding
+    # includes, so nested-include compilers cannot shadow it.
+    own_compiler = root.find("compiler")
+    own_meshdir = own_compiler.attrib.get("meshdir", ".") if own_compiler is not None else "."
+    own_texturedir = own_compiler.attrib.get("texturedir", own_meshdir) if own_compiler is not None else "."
+    # Strip consumed meshdir/texturedir so they don't leak into the parent tree
+    # and affect parent-file asset resolution. Other compiler attributes (angle, etc.)
+    # are left intact to match MuJoCo's include-as-paste semantics.
+    if own_compiler is not None:
+        own_compiler.attrib.pop("meshdir", None)
+        own_compiler.attrib.pop("texturedir", None)
+
     # Find all (parent, include) pairs in a single pass
     include_pairs = [(parent, child) for parent in root.iter() for child in parent if child.tag == "include"]
 
@@ -108,21 +120,27 @@ def _load_and_expand_mjcf(
                 raise ValueError(f"Circular include detected: {resolved}")
             included_files.add(resolved)
 
-        # Recursive call - handles both file paths and XML content
-        included_root, included_base_dir = _load_and_expand_mjcf(resolved, path_resolver, included_files)
-
-        # Resolve all file attributes in included content to absolute paths
-        # This ensures assets from included files are resolved relative to their source
-        for elem in included_root.iter():
-            file_attr = elem.get("file")
-            if file_attr and not os.path.isabs(file_attr):
-                elem.set("file", path_resolver(included_base_dir, file_attr))
+        # Recursive call - each included file extracts its own compiler and
+        # resolves its own asset paths before returning.
+        included_root, _ = _load_and_expand_mjcf(resolved, path_resolver, included_files)
 
         # Replace include element with children of included root
         idx = list(parent).index(include)
         parent.remove(include)
         for i, child in enumerate(included_root):
             parent.insert(idx + i, child)
+
+    # Resolve this file's own relative asset paths using the pre-extracted
+    # meshdir/texturedir.  Paths from nested includes are already absolute
+    # (resolved in their own recursive call), so the isabs check skips them.
+    _asset_dir_tags = {"mesh": own_meshdir, "hfield": own_meshdir, "texture": own_texturedir}
+    for elem in root.iter():
+        file_attr = elem.get("file")
+        if file_attr and not os.path.isabs(file_attr):
+            asset_dir = _asset_dir_tags.get(elem.tag, ".")
+            resolved_path = os.path.join(asset_dir, file_attr) if asset_dir != "." else file_attr
+            if base_dir is not None or os.path.isabs(resolved_path):
+                elem.set("file", path_resolver(base_dir, resolved_path))
 
     return root, base_dir
 
