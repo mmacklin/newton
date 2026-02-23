@@ -1365,7 +1365,43 @@ def update_ctrl_direct_actuator_properties_kernel(
 
     world_newton_idx = world * actuators_per_world + newton_idx
     actuator_gain[world, actuator] = newton_actuator_gainprm[world_newton_idx]
-    actuator_bias[world, actuator] = newton_actuator_biasprm[world_newton_idx]
+
+    bias = newton_actuator_biasprm[world_newton_idx]
+    # biasprm[2] is resolved by the MuJoCo compiler from dampratio via mj_setConst.
+    # _sync_compiled_actuator_params writes the resolved value to world 0's Newton
+    # custom attrs, but not to other worlds. Always read [2] from world 0 so all
+    # worlds get the compiler-resolved damping value.
+    bias[2] = newton_actuator_biasprm[newton_idx][2]
+    actuator_bias[world, actuator] = bias
+
+
+@wp.kernel
+def sync_compiled_actuator_params_kernel(
+    mjc_actuator_ctrl_source: wp.array(dtype=wp.int32),
+    mjc_actuator_to_newton_idx: wp.array(dtype=wp.int32),
+    compiled_gainprm: wp.array2d(dtype=vec10),
+    compiled_biasprm: wp.array2d(dtype=vec10),
+    # outputs
+    newton_actuator_gainprm: wp.array(dtype=vec10),
+    newton_actuator_biasprm: wp.array(dtype=vec10),
+):
+    """Copy compiler-resolved gainprm/biasprm back to Newton custom attributes.
+
+    Runs once after put_model to ensure Newton's custom attributes contain the
+    compiler-resolved values (e.g. dampratio → damping). This prevents
+    update_actuator_properties from overwriting resolved values.
+    """
+    actuator = wp.tid()
+
+    if mjc_actuator_ctrl_source[actuator] != CTRL_SOURCE_CTRL_DIRECT:
+        return
+
+    newton_idx = mjc_actuator_to_newton_idx[actuator]
+    if newton_idx < 0:
+        return
+
+    newton_actuator_gainprm[newton_idx] = compiled_gainprm[0, actuator]
+    newton_actuator_biasprm[newton_idx] = compiled_biasprm[0, actuator]
 
 
 @wp.kernel

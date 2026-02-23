@@ -57,6 +57,7 @@ from .kernels import (
     create_inverse_shape_mapping_kernel,
     eval_articulation_fk,
     repeat_array_kernel,
+    sync_compiled_actuator_params_kernel,
     sync_qpos0_kernel,
     update_axis_properties_kernel,
     update_body_inertia_kernel,
@@ -1339,6 +1340,18 @@ class SolverMuJoCo(SolverBase):
 
         builder.add_custom_attribute(
             ModelBuilder.CustomAttribute(
+                name="actuator_dampratio",
+                frequency="mujoco:actuator",
+                assignment=AttributeAssignment.MODEL,
+                dtype=wp.float32,
+                default=0.0,
+                namespace="mujoco",
+                mjcf_attribute_name="dampratio",
+            )
+        )
+
+        builder.add_custom_attribute(
+            ModelBuilder.CustomAttribute(
                 name="actuator_world",
                 frequency="mujoco:actuator",
                 assignment=AttributeAssignment.MODEL,
@@ -2510,6 +2523,7 @@ class SolverMuJoCo(SolverBase):
         actlimited_arr = (
             mujoco_attrs.actuator_actlimited.numpy() if hasattr(mujoco_attrs, "actuator_actlimited") else None
         )
+        dampratio_arr = mujoco_attrs.actuator_dampratio.numpy() if hasattr(mujoco_attrs, "actuator_dampratio") else None
 
         for mujoco_act_idx in range(mujoco_actuator_count):
             # Skip JOINT_TARGET actuators - they're already added via joint_act_mode path
@@ -2636,6 +2650,35 @@ class SolverMuJoCo(SolverBase):
                 biastype = int(mujoco_attrs.actuator_biastype.numpy()[mujoco_act_idx])
                 general_args["biastype"] = biastype
 
+            # Detect position/velocity actuator shortcuts. Use set_to_position/
+            # set_to_velocity after add_actuator so MuJoCo's compiler computes kd
+            # from dampratio via mj_setConst (kd = dampratio * 2 * sqrt(kp * acc0)).
+            shortcut = None  # "position" or "velocity" if detected
+            shortcut_args: dict[str, float] = {}
+            dampratio = float(dampratio_arr[mujoco_act_idx]) if dampratio_arr is not None else 0.0
+            if general_args.get("biastype") == mujoco.mjtBias.mjBIAS_AFFINE and general_args.get("gainprm", [0])[0] > 0:
+                kp = general_args["gainprm"][0]
+                bp = general_args.get("biasprm", [0, 0, 0])
+                # Position shortcut: biasprm = [0, -kp, -kv]
+                if bp[0] == 0 and abs(bp[1] + kp) < 1e-8:
+                    shortcut = "position"
+                    shortcut_args["kp"] = kp
+                    kv = -bp[2] if bp[2] != 0 else 0.0
+                    if kv > 0:
+                        shortcut_args["kv"] = kv
+                    if dampratio > 0:
+                        shortcut_args["dampratio"] = dampratio
+                    for key in ("biasprm", "biastype", "gainprm", "gaintype"):
+                        general_args.pop(key, None)
+                # Velocity shortcut: biasprm = [0, 0, -kv] where kv = gainprm[0]
+                elif bp[0] == 0 and bp[1] == 0 and bp[2] != 0:
+                    kv = general_args["gainprm"][0]
+                    if abs(bp[2] + kv) < 1e-8:
+                        shortcut = "velocity"
+                        shortcut_args["kv"] = kv
+                        for key in ("biasprm", "biastype", "gainprm", "gaintype"):
+                            general_args.pop(key, None)
+
             # Map trntype integer to MuJoCo enum and override default in general_args
             trntype_enum = {
                 0: mujoco.mjtTrn.mjTRN_JOINT,
@@ -2646,7 +2689,18 @@ class SolverMuJoCo(SolverBase):
                 5: mujoco.mjtTrn.mjTRN_SLIDERCRANK,
             }.get(trntype, mujoco.mjtTrn.mjTRN_JOINT)
             general_args["trntype"] = trntype_enum
-            spec.add_actuator(target=target_name, **general_args)
+            act = spec.add_actuator(target=target_name, **general_args)
+            if shortcut == "position":
+                act.set_to_position(**shortcut_args)
+            elif shortcut == "velocity":
+                act.set_to_velocity(**shortcut_args)
+            elif dampratio > 0:
+                if wp.config.verbose:
+                    print(
+                        f"Warning: actuator {mujoco_act_idx} has dampratio={dampratio} "
+                        f"but does not match position/velocity shortcut pattern. "
+                        f"dampratio will be ignored."
+                    )
             # CTRL_DIRECT actuators - store MJCF-order index into control.mujoco.ctrl
             # mujoco_act_idx is the index in Newton's mujoco:actuator frequency (MJCF order)
             mjc_actuator_ctrl_source_list.append(1)  # CTRL_DIRECT
@@ -4697,6 +4751,12 @@ class SolverMuJoCo(SolverBase):
             # create the MuJoCo Warp model
             self.mjw_model = mujoco_warp.put_model(self.mj_model)
 
+            # Sync compiler-resolved actuator params back to Newton custom
+            # attributes. MuJoCo's compiler resolves dampratio into biasprm[2]
+            # during compilation; without this sync, update_actuator_properties
+            # would overwrite the resolved values with the unresolved originals.
+            self._sync_compiled_actuator_params()
+
             # patch mjw_model with mesh_pos if it doesn't have it
             if not hasattr(self.mjw_model, "mesh_pos"):
                 self.mjw_model.mesh_pos = wp.array(self.mj_model.mesh_pos, dtype=wp.vec3)
@@ -5727,6 +5787,45 @@ class SolverMuJoCo(SolverBase):
             outputs=[
                 self.mjw_model.actuator_gainprm,
                 self.mjw_model.actuator_biasprm,
+            ],
+            device=self.model.device,
+        )
+
+    def _sync_compiled_actuator_params(self):
+        """Sync compiler-resolved actuator biasprm/gainprm back to Newton custom attributes.
+
+        MuJoCo's compiler resolves dampratio into biasprm[2] during model compilation.
+        This launches a kernel to copy the compiled values from mjw_model into Newton's
+        custom attributes so that update_actuator_properties writes the correct values.
+        """
+        if self.mjc_actuator_ctrl_source is None or self.mjc_actuator_to_newton_idx is None:
+            return
+
+        mujoco_attrs = getattr(self.model, "mujoco", None)
+        if mujoco_attrs is None:
+            return
+
+        newton_biasprm = getattr(mujoco_attrs, "actuator_biasprm", None)
+        newton_gainprm = getattr(mujoco_attrs, "actuator_gainprm", None)
+        if newton_biasprm is None or newton_gainprm is None:
+            return
+
+        nu = self.mjc_actuator_ctrl_source.shape[0]
+        if nu == 0:
+            return
+
+        wp.launch(
+            sync_compiled_actuator_params_kernel,
+            dim=nu,
+            inputs=[
+                self.mjc_actuator_ctrl_source,
+                self.mjc_actuator_to_newton_idx,
+                self.mjw_model.actuator_gainprm,
+                self.mjw_model.actuator_biasprm,
+            ],
+            outputs=[
+                newton_gainprm,
+                newton_biasprm,
             ],
             device=self.model.device,
         )
