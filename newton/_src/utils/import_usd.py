@@ -21,7 +21,10 @@ import os
 import re
 import warnings
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from pxr import Usd
 
 import numpy as np
 import warp as wp
@@ -221,6 +224,8 @@ def parse_usd(
               - Mapping from prim path to relative transform for bodies merged via ``collapse_fixed_joints``
             * - ``"path_original_body_map"``
               - Mapping from prim path to original body index before ``collapse_fixed_joints``
+            * - ``"actuator_count"``
+              - Number of external actuators parsed from the USD stage
     """
     # Early validation of base joint parameters
     builder._validate_base_joint_params(floating, base_joint, parent_body)
@@ -2289,7 +2294,24 @@ def parse_usd(
         # Joint indices may have shifted after collapsing fixed joints; refresh the joint path map accordingly.
         path_joint_map = {label: idx for idx, label in enumerate(builder.joint_label)}
 
-    # Build result dict early so we can pass it as context to custom frequency prim finders
+    # Parse Newton actuator prims from the USD stage.
+    from newton_actuators import parse_actuator_prim  # noqa: PLC0415
+
+    actuator_count = 0
+    path_to_dof = {
+        path: builder.joint_qd_start[idx] for path, idx in path_joint_map.items() if idx < len(builder.joint_qd_start)
+    }
+    for prim in Usd.PrimRange(stage.GetPrimAtPath(root_path)):
+        parsed = parse_actuator_prim(prim)
+        if parsed is None:
+            continue
+        dof_indices = [path_to_dof[p] for p in parsed.target_paths if p in path_to_dof]
+        if dof_indices:
+            builder.add_actuator(parsed.actuator_class, input_indices=dof_indices, **parsed.kwargs)
+            actuator_count += 1
+    if verbose and actuator_count > 0:
+        print(f"Added {actuator_count} actuator(s) from USD")
+
     result = {
         "fps": stage.GetFramesPerSecond(),
         "duration": stage.GetEndTimeCode() - stage.GetStartTimeCode(),
@@ -2308,6 +2330,7 @@ def parse_usd(
         # "articulation_bodies": articulation_bodies,
         "path_body_relative_transform": path_body_relative_transform,
         "max_solver_iterations": max_solver_iters,
+        "actuator_count": actuator_count,
     }
 
     # Process custom frequencies with USD prim filters
