@@ -1207,7 +1207,7 @@ def parse_usd(
             body_specs[body_path] = rigid_body_desc
             prim = stage.GetPrimAtPath(prim_path)
 
-    # Bodies with MassAPI that need ComputeMassProperties fallback (missing mass or inertia).
+    # Bodies with MassAPI that need ComputeMassProperties fallback (missing mass, inertia, or CoM).
     bodies_requiring_mass_properties_fallback: set[str] = set()
     if UsdPhysics.ObjectType.RigidBody in ret_dict:
         prim_paths, rigid_body_descs = ret_dict[UsdPhysics.ObjectType.RigidBody]
@@ -1225,7 +1225,8 @@ def parse_usd(
             mass_api = UsdPhysics.MassAPI(prim)
             has_authored_mass = mass_api.GetMassAttr().HasAuthoredValue()
             has_authored_inertia = mass_api.GetDiagonalInertiaAttr().HasAuthoredValue()
-            if not (has_authored_mass and has_authored_inertia):
+            has_authored_com = mass_api.GetCenterOfMassAttr().HasAuthoredValue()
+            if not (has_authored_mass and has_authored_inertia and has_authored_com):
                 bodies_requiring_mass_properties_fallback.add(body_path)
 
     # Collect joint descriptions regardless of whether articulations are authored.
@@ -2124,30 +2125,42 @@ def parse_usd(
             mass_api = UsdPhysics.MassAPI(prim)
             has_authored_mass = mass_api.GetMassAttr().HasAuthoredValue()
             has_authored_inertia = mass_api.GetDiagonalInertiaAttr().HasAuthoredValue()
+            has_authored_com = mass_api.GetCenterOfMassAttr().HasAuthoredValue()
 
-            if has_authored_mass and has_authored_inertia:
-                mass = float(mass_api.GetMassAttr().Get())
-                i_diag = mass_api.GetDiagonalInertiaAttr().Get()
-                if mass_api.GetCenterOfMassAttr().HasAuthoredValue():
-                    com = mass_api.GetCenterOfMassAttr().Get()
-                else:
-                    com = Gf.Vec3f(0.0, 0.0, 0.0)
-                if mass_api.GetPrincipalAxesAttr().HasAuthoredValue():
+            # Compute baseline mass properties via mass computer when at least one property needs resolving.
+            if not (has_authored_mass and has_authored_inertia and has_authored_com):
+                rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
+                cmp_mass, cmp_i_diag, cmp_com, cmp_principal_axes = rigid_body_api.ComputeMassProperties(
+                    _get_collision_mass_information
+                )
+
+            # Inertia: authored diagonal + principal axes take precedence over mass computer.
+            # When mass is authored but inertia is not, keep accumulated inertia
+            # (scaled to match authored mass below) instead of using mass computer
+            # inertia, which may already reflect the authored mass.
+            if has_authored_inertia:
+                i_diag_np = np.array(mass_api.GetDiagonalInertiaAttr().Get(), dtype=np.float32)
+                if np.any(i_diag_np < 0.0):
+                    warnings.warn(
+                        f"Body {body_path}: authored diagonal inertia contains negative values. "
+                        "Falling back to mass-computer result.",
+                        stacklevel=2,
+                    )
+                    has_authored_inertia = False
+                    i_diag_np = np.array(cmp_i_diag, dtype=np.float32)
+                    principal_axes = cmp_principal_axes
+                elif mass_api.GetPrincipalAxesAttr().HasAuthoredValue():
                     principal_axes = mass_api.GetPrincipalAxesAttr().Get()
                 else:
                     principal_axes = Gf.Quatf(1.0, 0.0, 0.0, 0.0)
+            elif not has_authored_mass:
+                i_diag_np = np.array(cmp_i_diag, dtype=np.float32)
+                principal_axes = cmp_principal_axes
             else:
-                rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
-                mass, i_diag, com, principal_axes = rigid_body_api.ComputeMassProperties(
-                    _get_collision_mass_information
-                )
-            # MassAPI bodies should always override any previously accumulated shape mass.
-            builder.body_mass[body_id] = mass
-            builder.body_inv_mass[body_id] = 1.0 / mass if mass > 0.0 else 0.0
-            builder.body_com[body_id] = wp.vec3(*com)
-
-            i_diag_np = np.array(i_diag, dtype=np.float32)
-            if np.linalg.norm(i_diag_np) > 0.0:
+                # Mass authored, inertia not: keep accumulated inertia and scale
+                # to match authored mass in the mass block below.
+                i_diag_np = None
+            if i_diag_np is not None and np.linalg.norm(i_diag_np) > 0.0:
                 i_rot = usd.from_gfquat(principal_axes)
                 rot = np.array(wp.quat_to_matrix(i_rot), dtype=np.float32).reshape(3, 3)
                 inertia = rot @ np.diag(i_diag_np) @ rot.T
@@ -2157,7 +2170,34 @@ def parse_usd(
                 else:
                     builder.body_inv_inertia[body_id] = wp.mat33(0.0)
 
-            # Assign nonzero inertia if mass is nonzero to make sure the body can be simulated
+            # Mass: authored value takes precedence over mass computer.
+            if has_authored_mass:
+                mass = float(mass_api.GetMassAttr().Get())
+                shape_accumulated_mass = builder.body_mass[body_id]
+                if not has_authored_inertia and mass_api.GetDensityAttr().HasAuthoredValue():
+                    warnings.warn(
+                        f"Body {body_path}: authored mass and density without authored diagonalInertia. "
+                        f"Ignoring body-level density.",
+                        stacklevel=2,
+                    )
+                # When mass is authored but inertia is not, scale the accumulated
+                # inertia to be consistent with the authored mass.
+                if not has_authored_inertia and shape_accumulated_mass > 0.0 and mass > 0.0:
+                    scale = mass / shape_accumulated_mass
+                    builder.body_inertia[body_id] = wp.mat33(np.array(builder.body_inertia[body_id]) * scale)
+                    builder.body_inv_inertia[body_id] = wp.inverse(builder.body_inertia[body_id])
+            else:
+                mass = cmp_mass
+            builder.body_mass[body_id] = mass
+            builder.body_inv_mass[body_id] = 1.0 / mass if mass > 0.0 else 0.0
+
+            # Center of mass: authored value takes precedence over mass computer.
+            if has_authored_com:
+                builder.body_com[body_id] = wp.vec3(*mass_api.GetCenterOfMassAttr().Get())
+            else:
+                builder.body_com[body_id] = wp.vec3(*cmp_com)
+
+            # Assign nonzero inertia if mass is nonzero to make sure the body can be simulated.
             I_m = np.array(builder.body_inertia[body_id])
             mass = builder.body_mass[body_id]
             if I_m.max() == 0.0:
@@ -2166,7 +2206,7 @@ def parse_usd(
                     # For a sphere: I = (2/5) * m * r^2
                     # Estimate radius from mass assuming reasonable density (e.g., water density ~1000 kg/m³)
                     # This gives r = (3*m/(4*π*p))^(1/3)
-                    density = default_shape_density  # kg/m³
+                    density = default_shape_density  # kg/m^3
                     volume = mass / density
                     radius = (3.0 * volume / (4.0 * np.pi)) ** (1.0 / 3.0)
                     _, _, I_default = compute_inertia_sphere(density, radius)
