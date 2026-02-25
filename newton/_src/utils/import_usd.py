@@ -154,7 +154,7 @@ def parse_usd(
         verbose (bool): If True, print additional information about the parsed USD file. Default is False.
         ignore_paths (List[str]): A list of regular expressions matching prim paths to ignore.
         collapse_fixed_joints (bool): If True, fixed joints are removed and the respective bodies are merged. Only considered if not set on the PhysicsScene as "newton:collapse_fixed_joints".
-        enable_self_collisions (bool): Determines the default behavior of whether self-collisions are enabled for all shapes within an articulation. If an articulation has the attribute ``physxArticulation:enabledSelfCollisions`` defined, this attribute takes precedence.
+        enable_self_collisions (bool): Default for whether self-collisions are enabled for all shapes within an articulation. Resolved via the schema resolver from ``newton:selfCollisionEnabled`` (NewtonArticulationRootAPI) or ``physxArticulation:enabledSelfCollisions``; if neither is authored, this value takes precedence.
         apply_up_axis_from_stage (bool): If True, the up axis of the stage will be used to set :attr:`newton.ModelBuilder.up_axis`. Otherwise, the stage will be rotated such that its up axis aligns with the builder's up axis. Default is False.
         root_path (str): The USD path to import, defaults to "/".
         joint_ordering (str): The ordering of the joints in the simulation. Can be either "bfs" or "dfs" for breadth-first or depth-first search, or ``None`` to keep joints in the order in which they appear in the USD. Default is "dfs".
@@ -1570,11 +1570,14 @@ def parse_usd(
                 )
 
             articulation_bodies[articulation_id] = art_bodies
-            # determine if self-collisions are enabled
-            articulation_has_self_collision[articulation_id] = usd.get_attribute(
-                articulation_prim,
-                "physxArticulation:enabledSelfCollisions",
-                default=enable_self_collisions,
+            articulation_has_self_collision[articulation_id] = bool(
+                R.get_value(
+                    articulation_prim,
+                    prim_type=PrimType.ARTICULATION,
+                    key="self_collision_enabled",
+                    default=enable_self_collisions,
+                    verbose=verbose,
+                )
             )
             articulation_id += 1
     no_articulations = UsdPhysics.ObjectType.Articulation not in ret_dict
@@ -1862,9 +1865,22 @@ def parse_usd(
                 if collect_schema_attrs:
                     R.collect_prim_attrs(prim)
 
-                gap = R.get_value(prim, prim_type=PrimType.SHAPE, key="gap", verbose=verbose)
-                if gap == float("-inf"):
-                    gap = builder.default_shape_cfg.gap
+                margin_val = R.get_value(
+                    prim,
+                    prim_type=PrimType.SHAPE,
+                    key="margin",
+                    default=builder.default_shape_cfg.margin,
+                    verbose=verbose,
+                )
+                gap_val = R.get_value(
+                    prim,
+                    prim_type=PrimType.SHAPE,
+                    key="gap",
+                    verbose=verbose,
+                )
+                if gap_val == float("-inf"):
+                    gap_val = builder.default_shape_cfg.gap
+                gap_cfg = gap_val
 
                 shape_params = {
                     "body": body_id,
@@ -1882,14 +1898,8 @@ def parse_usd(
                         ka=usd.get_float_with_fallback(
                             prim_and_scene, "newton:contact_ka", builder.default_shape_cfg.ka
                         ),
-                        margin=usd.get_float_with_fallback(
-                            prim_and_scene,
-                            "newton:margin",
-                            usd.get_float_with_fallback(
-                                prim_and_scene, "newton:contact_thickness", builder.default_shape_cfg.margin
-                            ),
-                        ),
-                        gap=gap,
+                        margin=margin_val,
+                        gap=gap_cfg,
                         mu=material.dynamicFriction,
                         restitution=material.restitution,
                         mu_torsional=material.torsionalFriction,
@@ -2297,6 +2307,46 @@ def parse_usd(
 
         # Joint indices may have shifted after collapsing fixed joints; refresh the joint path map accordingly.
         path_joint_map = {label: idx for idx, label in enumerate(builder.joint_label)}
+
+    # Mimic constraints (run after collapse so joint indices in path_joint_map are final).
+    for joint_path, joint_idx in path_joint_map.items():
+        joint_prim = stage.GetPrimAtPath(joint_path)
+        if not joint_prim.IsValid() or not joint_prim.HasAPI("NewtonMimicAPI"):
+            continue
+        mimic_enabled = usd.get_attribute(joint_prim, "newton:mimicEnabled", default=True)
+        if not mimic_enabled:
+            continue
+        mimic_rel = joint_prim.GetRelationship("newton:mimicJoint")
+        if not mimic_rel or not mimic_rel.HasAuthoredTargets():
+            if verbose:
+                print(f"NewtonMimicAPI on {joint_path} has no newton:mimicJoint target; skipping")
+            continue
+        targets = mimic_rel.GetTargets()
+        if not targets:
+            if verbose:
+                print(f"NewtonMimicAPI on {joint_path}: newton:mimicJoint has no targets; skipping")
+            continue
+        leader_path = targets[0]
+        if not leader_path.IsAbsolutePath():
+            leader_path = joint_prim.GetPath().GetParentPath().AppendPath(leader_path)
+        leader_path_str = str(leader_path)
+        if leader_path_str not in path_joint_map:
+            warnings.warn(
+                f"NewtonMimicAPI on {joint_path}: leader {leader_path_str} not in path_joint_map; skipping mimic constraint.",
+                stacklevel=2,
+            )
+            continue
+        coef0 = usd.get_attribute(joint_prim, "newton:mimicCoef0", default=0.0)
+        coef1 = usd.get_attribute(joint_prim, "newton:mimicCoef1", default=1.0)
+        leader_idx = path_joint_map[leader_path_str]
+        builder.add_constraint_mimic(
+            joint0=joint_idx,
+            joint1=leader_idx,
+            coef0=coef0,
+            coef1=coef1,
+            enabled=True,
+            label=joint_path,
+        )
 
     # Parse Newton actuator prims from the USD stage.
     from newton_actuators import parse_actuator_prim  # noqa: PLC0415
