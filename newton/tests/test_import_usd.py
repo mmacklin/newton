@@ -2108,10 +2108,10 @@ def PhysicsRevoluteJoint "Joint2"
 
     @unittest.skipUnless(USD_AVAILABLE, "Requires usd-core")
     def test_actuator_mode_inference_from_drive(self):
-        """Test that ActuatorMode is correctly inferred from USD joint drives."""
+        """Test that JointTargetMode is correctly inferred from USD joint drives."""
         from pxr import Usd
 
-        from newton._src.sim.joints import ActuatorMode  # noqa: PLC0415
+        from newton._src.sim.joints import JointTargetMode  # noqa: PLC0415
 
         usd_content = """#usda 1.0
 (
@@ -2268,24 +2268,24 @@ def Xform "Root" (
             return sum(b.joint_dof_dim[i][0] + b.joint_dof_dim[i][1] for i in range(joint_idx))
 
         self.assertEqual(
-            builder.joint_act_mode[get_qd_start(builder, "/Root/joint_effort")],
-            int(ActuatorMode.EFFORT),
+            builder.joint_target_mode[get_qd_start(builder, "/Root/joint_effort")],
+            int(JointTargetMode.EFFORT),
         )
         self.assertEqual(
-            builder.joint_act_mode[get_qd_start(builder, "/Root/joint_passive")],
-            int(ActuatorMode.NONE),
+            builder.joint_target_mode[get_qd_start(builder, "/Root/joint_passive")],
+            int(JointTargetMode.NONE),
         )
         self.assertEqual(
-            builder.joint_act_mode[get_qd_start(builder, "/Root/joint_position")],
-            int(ActuatorMode.POSITION),
+            builder.joint_target_mode[get_qd_start(builder, "/Root/joint_position")],
+            int(JointTargetMode.POSITION),
         )
         self.assertEqual(
-            builder.joint_act_mode[get_qd_start(builder, "/Root/joint_velocity")],
-            int(ActuatorMode.VELOCITY),
+            builder.joint_target_mode[get_qd_start(builder, "/Root/joint_velocity")],
+            int(JointTargetMode.VELOCITY),
         )
         self.assertEqual(
-            builder.joint_act_mode[get_qd_start(builder, "/Root/joint_both_gains")],
-            int(ActuatorMode.POSITION),
+            builder.joint_target_mode[get_qd_start(builder, "/Root/joint_both_gains")],
+            int(JointTargetMode.POSITION),
         )
 
         stage2 = Usd.Stage.CreateInMemory()
@@ -2295,16 +2295,16 @@ def Xform "Root" (
         builder2.add_usd(stage2, force_position_velocity_actuation=True)
 
         self.assertEqual(
-            builder2.joint_act_mode[get_qd_start(builder2, "/Root/joint_both_gains")],
-            int(ActuatorMode.POSITION_VELOCITY),
+            builder2.joint_target_mode[get_qd_start(builder2, "/Root/joint_both_gains")],
+            int(JointTargetMode.POSITION_VELOCITY),
         )
         self.assertEqual(
-            builder2.joint_act_mode[get_qd_start(builder2, "/Root/joint_position")],
-            int(ActuatorMode.POSITION),
+            builder2.joint_target_mode[get_qd_start(builder2, "/Root/joint_position")],
+            int(JointTargetMode.POSITION),
         )
         self.assertEqual(
-            builder2.joint_act_mode[get_qd_start(builder2, "/Root/joint_velocity")],
-            int(ActuatorMode.VELOCITY),
+            builder2.joint_target_mode[get_qd_start(builder2, "/Root/joint_velocity")],
+            int(JointTargetMode.VELOCITY),
         )
 
     def test__add_base_joints_to_floating_bodies_default(self):
@@ -2808,7 +2808,7 @@ def verify_usdphysics_parser(test, file, model, compare_min_max_coords, floating
             f"Shape {sid} collision mismatch: USD={collision_enabled_usd}, Newton={collision_enabled_newton}",
         )
 
-        usd_quat = usd.from_gfquat(shape_spec.localRot)
+        usd_quat = usd.value_to_warp(shape_spec.localRot)
         newton_pos = newton_transform[:3]
         newton_quat = newton_transform[3:7]
 
