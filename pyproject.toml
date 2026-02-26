@@ -79,6 +79,13 @@ examples = [
     "cbor2>=5.7.0",         # for binary recording format (.bin files) - more efficient than JSON
 ]
 
+# OVRTX real-time ray tracing viewer
+rtx = [
+    "newton[importers]",    # include import dependencies (USD)
+    "pyglet>=2.1.6",        # for the viewer window/presentation
+    "ovrtx",                # NVIDIA OVRTX renderer
+]
+
 # Extra dependency needed to run examples that inference an RL policy
 torch-cu12 = [
     "newton[examples]", # include example dependencies
@@ -148,6 +155,7 @@ torch = [
     { index = "pytorch-cu128", extra = "torch-cu12" },
     { index = "pytorch-cu130", extra = "torch-cu13" },
 ]
+ovrtx = { index = "nvidia" }
 
 [dependency-groups]
 dev = ["asv>=0.6.4"]
@@ -218,6 +226,7 @@ banned-module-level-imports = [
     "networkx",
     "open3d",
     "openmesh",
+    "ovrtx",
     "PIL",
     "point_cloud_utils",
     "pxr",
