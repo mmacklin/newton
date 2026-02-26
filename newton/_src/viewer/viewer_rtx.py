@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import math
 import os
 from time import perf_counter
@@ -582,6 +583,14 @@ void main() {
     def log_points(self, name, points, radii, colors, hidden=False):
         if self._phase == self._PHASE_BUILD:
             super().log_points(name, points, radii, colors, hidden)
+            self._mesh_prim_paths[name] = self._get_path(name)
+        elif name in self._mesh_prim_paths:
+            pts = (
+                points.numpy().astype(np.float32)
+                if isinstance(points, wp.array)
+                else np.asarray(points, dtype=np.float32)
+            )
+            self._pending_mesh_points[name] = pts
 
     # --------------------------------------------------------- OVRTX updates
 
@@ -640,17 +649,35 @@ void main() {
                 flush=True,
             )
 
+    @staticmethod
+    def _make_point3f_dltensor(points_np):
+        """Create a DLTensor with float3 (lanes=3) dtype from an (N,3) float32 array.
+
+        OVRTX Fabric stores 'points' as point3f[] where each element is 12 bytes
+        (float32 x 3 lanes). A plain DLTensor.from_dlpack on a (N,3) float32 array
+        produces scalar float32 elements (4 bytes), causing an element-size mismatch.
+        """
+        from ovrtx._src.dlpack import DLTensor
+
+        flat = np.ascontiguousarray(points_np, dtype=np.float32).reshape(-1)
+        dl = DLTensor.from_dlpack(flat)
+        n = len(flat) // 3
+        dl.dtype.lanes = 3
+        dl.ndim = 1
+        shape_arr = (ctypes.c_int64 * 1)(n)
+        dl.shape = ctypes.cast(shape_arr, ctypes.POINTER(ctypes.c_int64))
+        dl._point3f_shape = shape_arr  # prevent GC
+        return dl
+
     def _update_ovrtx_mesh_points(self):
         if self._rtx is None or not self._pending_mesh_points:
             return
-
-        from ovrtx._src.dlpack import DLTensor
 
         for mesh_name, points_np in self._pending_mesh_points.items():
             prim_path = self._mesh_prim_paths.get(mesh_name)
             if prim_path is None:
                 continue
-            dl = DLTensor.from_dlpack(points_np)
+            dl = self._make_point3f_dltensor(points_np)
             self._rtx.write_array_attribute(
                 prim_paths=[prim_path],
                 attribute_name="points",
