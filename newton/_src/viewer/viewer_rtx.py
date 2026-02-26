@@ -101,8 +101,8 @@ class ViewerRTX(ViewerUSD):
         self._camera_fov = 45.0
         self._camera_near = 0.01
         self._camera_far = 1000.0
-        self._camera_prim_path = "/root/_RTXCamera"
-        self._render_product_path = "/Render/RTXProduct"
+        self._camera_prim_path = "/World/Camera"
+        self._render_product_path = "/Render/OmniverseKit/HydraTextures/omni_kit_widget_viewport_ViewportTexture_0"
 
         # Input / timing state
         self._paused = False
@@ -341,28 +341,93 @@ void main() {
         else:
             rot.Set(Gf.Vec3f(-45.0, 0.0, 30.0))
 
-        # ---- RenderProduct ---------------------------------------------------
-        rp = self.stage.DefinePrim(self._render_product_path, "RenderProduct")
-        rp.CreateRelationship("camera").SetTargets([Sdf.Path(self._camera_prim_path)])
-        rp.CreateAttribute("resolution", Sdf.ValueTypeNames.Int2).Set(Gf.Vec2i(self._width, self._height))
+        # ---- Render hierarchy (must match Kit convention for OVRTX) ------------
+        # Structure: /Render/OmniverseKit/HydraTextures/<product>
+        #            /Render/Vars/LdrColor
+        #            /Render/OmniverseGlobalRenderSettings
+        self.stage.DefinePrim("/Render")
+        self.stage.DefinePrim("/Render/OmniverseKit")
+        self.stage.DefinePrim("/Render/OmniverseKit/HydraTextures")
 
-        rv_path = self._render_product_path + "/LdrColor"
+        rp = self.stage.DefinePrim(self._render_product_path, "RenderProduct")
+        rp.SetMetadata(
+            "apiSchemas",
+            Sdf.TokenListOp.Create(
+                prependedItems=[
+                    "OmniRtxSettingsCommonAdvancedAPI_1",
+                    "OmniRtxSettingsRtAdvancedAPI_1",
+                    "OmniRtxSettingsPtAdvancedAPI_1",
+                    "OmniRtxPostColorGradingAPI_1",
+                    "OmniRtxPostChromaticAberrationAPI_1",
+                    "OmniRtxPostBloomPhysicalAPI_1",
+                    "OmniRtxPostMatteObjectAPI_1",
+                    "OmniRtxPostCompositingAPI_1",
+                    "OmniRtxPostDofAPI_1",
+                    "OmniRtxPostMotionBlurAPI_1",
+                    "OmniRtxPostTvNoiseAPI_1",
+                    "OmniRtxPostTonemapIrayReinhardAPI_1",
+                    "OmniRtxPostDebugSettingsAPI_1",
+                    "OmniRtxDebugSettingsAPI_1",
+                ]
+            ),
+        )
+        rp.CreateRelationship("camera").SetTargets([Sdf.Path(self._camera_prim_path)])
+        rp.CreateAttribute("resolution", Sdf.ValueTypeNames.Int2, custom=False).Set(Gf.Vec2i(self._width, self._height))
+
+        # RenderVar lives at /Render/Vars/LdrColor (NOT nested under the product)
+        rv_path = "/Render/Vars/LdrColor"
         rv = self.stage.DefinePrim(rv_path, "RenderVar")
-        rv.CreateAttribute("sourceName", Sdf.ValueTypeNames.String).Set("LdrColor")
+        rv.CreateAttribute("sourceName", Sdf.ValueTypeNames.String, custom=False).Set("LdrColor")
         rp.CreateRelationship("orderedVars").SetTargets([Sdf.Path(rv_path)])
 
-        # ---- RTX render settings on the RenderProduct for real-time perf -----
-        rp.CreateAttribute("omni:rtx:rendermode", Sdf.ValueTypeNames.Token).Set("RaytracedLighting")
-        rp.CreateAttribute("omni:rtx:post:dlss:execMode", Sdf.ValueTypeNames.Token).Set("performance")
-        rp.CreateAttribute("omni:rtx:dlss:frameGeneration", Sdf.ValueTypeNames.Bool).Set(True)
-        rp.CreateAttribute("omni:rtx:post:aa:limitedOps", Sdf.ValueTypeNames.Bool).Set(False)
+        # ---- RTX render settings on the RenderProduct -------------------------
+        rp.CreateAttribute("omni:rtx:rendermode", Sdf.ValueTypeNames.Token).Set("RealTimePathTracing")
         rp.CreateAttribute("omni:rtx:ambientOcclusion:denoiserMode", Sdf.ValueTypeNames.Token).Set("none")
+        rp.CreateAttribute("omni:rtx:background:source:texture:textureMode", Sdf.ValueTypeNames.Token).Set(
+            "repeatMirrored"
+        )
+        rp.CreateAttribute("omni:rtx:background:source:type", Sdf.ValueTypeNames.Token).Set("domeLight")
+        rp.CreateAttribute("omni:rtx:debug:view:pixelDebug:enableFixedTextPos", Sdf.ValueTypeNames.Bool).Set(True)
         rp.CreateAttribute("omni:rtx:directLighting:sampledLighting:denoisingTechnique", Sdf.ValueTypeNames.Token).Set(
             "None"
         )
+        rp.CreateAttribute("omni:rtx:dlss:frameGeneration", Sdf.ValueTypeNames.Bool).Set(True)
         rp.CreateAttribute("omni:rtx:indirectDiffuse:denoiser:enabled", Sdf.ValueTypeNames.Bool).Set(False)
+        rp.CreateAttribute("omni:rtx:post:aa:limitedOps", Sdf.ValueTypeNames.Bool).Set(False)
+        rp.CreateAttribute("omni:rtx:post:registeredCompositing:invertColorCorrection", Sdf.ValueTypeNames.Bool).Set(
+            True
+        )
+        rp.CreateAttribute("omni:rtx:post:registeredCompositing:invertToneMap", Sdf.ValueTypeNames.Bool).Set(True)
+        rp.CreateAttribute("omni:rtx:pt:maxSamplesPerLaunch", Sdf.ValueTypeNames.Int).Set(2073600)
+        rp.CreateAttribute("omni:rtx:pt:mgpu:maxPixelsPerRegionExponent", Sdf.ValueTypeNames.Int).Set(12)
         rp.CreateAttribute("omni:rtx:reflections:denoiser:enabled", Sdf.ValueTypeNames.Bool).Set(False)
-        rp.CreateAttribute("omni:rtx:rt:ecoMode:enabled", Sdf.ValueTypeNames.Bool).Set(False)
+        rp.CreateAttribute("omni:rtx:rt:ambientLight:color", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.1, 0.1, 0.1))
+        rp.CreateAttribute("omni:rtx:rt:demoire", Sdf.ValueTypeNames.Bool).Set(False)
+        rp.CreateAttribute("omni:rtx:rt:lightcache:spatialCache:dontResolveConflicts", Sdf.ValueTypeNames.Bool).Set(
+            True
+        )
+        rp.CreateAttribute("omni:rtx:rt:sss:samples", Sdf.ValueTypeNames.Int).Set(1)
+        rp.CreateAttribute("omni:rtx:rtpt:maxVolumeBounces", Sdf.ValueTypeNames.Int).Set(15)
+        rp.CreateAttribute("omni:rtx:rtpt:modulatingRoughnessThreshold", Sdf.ValueTypeNames.Float).Set(0.08)
+        rp.CreateAttribute("omni:rtx:scene:hydra:mdlMaterialWarmup", Sdf.ValueTypeNames.Bool).Set(True)
+        rp.CreateAttribute("omni:rtx:viewTile:limit", Sdf.ValueTypeNames.UInt).Set(4294967295)
+
+        # Disable the quality convergence loop to minimize step() latency
+        rp.CreateAttribute("omni:rtx:quality", Sdf.ValueTypeNames.Int, custom=False).Set(0)
+        rp.CreateAttribute("omni:rtx:waitForEvents", Sdf.ValueTypeNames.TokenArray).Set([])
+
+        # ---- RenderSettings --------------------------------------------------
+        rs = self.stage.DefinePrim("/Render/OmniverseGlobalRenderSettings", "RenderSettings")
+        rs.SetMetadata(
+            "apiSchemas",
+            Sdf.TokenListOp.Create(
+                prependedItems=[
+                    "OmniRtxSettingsGlobalRtAdvancedAPI_1",
+                    "OmniRtxSettingsGlobalPtAdvancedAPI_1",
+                ]
+            ),
+        )
+        rs.CreateRelationship("products").SetTargets([Sdf.Path(self._render_product_path)])
 
     # ------------------------------------------------------------- OVRTX init
 
