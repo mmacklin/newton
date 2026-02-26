@@ -2964,7 +2964,7 @@ class SolverMuJoCo(SolverBase):
             self._mujoco.mj_step(self.mj_model, self.mj_data)
             self._update_newton_state(self.model, state_out, self.mj_data)
         else:
-            self.enable_rne_postconstraint(state_out)
+            self._enable_rne_postconstraint(state_out)
             self._apply_mjc_control(self.model, state_in, control, self.mjw_data)
             if self.update_data_interval > 0 and self._step % self.update_data_interval == 0:
                 self._update_mjc_data(self.mjw_data, self.model, state_in)
@@ -2980,7 +2980,7 @@ class SolverMuJoCo(SolverBase):
         self._step += 1
         return state_out
 
-    def enable_rne_postconstraint(self, state_out: State):
+    def _enable_rne_postconstraint(self, state_out: State):
         """Request computation of RNE forces if required for state fields."""
         rne_postconstraint_fields = {"body_qdd", "body_parent_f"}
         # TODO: handle use_mujoco_cpu
@@ -3059,16 +3059,16 @@ class SolverMuJoCo(SolverBase):
             self._update_joint_dof_properties()
         if flags & SolverNotifyFlags.SHAPE_PROPERTIES:
             self._update_geom_properties()
-            self.update_pair_properties()
+            self._update_pair_properties()
         if flags & SolverNotifyFlags.MODEL_PROPERTIES:
             self._update_model_properties()
         if flags & SolverNotifyFlags.CONSTRAINT_PROPERTIES:
-            self.update_eq_properties()
-            self.update_mimic_eq_properties()
+            self._update_eq_properties()
+            self._update_mimic_eq_properties()
         if flags & SolverNotifyFlags.TENDON_PROPERTIES:
-            self.update_tendon_properties()
+            self._update_tendon_properties()
         if flags & SolverNotifyFlags.ACTUATOR_PROPERTIES:
-            self.update_actuator_properties()
+            self._update_actuator_properties()
 
     def _create_inverse_shape_mapping(self):
         """
@@ -4755,7 +4755,7 @@ class SolverMuJoCo(SolverBase):
 
             # Sync compiler-resolved actuator params back to Newton custom
             # attributes. MuJoCo's compiler resolves dampratio into biasprm[2]
-            # during compilation; without this sync, update_actuator_properties
+            # during compilation; without this sync, _update_actuator_properties
             # would overwrite the resolved values with the unresolved originals.
             self._sync_compiled_actuator_params()
 
@@ -5499,7 +5499,7 @@ class SolverMuJoCo(SolverBase):
             device=self.model.device,
         )
 
-    def update_pair_properties(self):
+    def _update_pair_properties(self):
         """Update MuJoCo contact pair properties from Newton custom attributes.
 
         Updates the randomizable pair properties (solref, solreffriction, solimp,
@@ -5580,7 +5580,7 @@ class SolverMuJoCo(SolverBase):
                     device=self.model.device,
                 )
 
-    def update_eq_properties(self):
+    def _update_eq_properties(self):
         """Update equality constraint properties in the MuJoCo model.
 
         Updates:
@@ -5647,7 +5647,7 @@ class SolverMuJoCo(SolverBase):
             device=self.model.device,
         )
 
-    def update_mimic_eq_properties(self):
+    def _update_mimic_eq_properties(self):
         """Update mimic constraint properties in the MuJoCo model.
 
         Updates:
@@ -5683,7 +5683,7 @@ class SolverMuJoCo(SolverBase):
             device=self.model.device,
         )
 
-    def update_tendon_properties(self):
+    def _update_tendon_properties(self):
         """Update fixed tendon properties in the MuJoCo model.
 
         Updates tendon stiffness, damping, frictionloss, range, margin, solref, solimp,
@@ -5751,7 +5751,7 @@ class SolverMuJoCo(SolverBase):
             device=self.model.device,
         )
 
-    def update_actuator_properties(self):
+    def _update_actuator_properties(self):
         """Update CTRL_DIRECT actuator properties (gainprm, biasprm) in the MuJoCo model.
 
         Only updates actuators that use CTRL_DIRECT mode. JOINT_TARGET actuators are
@@ -5798,7 +5798,7 @@ class SolverMuJoCo(SolverBase):
 
         MuJoCo's compiler resolves dampratio into biasprm[2] during model compilation.
         This launches a kernel to copy the compiled values from mjw_model into Newton's
-        custom attributes so that update_actuator_properties writes the correct values.
+        custom attributes so that _update_actuator_properties writes the correct values.
         """
         if self.mjc_actuator_ctrl_source is None or self.mjc_actuator_to_newton_idx is None:
             return
