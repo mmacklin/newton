@@ -31,6 +31,11 @@ class ViewerGui:
         self._viewer = viewer
         self.ui = UI(window)
 
+        # Camera keyboard movement (shared with GL/RTX)
+        self._cam_vel = np.zeros(3, dtype=np.float32)
+        self._cam_speed = 4.0
+        self._cam_damp_tau = 0.083
+
         # Selection panel state (UI-local, not simulation state).
         self._selection_ui_state = {
             "selected_articulation_pattern": "*",
@@ -108,6 +113,61 @@ class ViewerGui:
         if camera is None:
             return
         camera.fov = max(15.0, min(90.0, camera.fov - scroll_y * scale))
+        if hasattr(self._viewer, "_camera_dirty"):
+            self._viewer._camera_dirty = True
+
+    def update_camera_from_keys(self, dt: float, is_key_down):
+        """Update camera position from WASD/QE keys. Uses same speed and damping as ViewerGL."""
+        if self.is_capturing():
+            return
+        camera = getattr(self._viewer, "camera", None)
+        if camera is None:
+            return
+
+        import pyglet
+
+        key = pyglet.window.key
+        forward = np.array(camera.get_front(), dtype=np.float32)
+        right = np.array(camera.get_right(), dtype=np.float32)
+        up = np.array(camera.get_up(), dtype=np.float32)
+
+        # Keep motion in the horizontal plane
+        forward -= up * float(np.dot(forward, up))
+        right -= up * float(np.dot(right, up))
+        fn = float(np.linalg.norm(forward))
+        ln = float(np.linalg.norm(right))
+        if fn > 1.0e-6:
+            forward /= fn
+        if ln > 1.0e-6:
+            right /= ln
+
+        desired = np.zeros(3, dtype=np.float32)
+        if is_key_down(key.W) or is_key_down(key.UP):
+            desired += forward
+        if is_key_down(key.S) or is_key_down(key.DOWN):
+            desired -= forward
+        if is_key_down(key.A) or is_key_down(key.LEFT):
+            desired -= right
+        if is_key_down(key.D) or is_key_down(key.RIGHT):
+            desired += right
+        if is_key_down(key.Q):
+            desired -= up
+        if is_key_down(key.E):
+            desired += up
+
+        dn = float(np.linalg.norm(desired))
+        if dn > 1.0e-6:
+            desired = desired / dn * self._cam_speed
+        else:
+            desired[:] = 0.0
+
+        tau = max(1.0e-4, float(self._cam_damp_tau))
+        self._cam_vel += (desired - self._cam_vel) * (dt / tau)
+
+        pos = camera.pos
+        camera.pos = type(pos)(
+            pos.x + self._cam_vel[0] * dt, pos.y + self._cam_vel[1] * dt, pos.z + self._cam_vel[2] * dt
+        )
         if hasattr(self._viewer, "_camera_dirty"):
             self._viewer._camera_dirty = True
 

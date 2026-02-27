@@ -106,7 +106,6 @@ class ViewerRTX(ViewerUSD):
 
         # Input / timing state
         self._keys_down: set[int] = set()
-        self._cam_speed = 4.0
         self._last_perf_time: float | None = None
         self.gui = None
 
@@ -207,7 +206,7 @@ void main() {
             if self.gui and self.gui.should_ignore_mouse_input(allow_active_pick_drag=allow_active_pick_drag):
                 return
             if buttons & pyglet.window.mouse.LEFT and self.gui:
-                self.gui.rotate_camera_from_drag(dx, dy, sensitivity=0.2)
+                self.gui.rotate_camera_from_drag(dx, dy, sensitivity=0.1)
             if buttons & pyglet.window.mouse.RIGHT and self.picking_enabled and self.picking is not None:
                 if self.gui:
                     self.gui.update_picking_from_screen(x, y, self._to_framebuffer_coords)
@@ -244,6 +243,8 @@ void main() {
                 self._paused = not self._paused
             elif symbol == pyglet.window.key.H:
                 self.show_ui = not self.show_ui
+            elif symbol == pyglet.window.key.F:
+                self._frame_camera_on_model()
 
         @self._window.event
         def on_key_release(symbol, modifiers):
@@ -276,48 +277,46 @@ void main() {
         mat[3, :3] = np.array(self.camera.pos, dtype=np.float64)
         return mat
 
-    def _update_camera_movement(self, dt: float):
-        import pyglet
-        from pyglet.math import Vec3 as PyVec3
-
-        fwd = np.array(self.camera.get_front(), dtype=np.float64)
-        up = np.zeros(3, dtype=np.float64)
-        up[self.camera.up_axis] = 1.0
-        right = np.cross(fwd, up)
-        rn = np.linalg.norm(right)
-        if rn > 1e-6:
-            right /= rn
-
-        fwd_horiz = fwd - up * np.dot(fwd, up)
-        fn = np.linalg.norm(fwd_horiz)
-        if fn > 1e-6:
-            fwd_horiz /= fn
-
-        desired = np.zeros(3, dtype=np.float64)
-        key = pyglet.window.key
-        if key.W in self._keys_down or key.UP in self._keys_down:
-            desired += fwd_horiz
-        if key.S in self._keys_down or key.DOWN in self._keys_down:
-            desired -= fwd_horiz
-        if key.A in self._keys_down or key.LEFT in self._keys_down:
-            desired -= right
-        if key.D in self._keys_down or key.RIGHT in self._keys_down:
-            desired += right
-        if key.E in self._keys_down:
-            desired += up
-        if key.Q in self._keys_down:
-            desired -= up
-
-        dn = np.linalg.norm(desired)
-        if dn > 1e-6:
-            desired = desired / dn * self._cam_speed
-            self.camera.pos += PyVec3(*(desired * dt))
-            self._camera_dirty = True
-
     def _to_framebuffer_coords(self, x: float, y: float) -> tuple[float, float]:
         if self.gui:
             return self.gui.map_window_to_target_coords(x, y, self._window, target_size=(self._width, self._height))
         return float(x), float(y)
+
+    def _frame_camera_on_model(self):
+        """Frame the camera to show all visible objects in the scene."""
+        if self.model is None:
+            return
+        from pyglet.math import Vec3 as PyVec3
+
+        min_bounds = np.array([float("inf")] * 3)
+        max_bounds = np.array([float("-inf")] * 3)
+        found_objects = False
+        if hasattr(self, "_last_state") and self._last_state is not None:
+            if hasattr(self._last_state, "body_q") and self._last_state.body_q is not None:
+                body_q = self._last_state.body_q.numpy()
+                for i in range(len(body_q)):
+                    pos = body_q[i, :3]
+                    min_bounds = np.minimum(min_bounds, pos)
+                    max_bounds = np.maximum(max_bounds, pos)
+                    found_objects = True
+        if not found_objects:
+            min_bounds = np.array([-5.0, -5.0, -5.0])
+            max_bounds = np.array([5.0, 5.0, 5.0])
+        center = (min_bounds + max_bounds) * 0.5
+        size = max_bounds - min_bounds
+        max_extent = float(np.max(size))
+        if max_extent < 1.0:
+            max_extent = 1.0
+        fov_rad = np.radians(self.camera.fov)
+        padding = 1.5
+        distance = max_extent / (2.0 * np.tan(fov_rad / 2.0)) * padding
+        front = self.camera.get_front()
+        self.camera.pos = PyVec3(
+            center[0] - front.x * distance,
+            center[1] - front.y * distance,
+            center[2] - front.z * distance,
+        )
+        self._camera_dirty = True
 
     # -------------------------------------------------------- USD scene helpers
 
@@ -518,11 +517,16 @@ void main() {
         self._camera_dirty = True
 
     @override
+    def log_gizmo(self, name, transform):
+        self._gizmo_log[name] = transform
+
+    @override
     def begin_frame(self, time):
         self._t_begin_frame = perf_counter()
         super().begin_frame(time)
         self._pending_xforms.clear()
         self._pending_mesh_points.clear()
+        self._gizmo_log = {}
 
         if self._window and not self._headless:
             try:
@@ -534,7 +538,8 @@ void main() {
         now = perf_counter()
         if self._last_perf_time is not None:
             dt = min(now - self._last_perf_time, 0.1)
-            self._update_camera_movement(dt)
+            if self.gui:
+                self.gui.update_camera_from_keys(dt, lambda k: k in self._keys_down)
         self._last_perf_time = now
         self._t_after_begin = perf_counter()
 

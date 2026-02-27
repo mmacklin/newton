@@ -204,12 +204,6 @@ class ViewerGL(ViewerBase):
         self.renderer.register_mouse_scroll(self.on_mouse_scroll)
         self.renderer.register_resize(self.on_resize)
 
-        # Camera movement settings
-        self._camera_speed = 0.04
-        self._cam_vel = np.zeros(3, dtype=np.float32)
-        self._cam_speed = 4.0  # m/s
-        self._cam_damp_tau = 0.083  # s
-
         # initialize viewer-local timer for per-frame integration
         self._last_time = time.perf_counter()
 
@@ -1211,53 +1205,10 @@ class ViewerGL(ViewerBase):
         Args:
             dt (float): Time delta since last update.
         """
-        if self.ui and self.ui.is_capturing():
-            return
-
-        # camera-relative basis
-        forward = np.array(self.camera.get_front(), dtype=np.float32)
-        right = np.array(self.camera.get_right(), dtype=np.float32)
-        up = np.array(self.camera.get_up(), dtype=np.float32)
-
-        # keep motion in the horizontal plane
-        forward -= up * float(np.dot(forward, up))
-        right -= up * float(np.dot(right, up))
-        # renormalize
-        fn = float(np.linalg.norm(forward))
-        ln = float(np.linalg.norm(right))
-        if fn > 1.0e-6:
-            forward /= fn
-        if ln > 1.0e-6:
-            right /= ln
-
-        import pyglet
-
-        desired = np.zeros(3, dtype=np.float32)
-        if self.renderer.is_key_down(pyglet.window.key.W) or self.renderer.is_key_down(pyglet.window.key.UP):
-            desired += forward
-        if self.renderer.is_key_down(pyglet.window.key.S) or self.renderer.is_key_down(pyglet.window.key.DOWN):
-            desired -= forward
-        if self.renderer.is_key_down(pyglet.window.key.A) or self.renderer.is_key_down(pyglet.window.key.LEFT):
-            desired -= right  # strafe left
-        if self.renderer.is_key_down(pyglet.window.key.D) or self.renderer.is_key_down(pyglet.window.key.RIGHT):
-            desired += right  # strafe right
-        if self.renderer.is_key_down(pyglet.window.key.Q):
-            desired -= up  # pan down
-        if self.renderer.is_key_down(pyglet.window.key.E):
-            desired += up  # pan up
-
-        dn = float(np.linalg.norm(desired))
-        if dn > 1.0e-6:
-            desired = desired / dn * self._cam_speed
-        else:
-            desired[:] = 0.0
-
-        tau = max(1.0e-4, float(self._cam_damp_tau))
-        self._cam_vel += (desired - self._cam_vel) * (dt / tau)
-
-        # integrate position
-        dv = type(self.camera.pos)(*self._cam_vel)
-        self.camera.pos += dv * dt
+        if self.gui:
+            self.gui.update_camera_from_keys(dt, self.renderer.is_key_down)
+        fb_w, fb_h = self.renderer.window.get_framebuffer_size()
+        self.camera.update_screen_size(fb_w, fb_h)
 
     def on_resize(self, width, height):
         """
