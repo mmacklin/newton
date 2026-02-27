@@ -760,11 +760,15 @@ void main() {
             return
         from ovrtx import Device
 
-        with wp.ScopedTimer("ViewerRTX::rtx_step", use_nvtx=True, detailed=True):
-            products = self._rtx.step_async(
+        with wp.ScopedTimer("ViewerRTX::rtx_step", use_nvtx=True):
+            result = self._rtx.step_async(
                 render_products={self._render_product_path},
                 delta_time=1.0 / self.fps,
             )
+            products = result.wait()
+
+        if products is None:
+            return
 
         for _pname, product in products.items():
             for frame in product.frames:
