@@ -82,7 +82,7 @@ class ViewerUSD(ViewerBase):
     and visualization of simulation data.
     """
 
-    def __init__(self, output_path, fps=60, up_axis="Z", num_frames=100, scaling=1.0):
+    def __init__(self, output_path, fps=60, up_axis="Z", num_frames=100, scaling=1.0, paused=False):
         """
         Initialize the USD viewer backend for Newton physics simulations.
 
@@ -92,6 +92,7 @@ class ViewerUSD(ViewerBase):
             up_axis (str, optional): USD up axis, either 'Y' or 'Z'. Default is 'Z'.
             num_frames (int, optional): Maximum number of frames to record. Default is 100. If None, recording is unlimited.
             scaling (float, optional): Uniform scaling applied to the scene root. Default is 1.0.
+            paused (bool, optional): Start the viewer in a paused state. Default is False.
 
         Raises:
             ImportError: If the usd-core package is not installed.
@@ -99,7 +100,7 @@ class ViewerUSD(ViewerBase):
         if Usd is None:
             raise ImportError("usd-core package is required for ViewerUSD. Install with: pip install usd-core")
 
-        super().__init__()
+        super().__init__(paused=paused)
 
         self.output_path = os.path.abspath(output_path)
         self.fps = fps

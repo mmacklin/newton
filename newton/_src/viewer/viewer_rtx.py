@@ -30,6 +30,8 @@ try:
 except ImportError:
     Gf = UsdGeom = None
 
+from .camera import Camera
+from .viewer_gui import ViewerGui
 from .viewer_usd import ViewerUSD
 
 
@@ -46,7 +48,9 @@ class ViewerRTX(ViewerUSD):
     _PHASE_BUILD = 0
     _PHASE_RENDER = 1
 
-    def __init__(self, width=1280, height=720, fps=60, up_axis="Z", num_frames=None, scaling=1.0, headless=False):
+    def __init__(
+        self, width=1920, height=1080, fps=60, up_axis="Z", num_frames=None, scaling=1.0, headless=False, paused=False
+    ):
         os.environ["OVRTX_SKIP_USD_CHECK"] = "1"
 
         try:
@@ -65,6 +69,7 @@ class ViewerRTX(ViewerUSD):
             up_axis=up_axis,
             num_frames=num_frames,
             scaling=scaling,
+            paused=paused,
         )
 
         self._width = width
@@ -94,22 +99,16 @@ class ViewerRTX(ViewerUSD):
         self._pending_xforms: dict[str, tuple[np.ndarray, np.ndarray]] = {}
         self._pending_mesh_points: dict[str, np.ndarray] = {}
 
-        # Camera state (matches ViewerGL Camera conventions)
-        self._up_axis_idx = {"X": 0, "Y": 1, "Z": 2}.get(up_axis.strip().upper(), 2)
-        self._camera_pos = np.array([10.0, 0.0, 2.0], dtype=np.float64)
-        self._camera_pitch = 0.0
-        self._camera_yaw = -180.0
-        self._camera_fov = 45.0
-        self._camera_near = 0.01
-        self._camera_far = 1000.0
+        # Camera (shared Camera class with ViewerGL)
+        self.camera = Camera(width=self._width, height=self._height, up_axis=up_axis)
         self._camera_prim_path = "/World/Camera"
         self._render_product_path = "/Render/OmniverseKit/HydraTextures/omni_kit_widget_viewport_ViewportTexture_0"
 
         # Input / timing state
-        self._paused = False
         self._keys_down: set[int] = set()
         self._cam_speed = 4.0
         self._last_perf_time: float | None = None
+        self.gui = None
 
         # Window is deferred until _init_ovrtx to avoid pyglet/Warp
         # kernel compilation deadlock on Windows.
@@ -199,24 +198,52 @@ void main() {
         # ---- input callbacks ------------------------------------------------
         @self._window.event
         def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
-            if buttons & pyglet.window.mouse.LEFT:
-                self._camera_yaw -= dx * 0.2
-                self._camera_pitch += dy * 0.2
-                self._camera_pitch = max(-89.0, min(89.0, self._camera_pitch))
-                self._camera_dirty = True
+            allow_active_pick_drag = (
+                bool(buttons & pyglet.window.mouse.RIGHT)
+                and self.picking_enabled
+                and self.gui is not None
+                and self.gui.is_pick_active()
+            )
+            if self.gui and self.gui.should_ignore_mouse_input(allow_active_pick_drag=allow_active_pick_drag):
+                return
+            if buttons & pyglet.window.mouse.LEFT and self.gui:
+                self.gui.rotate_camera_from_drag(dx, dy, sensitivity=0.2)
+            if buttons & pyglet.window.mouse.RIGHT and self.picking_enabled and self.picking is not None:
+                if self.gui:
+                    self.gui.update_picking_from_screen(x, y, self._to_framebuffer_coords)
+
+        @self._window.event
+        def on_mouse_press(x, y, button, modifiers):
+            if self.gui and self.gui.should_ignore_mouse_input():
+                return
+            if button == pyglet.window.mouse.RIGHT and self.picking_enabled and self.picking is not None:
+                if self.gui:
+                    self.gui.start_picking_from_screen(x, y, self._to_framebuffer_coords)
+
+        @self._window.event
+        def on_mouse_release(x, y, button, modifiers):
+            if button == pyglet.window.mouse.RIGHT and self.picking is not None:
+                if self.gui:
+                    self.gui.release_picking()
 
         @self._window.event
         def on_mouse_scroll(x, y, scroll_x, scroll_y):
-            self._camera_fov = max(15.0, min(90.0, self._camera_fov - scroll_y * 2.0))
-            self._camera_dirty = True
+            if self.gui and self.gui.should_ignore_mouse_input():
+                return
+            if self.gui:
+                self.gui.adjust_camera_fov_from_scroll(scroll_y, scale=2.0)
 
         @self._window.event
         def on_key_press(symbol, modifiers):
+            if self.gui and self.gui.should_ignore_keyboard_input():
+                return
             self._keys_down.add(symbol)
             if symbol == pyglet.window.key.ESCAPE:
                 self._window.close()
             elif symbol == pyglet.window.key.SPACE:
                 self._paused = not self._paused
+            elif symbol == pyglet.window.key.H:
+                self.show_ui = not self.show_ui
 
         @self._window.event
         def on_key_release(symbol, modifiers):
@@ -226,56 +253,42 @@ void main() {
         def on_close():
             self._should_close = True
 
+        self.gui = ViewerGui(self, self._window)
+
+    @property
+    def ui(self):
+        if self.gui is None:
+            return None
+        return self.gui.ui
+
     # ------------------------------------------------------------------ camera
-
-    def _get_camera_front(self):
-        pitch = max(-89.0, min(89.0, self._camera_pitch))
-        pr, yr = np.deg2rad(pitch), np.deg2rad(self._camera_yaw)
-        cp, sp = np.cos(pr), np.sin(pr)
-        cy, sy = np.cos(yr), np.sin(yr)
-        if self._up_axis_idx == 2:  # Z-up
-            return np.array([cy * cp, sy * cp, sp], dtype=np.float64)
-        if self._up_axis_idx == 0:  # X-up
-            return np.array([sp, cy * cp, sy * cp], dtype=np.float64)
-        return np.array([cy * cp, sp, sy * cp], dtype=np.float64)  # Y-up
-
-    def _get_world_up(self):
-        up = np.zeros(3, dtype=np.float64)
-        up[self._up_axis_idx] = 1.0
-        return up
 
     def _compute_camera_matrix(self):
         """Return a 4x4 row-major world-transform for the camera prim (USD convention)."""
-        fwd = self._get_camera_front()
-        fwd /= np.linalg.norm(fwd) + 1e-12
-        world_up = self._get_world_up()
-        right = np.cross(fwd, world_up)
-        rn = np.linalg.norm(right)
-        if rn < 1e-6:
-            right = np.cross(fwd, np.array([1.0, 0.0, 0.0], dtype=np.float64))
-            rn = np.linalg.norm(right)
-        right /= rn
-        up = np.cross(right, fwd)
-        up /= np.linalg.norm(up)
+        fwd = np.array(self.camera.get_front(), dtype=np.float64)
+        right = np.array(self.camera.get_right(), dtype=np.float64)
+        up = np.array(self.camera.get_up(), dtype=np.float64)
 
         mat = np.eye(4, dtype=np.float64)
         mat[0, :3] = right
         mat[1, :3] = up
         mat[2, :3] = -fwd  # USD cameras look along local -Z
-        mat[3, :3] = self._camera_pos
+        mat[3, :3] = np.array(self.camera.pos, dtype=np.float64)
         return mat
 
     def _update_camera_movement(self, dt: float):
         import pyglet
+        from pyglet.math import Vec3 as PyVec3
 
-        fwd = self._get_camera_front()
-        world_up = self._get_world_up()
-        right = np.cross(fwd, world_up)
+        fwd = np.array(self.camera.get_front(), dtype=np.float64)
+        up = np.zeros(3, dtype=np.float64)
+        up[self.camera.up_axis] = 1.0
+        right = np.cross(fwd, up)
         rn = np.linalg.norm(right)
         if rn > 1e-6:
             right /= rn
 
-        fwd_horiz = fwd - world_up * np.dot(fwd, world_up)
+        fwd_horiz = fwd - up * np.dot(fwd, up)
         fn = np.linalg.norm(fwd_horiz)
         if fn > 1e-6:
             fwd_horiz /= fn
@@ -291,15 +304,20 @@ void main() {
         if key.D in self._keys_down or key.RIGHT in self._keys_down:
             desired += right
         if key.E in self._keys_down:
-            desired += world_up
+            desired += up
         if key.Q in self._keys_down:
-            desired -= world_up
+            desired -= up
 
         dn = np.linalg.norm(desired)
         if dn > 1e-6:
             desired = desired / dn * self._cam_speed
-            self._camera_pos += desired * dt
+            self.camera.pos += PyVec3(*(desired * dt))
             self._camera_dirty = True
+
+    def _to_framebuffer_coords(self, x: float, y: float) -> tuple[float, float]:
+        if self.gui:
+            return self.gui.map_window_to_target_coords(x, y, self._window, target_size=(self._width, self._height))
+        return float(x), float(y)
 
     # -------------------------------------------------------- USD scene helpers
 
@@ -311,14 +329,15 @@ void main() {
         cam = UsdGeom.Camera.Define(self.stage, self._camera_prim_path)
 
         aspect = self._width / max(self._height, 1)
-        h_aperture = 20.955
-        v_aperture = h_aperture / aspect
-        focal_length = h_aperture / (2.0 * math.tan(math.radians(self._camera_fov) / 2.0))
+        # camera.fov is vertical FOV, so derive focal length from the vertical aperture.
+        v_aperture = 20.955
+        h_aperture = v_aperture * aspect
+        focal_length = v_aperture / (2.0 * math.tan(math.radians(self.camera.fov) / 2.0))
 
         cam.GetFocalLengthAttr().Set(focal_length)
         cam.GetHorizontalApertureAttr().Set(h_aperture)
         cam.GetVerticalApertureAttr().Set(v_aperture)
-        cam.GetClippingRangeAttr().Set(Gf.Vec2f(self._camera_near, self._camera_far))
+        cam.GetClippingRangeAttr().Set(Gf.Vec2f(self.camera.near, self.camera.far))
 
         xform = UsdGeom.Xform(cam.GetPrim())
         xform.ClearXformOpOrder()
@@ -337,7 +356,7 @@ void main() {
         dx = UsdGeom.Xform(distant.GetPrim())
         dx.ClearXformOpOrder()
         rot = dx.AddRotateXYZOp()
-        if self._up_axis_idx == 2:
+        if self.camera.up_axis == 2:
             rot.Set(Gf.Vec3f(-45.0, 30.0, 0.0))
         else:
             rot.Set(Gf.Vec3f(-45.0, 0.0, 30.0))
@@ -473,25 +492,29 @@ void main() {
     def set_model(self, model, max_worlds=None):
         super().set_model(model, max_worlds=max_worlds)
         if model is not None:
+            from pyglet.math import Vec3 as PyVec3
+
             axis_idx = (
                 model.up_axis
                 if isinstance(model.up_axis, int)
                 else {"X": 0, "Y": 1, "Z": 2}.get(str(model.up_axis).upper(), 2)
             )
-            self._up_axis_idx = axis_idx
+            self.camera.up_axis = axis_idx
             if axis_idx == 0:
-                self._camera_pos = np.array([2.0, 0.0, 10.0], dtype=np.float64)
+                self.camera.pos = PyVec3(2.0, 0.0, 10.0)
             elif axis_idx == 2:
-                self._camera_pos = np.array([10.0, 0.0, 2.0], dtype=np.float64)
+                self.camera.pos = PyVec3(10.0, 0.0, 2.0)
             else:
-                self._camera_pos = np.array([0.0, 2.0, 10.0], dtype=np.float64)
+                self.camera.pos = PyVec3(0.0, 2.0, 10.0)
 
     @override
     def set_camera(self, pos, pitch: float, yaw: float):
+        from pyglet.math import Vec3 as PyVec3
+
         if hasattr(pos, "__iter__"):
-            self._camera_pos = np.array([float(pos[0]), float(pos[1]), float(pos[2])], dtype=np.float64)
-        self._camera_pitch = pitch
-        self._camera_yaw = yaw
+            self.camera.pos = PyVec3(float(pos[0]), float(pos[1]), float(pos[2]))
+        self.camera.pitch = pitch
+        self.camera.yaw = yaw
         self._camera_dirty = True
 
     @override
@@ -794,6 +817,9 @@ void main() {
         gl.glUseProgram(0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
 
+        if self.gui:
+            self.gui.render_frame(update_fps=True)
+
         self._window.flip()
 
     # ----------------------------------------------------------- viewer API
@@ -807,16 +833,14 @@ void main() {
         return True
 
     @override
-    def is_paused(self) -> bool:
-        return self._paused
-
-    @override
     def close(self):
         if self._transform_binding is not None:
             self._transform_binding.unbind()
             self._transform_binding = None
 
         self._rtx = None
+        if self.ui:
+            self.ui.shutdown()
 
         if self._window is not None:
             if not self._headless:

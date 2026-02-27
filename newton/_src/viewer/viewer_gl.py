@@ -22,15 +22,13 @@ import numpy as np
 import warp as wp
 
 import newton as nt
-from newton.selection import ArticulationView
 
 from ..core.types import override
 from ..utils.render import copy_rgb_frame_uint8
 from .camera import Camera
-from .gl.gui import UI
 from .gl.opengl import LinesGL, MeshGL, MeshInstancerGL, RendererGL
-from .picking import Picking
 from .viewer import ViewerBase
+from .viewer_gui import ViewerGui
 from .wind import Wind
 
 
@@ -177,7 +175,7 @@ class ViewerGL(ViewerBase):
         - Extensible logging of meshes, lines, points, and arrays for custom visualization.
     """
 
-    def __init__(self, width=1920, height=1080, vsync=False, headless=False):
+    def __init__(self, width=1920, height=1080, vsync=False, headless=False, paused=False):
         """
         Initialize the OpenGL viewer and UI.
 
@@ -186,8 +184,9 @@ class ViewerGL(ViewerBase):
             height (int): Window height in pixels.
             vsync (bool): Enable vertical sync.
             headless (bool): Run in headless mode (no window).
+            paused (bool): Start the viewer in a paused state.
         """
-        super().__init__()
+        super().__init__(paused=paused)
 
         # map from path to any object type
         self.objects = {}
@@ -195,27 +194,7 @@ class ViewerGL(ViewerBase):
         self.renderer = RendererGL(vsync=vsync, screen_width=width, screen_height=height, headless=headless)
         self.renderer.set_title("Newton Viewer")
 
-        self._paused = False
         self._packed_vbo_xforms = None
-
-        # State caching for selection panel
-        self._last_state = None
-        self._last_control = None
-
-        # Selection panel state
-        self._selection_ui_state = {
-            "selected_articulation_pattern": "*",
-            "selected_articulation_view": None,
-            "selected_attribute": "joint_q",
-            "attribute_options": ["joint_q", "joint_qd", "joint_f", "body_q", "body_qd"],
-            "include_joints": "",
-            "exclude_joints": "",
-            "include_links": "",
-            "exclude_links": "",
-            "show_values": False,
-            "selected_batch_idx": 0,
-            "error_message": "",
-        }
 
         self.renderer.register_key_press(self.on_key_press)
         self.renderer.register_key_release(self.on_key_release)
@@ -234,34 +213,29 @@ class ViewerGL(ViewerBase):
         # initialize viewer-local timer for per-frame integration
         self._last_time = time.perf_counter()
 
-        # Only create UI in non-headless mode to avoid OpenGL context dependency
+        # Only create GUI in non-headless mode to avoid OpenGL context dependency.
         if not headless:
-            self.ui = UI(self.renderer.window)
+            self.gui = ViewerGui(self, self.renderer.window)
+            self.gui.register_ui_callback(self._render_gl_rendering_options, position="side")
+            self.gui.register_ui_callback(self._render_wind_options, position="side")
         else:
-            self.ui = None
+            self.gui = None
         self._gizmo_log = None
-
-        # Performance tracking
-        self._fps_history = []
-        self._last_fps_time = time.perf_counter()
-        self._frame_count = 0
-        self._current_fps = 0.0
 
         # a low resolution sphere mesh for point rendering
         self._point_mesh = None
-
-        # UI visibility toggle
-        self.show_ui = True
-
-        # UI callback system - organized by position
-        # positions: "side", "stats", "free"
-        self._ui_callbacks = {"side": [], "stats": [], "free": []}
 
         # Initialize PBO (Pixel Buffer Object) resources used in the `get_frame` method.
         self._pbo = None
         self._wp_pbo = None
 
         self.set_model(None)
+
+    @property
+    def ui(self):
+        if self.gui is None:
+            return None
+        return self.gui.ui
 
     def _hash_geometry(self, geo_type: int, geo_scale, thickness: float, is_solid: bool, geo_src=None) -> int:
         # For capsules, ignore (radius, half_height) in the geometry hash so varying-length capsules batch together.
@@ -280,26 +254,6 @@ class ViewerGL(ViewerBase):
             pbo_id = (gl.GLuint * 1)(self._pbo)
             gl.glDeleteBuffers(1, pbo_id)
             self._pbo = None
-
-    def register_ui_callback(self, callback, position="side"):
-        """
-        Register a UI callback to be rendered during the UI phase.
-
-        Args:
-            callback: Function to be called during UI rendering
-            position: Position where the UI should be rendered. One of:
-                     "side" - Side callback (default)
-                     "stats" - Stats/metrics area
-                     "free" - Free-floating UI elements
-        """
-        if not callable(callback):
-            raise TypeError("callback must be callable")
-
-        if position not in self._ui_callbacks:
-            valid_positions = list(self._ui_callbacks.keys())
-            raise ValueError(f"Invalid position '{position}'. Must be one of: {valid_positions}")
-
-        self._ui_callbacks[position].append(callback)
 
     # helper function to create a low resolution sphere mesh for point rendering
     def _create_point_mesh(self):
@@ -372,7 +326,6 @@ class ViewerGL(ViewerBase):
                 )
                 batch.scales = out_scales
 
-        self.picking = Picking(model, pick_stiffness=10000.0, pick_damping=1000.0, world_offsets=self.world_offsets)
         self.wind = Wind(model)
 
         # Build packed arrays for batched GPU rendering of shape instances
@@ -436,18 +389,6 @@ class ViewerGL(ViewerBase):
         self._packed_world_xforms = all_world_xforms
         self._packed_vbo_xforms = wp.empty(total, dtype=wp.mat44, device=device)
         self._packed_vbo_xforms_host = wp.empty(total, dtype=wp.mat44, device="cpu", pinned=True)
-
-    @override
-    def set_world_offsets(self, spacing: tuple[float, float, float] | list[float] | wp.vec3):
-        """Set world offsets and update the picking system.
-
-        Args:
-            spacing: Spacing between worlds along each axis.
-        """
-        super().set_world_offsets(spacing)
-        # Update picking system with new world offsets
-        if hasattr(self, "picking") and self.picking is not None:
-            self.picking.world_offsets = self.world_offsets
 
     @override
     def set_camera(self, pos: wp.vec3, pitch: float, yaw: float):
@@ -878,8 +819,7 @@ class ViewerGL(ViewerBase):
         Args:
             state: The current simulation state.
         """
-        if self.picking_enabled:
-            self.picking._apply_picking_force(state)
+        super().apply_forces(state)
 
         # Apply wind forces
         self.wind._apply_wind_force(state)
@@ -908,14 +848,8 @@ class ViewerGL(ViewerBase):
         # Always update FPS tracking, even if UI is hidden
         self._update_fps()
 
-        if self.ui and self.ui.is_available and self.show_ui:
-            self.ui.begin_frame()
-
-            # Render the UI
-            self._render_ui()
-
-            self.ui.end_frame()
-            self.ui.render()
+        if self.gui:
+            self.gui.render_frame(update_fps=False)
 
         self.renderer.present()
 
@@ -966,11 +900,8 @@ class ViewerGL(ViewerBase):
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self.renderer._frame_fbo)
         gl.glBindBuffer(gl.GL_PIXEL_PACK_BUFFER, self._pbo)
 
-        if render_ui and self.ui:
-            self.ui.begin_frame()
-            self._render_ui()
-            self.ui.end_frame()
-            self.ui.render()
+        if render_ui and self.gui:
+            self.gui.render_frame(update_fps=False)
 
         gl.glReadPixels(0, 0, w, h, gl.GL_RGB, gl.GL_UNSIGNED_BYTE, ctypes.c_void_p(0))
         gl.glBindBuffer(gl.GL_PIXEL_PACK_BUFFER, 0)
@@ -1015,20 +946,12 @@ class ViewerGL(ViewerBase):
         return not self.renderer.has_exit()
 
     @override
-    def is_paused(self) -> bool:
-        """
-        Check if the simulation is paused.
-
-        Returns:
-            bool: True if paused, False otherwise.
-        """
-        return self._paused
-
-    @override
     def close(self):
         """
         Close the viewer and clean up resources.
         """
+        if self.ui:
+            self.ui.shutdown()
         self.renderer.close()
 
     @property
@@ -1119,22 +1042,16 @@ class ViewerGL(ViewerBase):
             x, y: Mouse position.
             scroll_x, scroll_y: Scroll deltas.
         """
-        if self.ui and self.ui.is_capturing():
+        if self.gui and self.gui.should_ignore_mouse_input():
             return
-
-        fov_delta = scroll_y * 2.0
-        self.camera.fov -= fov_delta
-        self.camera.fov = max(min(self.camera.fov, 90.0), 15.0)
+        if self.gui:
+            self.gui.adjust_camera_fov_from_scroll(scroll_y, scale=2.0)
 
     def _to_framebuffer_coords(self, x: float, y: float) -> tuple[float, float]:
         """Convert window coordinates to framebuffer coordinates."""
-        fb_w, fb_h = self.renderer.window.get_framebuffer_size()
-        win_w, win_h = self.renderer.window.get_size()
-        if win_w <= 0 or win_h <= 0:
-            return float(x), float(y)
-        scale_x = fb_w / win_w
-        scale_y = fb_h / win_h
-        return float(x) * scale_x, float(y) * scale_y
+        if self.gui:
+            return self.gui.map_window_to_target_coords(x, y, self.renderer.window)
+        return float(x), float(y)
 
     def on_mouse_press(self, x, y, button, modifiers):
         """
@@ -1145,17 +1062,14 @@ class ViewerGL(ViewerBase):
             button: Mouse button pressed.
             modifiers: Modifier keys.
         """
-        if self.ui and self.ui.is_capturing():
+        if self.gui and self.gui.should_ignore_mouse_input():
             return
 
         import pyglet
 
         # Handle right-click for picking
-        if button == pyglet.window.mouse.RIGHT and self.picking_enabled:
-            fb_x, fb_y = self._to_framebuffer_coords(x, y)
-            ray_start, ray_dir = self.camera.get_world_ray(fb_x, fb_y)
-            if self._last_state is not None:
-                self.picking.pick(self._last_state, ray_start, ray_dir)
+        if button == pyglet.window.mouse.RIGHT and self.gui:
+            self.gui.start_picking_from_screen(x, y, self._to_framebuffer_coords)
 
     def on_mouse_release(self, x, y, button, modifiers):
         """
@@ -1166,7 +1080,10 @@ class ViewerGL(ViewerBase):
             button: Mouse button released.
             modifiers: Modifier keys.
         """
-        self.picking.release()
+        import pyglet
+
+        if button == pyglet.window.mouse.RIGHT and self.gui:
+            self.gui.release_picking()
 
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
         """
@@ -1178,27 +1095,19 @@ class ViewerGL(ViewerBase):
             buttons: Mouse buttons pressed.
             modifiers: Modifier keys.
         """
-        if self.ui and self.ui.is_capturing():
-            return
-
         import pyglet
 
-        if buttons & pyglet.window.mouse.LEFT:
-            sensitivity = 0.1
-            dx *= sensitivity
-            dy *= sensitivity
+        allow_active_pick_drag = bool(buttons & pyglet.window.mouse.RIGHT) and bool(
+            self.gui and self.gui.is_pick_active()
+        )
+        if self.gui and self.gui.should_ignore_mouse_input(allow_active_pick_drag=allow_active_pick_drag):
+            return
 
-            # Map screen-space right drag to a right turn (clockwise),
-            # independent of world up-axis convention.
-            self.camera.yaw -= dx
-            self.camera.pitch += dy
+        if buttons & pyglet.window.mouse.LEFT and self.gui:
+            self.gui.rotate_camera_from_drag(dx, dy, sensitivity=0.1)
 
-        if buttons & pyglet.window.mouse.RIGHT and self.picking_enabled:
-            fb_x, fb_y = self._to_framebuffer_coords(x, y)
-            ray_start, ray_dir = self.camera.get_world_ray(fb_x, fb_y)
-
-            if self.picking.is_picking():
-                self.picking.update(ray_start, ray_dir)
+        if buttons & pyglet.window.mouse.RIGHT and self.gui:
+            self.gui.update_picking_from_screen(x, y, self._to_framebuffer_coords)
 
     def on_mouse_motion(self, x, y, dx, dy):
         """
@@ -1214,7 +1123,7 @@ class ViewerGL(ViewerBase):
             symbol: Key symbol.
             modifiers: Modifier keys.
         """
-        if self.ui and self.ui.is_capturing():
+        if self.gui and self.gui.should_ignore_keyboard_input():
             return
 
         try:
@@ -1365,694 +1274,41 @@ class ViewerGL(ViewerBase):
         if self.ui:
             self.ui.resize(width, height)
 
-    def _update_fps(self):
-        """
-        Update FPS calculation and statistics.
-        """
-        current_time = time.perf_counter()
-        self._frame_count += 1
-
-        # Update FPS every second
-        if current_time - self._last_fps_time >= 1.0:
-            time_delta = current_time - self._last_fps_time
-            self._current_fps = self._frame_count / time_delta
-            self._fps_history.append(self._current_fps)
-
-            # Keep only last 60 FPS readings
-            if len(self._fps_history) > 60:
-                self._fps_history.pop(0)
-
-            self._last_fps_time = current_time
-            self._frame_count = 0
-
-    def _render_gizmos(self):
-        if not self._gizmo_log or not self.ui:
-            return
-
-        giz = self.ui.giz
-        io = self.ui.io
-
-        # Setup ImGuizmo viewport
-        giz.set_orthographic(False)
-        giz.set_rect(0.0, 0.0, float(io.display_size[0]), float(io.display_size[1]))
-        giz.set_gizmo_size_clip_space(0.07)
-        giz.set_axis_limit(0.0)
-        giz.set_plane_limit(0.0)
-
-        # Camera matrices
-        view = self.camera.get_view_matrix().reshape(4, 4).transpose()
-        proj = self.camera.get_projection_matrix().reshape(4, 4).transpose()
-
-        # Draw & mutate each gizmo
-        for gid, transform in self._gizmo_log.items():
-            giz.push_id(str(gid))
-
-            M = wp.transform_to_matrix(transform)
-
-            def m44_to_mat16(m):
-                """Row-major 4x4 -> giz.Matrix16 (column-major, 16 floats)."""
-                m = np.asarray(m, dtype=np.float32).reshape(4, 4)
-                return giz.Matrix16(m.flatten(order="F").tolist())
-
-            view_ = m44_to_mat16(view)
-            proj_ = m44_to_mat16(proj)
-            M_ = m44_to_mat16(M)
-
-            giz.manipulate(view_, proj_, giz.OPERATION.rotate, giz.MODE.world, M_, None, None)
-            giz.manipulate(view_, proj_, giz.OPERATION.translate, giz.MODE.world, M_, None, None)
-
-            M[:] = M_.values.reshape(4, 4, order="F")
-            transform[:] = wp.transform_from_matrix(M)
-
-            giz.pop_id()
-
-    def _render_ui(self):
-        """
-        Render the complete ImGui interface (left panel, stats overlay, and custom UI).
-        """
-        if not self.ui or not self.ui.is_available:
-            return
-
-        # Render gizmos
-        self._render_gizmos()
-
-        # Render left panel
-        self._render_left_panel()
-
-        # Render top-right stats overlay
-        self._render_stats_overlay()
-
-        # allow users to create custom windows
-        for callback in self._ui_callbacks["free"]:
-            callback(self.ui.imgui)
-
-    def _render_left_panel(self):
-        """
-        Render the left panel with model info and visualization controls.
-        """
-        imgui = self.ui.imgui
-
-        # Use theme colors directly
-        nav_highlight_color = self.ui.get_theme_color(imgui.Col_.nav_cursor, (1.0, 1.0, 1.0, 1.0))
-
-        # Position the window on the left side
-        io = self.ui.io
-        imgui.set_next_window_pos(imgui.ImVec2(10, 10))
-        imgui.set_next_window_size(imgui.ImVec2(300, io.display_size[1] - 20))
-
-        # Main control panel window - use safe flag values
-        flags = imgui.WindowFlags_.no_resize.value
-
-        if imgui.begin(f"Newton Viewer v{nt.__version__}", flags=flags):
+    def _render_gl_rendering_options(self, imgui):
+        """GL-specific rendering options UI callback."""
+        imgui.set_next_item_open(True, imgui.Cond_.appearing)
+        if imgui.collapsing_header("Rendering Options"):
             imgui.separator()
 
-            # Collapsing headers default-open handling (first frame only)
-            header_flags = 0
+            changed, vsync = imgui.checkbox("VSync", self.vsync)
+            if changed:
+                self.vsync = vsync
 
-            # Model Information section
-            if self.model is not None:
-                imgui.set_next_item_open(True, imgui.Cond_.appearing)
-                if imgui.collapsing_header("Model Information", flags=header_flags):
-                    imgui.separator()
-                    imgui.text(f"Worlds: {self.model.world_count}")
-                    axis_names = ["X", "Y", "Z"]
-                    imgui.text(f"Up Axis: {axis_names[self.model.up_axis]}")
-                    gravity = self.model.gravity.numpy()[0]
-                    gravity_text = f"Gravity: ({gravity[0]:.2f}, {gravity[1]:.2f}, {gravity[2]:.2f})"
-                    imgui.text(gravity_text)
+            _changed, self.renderer.draw_sky = imgui.checkbox("Sky", self.renderer.draw_sky)
+            _changed, self.renderer.draw_shadows = imgui.checkbox("Shadows", self.renderer.draw_shadows)
+            _changed, self.renderer.draw_wireframe = imgui.checkbox("Wireframe", self.renderer.draw_wireframe)
+            _changed, self.renderer._light_color = imgui.color_edit3("Light Color", self.renderer._light_color)
+            _changed, self.renderer.sky_upper = imgui.color_edit3("Sky Color", self.renderer.sky_upper)
+            _changed, self.renderer.sky_lower = imgui.color_edit3("Ground Color", self.renderer.sky_lower)
 
-                    # Pause simulation checkbox
-                    changed, self._paused = imgui.checkbox("Pause", self._paused)
-
-                # Visualization Controls section
-                imgui.set_next_item_open(True, imgui.Cond_.appearing)
-                if imgui.collapsing_header("Visualization", flags=header_flags):
-                    imgui.separator()
-
-                    # Joint visualization
-                    show_joints = self.show_joints
-                    changed, self.show_joints = imgui.checkbox("Show Joints", show_joints)
-
-                    # Contact visualization
-                    show_contacts = self.show_contacts
-                    changed, self.show_contacts = imgui.checkbox("Show Contacts", show_contacts)
-
-                    # Particle visualization
-                    show_particles = self.show_particles
-                    changed, self.show_particles = imgui.checkbox("Show Particles", show_particles)
-
-                    # Spring visualization
-                    show_springs = self.show_springs
-                    changed, self.show_springs = imgui.checkbox("Show Springs", show_springs)
-
-                    # Center of mass visualization
-                    show_com = self.show_com
-                    changed, self.show_com = imgui.checkbox("Show Center of Mass", show_com)
-
-                    # Triangle mesh visualization
-                    show_triangles = self.show_triangles
-                    changed, self.show_triangles = imgui.checkbox("Show Cloth", show_triangles)
-
-                    # Collision geometry toggle
-                    show_collision = self.show_collision
-                    changed, self.show_collision = imgui.checkbox("Show Collision", show_collision)
-
-                    # Visual geometry toggle
-                    show_visual = self.show_visual
-                    changed, self.show_visual = imgui.checkbox("Show Visual", show_visual)
-
-                    # Inertia boxes toggle
-                    show_inertia_boxes = self.show_inertia_boxes
-                    changed, self.show_inertia_boxes = imgui.checkbox("Show Inertia Boxes", show_inertia_boxes)
-
-            imgui.set_next_item_open(True, imgui.Cond_.appearing)
-            if imgui.collapsing_header("Example Options"):
-                # Render UI callbacks for side panel
-                for callback in self._ui_callbacks["side"]:
-                    callback(self.ui.imgui)
-
-            # Rendering Options section
-            imgui.set_next_item_open(True, imgui.Cond_.appearing)
-            if imgui.collapsing_header("Rendering Options"):
-                imgui.separator()
-
-                # VSync
-                changed, vsync = imgui.checkbox("VSync", self.vsync)
-                if changed:
-                    self.vsync = vsync
-
-                # Sky rendering
-                changed, self.renderer.draw_sky = imgui.checkbox("Sky", self.renderer.draw_sky)
-
-                # Shadow rendering
-                changed, self.renderer.draw_shadows = imgui.checkbox("Shadows", self.renderer.draw_shadows)
-
-                # Wireframe mode
-                changed, self.renderer.draw_wireframe = imgui.checkbox("Wireframe", self.renderer.draw_wireframe)
-
-                # Light color
-                changed, self.renderer._light_color = imgui.color_edit3("Light Color", self.renderer._light_color)
-                # Sky color
-                changed, self.renderer.sky_upper = imgui.color_edit3("Sky Color", self.renderer.sky_upper)
-                # Ground color
-                changed, self.renderer.sky_lower = imgui.color_edit3("Ground Color", self.renderer.sky_lower)
-
-            # Wind Effects section
-            imgui.set_next_item_open(False, imgui.Cond_.once)
-            if imgui.collapsing_header("Wind"):
-                imgui.separator()
-
-                # Wind amplitude slider
-                changed, amplitude = imgui.slider_float("Wind Amplitude", self.wind.amplitude, -2.0, 2.0, "%.2f")
-                if changed:
-                    self.wind.amplitude = amplitude
-
-                # Wind period slider
-                changed, period = imgui.slider_float("Wind Period", self.wind.period, 1.0, 30.0, "%.2f")
-                if changed:
-                    self.wind.period = period
-
-                # Wind frequency slider
-                changed, frequency = imgui.slider_float("Wind Frequency", self.wind.frequency, 0.1, 5.0, "%.2f")
-                if changed:
-                    self.wind.frequency = frequency
-
-                # Wind direction sliders
-                direction = [self.wind.direction[0], self.wind.direction[1], self.wind.direction[2]]
-                changed, direction = imgui.slider_float3("Wind Direction", direction, -1.0, 1.0, "%.2f")
-                if changed:
-                    self.wind.direction = direction
-
-            # Camera Information section
-            imgui.set_next_item_open(True, imgui.Cond_.appearing)
-            if imgui.collapsing_header("Camera"):
-                imgui.separator()
-
-                pos = self.camera.pos
-                pos_text = f"Position: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})"
-                imgui.text(pos_text)
-                imgui.text(f"FOV: {self.camera.fov:.1f}°")
-                imgui.text(f"Pitch: {self.camera.pitch:.1f}°")
-                imgui.text(f"Yaw: {self.camera.yaw:.1f}°")
-
-                # Camera controls hint
-                imgui.separator()
-                imgui.push_style_color(imgui.Col_.text, imgui.ImVec4(*nav_highlight_color))
-                imgui.text("Controls:")
-                imgui.pop_style_color()
-                imgui.text("WASD - Move camera")
-                imgui.text("QE - Pan up/down")
-                imgui.text("Left Click - Look around")
-                imgui.text("Right Click - Pick objects")
-                imgui.text("Scroll - Zoom")
-                imgui.text("Space - Pause/Resume")
-                imgui.text("H - Toggle UI")
-                imgui.text("F - Frame camera around model")
-
-            # Selection API section
-            self._render_selection_panel()
-
-        imgui.end()
-
-    def _render_stats_overlay(self):
-        """
-        Render performance stats overlay in the top-right corner.
-        """
-        imgui = self.ui.imgui
-        io = self.ui.io
-
-        # Use fallback color for FPS display
-        fps_color = (1.0, 1.0, 1.0, 1.0)  # Bright white
-
-        # Position in top-right corner
-        window_pos = (io.display_size[0] - 10, 10)
-        imgui.set_next_window_pos(imgui.ImVec2(window_pos[0], window_pos[1]), pivot=imgui.ImVec2(1.0, 0.0))
-
-        # Transparent background, auto-sized, non-resizable/movable - use safe flags
-        #        try:
-        flags: imgui.WindowFlags = (
-            imgui.WindowFlags_.no_decoration.value
-            | imgui.WindowFlags_.always_auto_resize.value
-            | imgui.WindowFlags_.no_resize.value
-            | imgui.WindowFlags_.no_saved_settings.value
-            | imgui.WindowFlags_.no_focus_on_appearing.value
-            | imgui.WindowFlags_.no_nav.value
-            | imgui.WindowFlags_.no_move.value
-        )
-
-        # Set semi-transparent background for the overlay window
-        pushed_window_bg = False
-        try:
-            # Preferred API name in pyimgui
-            imgui.set_next_window_bg_alpha(0.7)
-        except AttributeError:
-            # Fallback: temporarily override window bg color alpha
-            try:
-                style = imgui.get_style()
-                bg = style.color_(imgui.Col_.window_bg)
-                r, g, b = bg.x, bg.y, bg.z
-            except Exception:
-                # Reasonable dark default
-                r, g, b = 0.094, 0.094, 0.094
-            imgui.push_style_color(imgui.Col_.window_bg, imgui.ImVec4(r, g, b, 0.7))
-            pushed_window_bg = True
-
-        if imgui.begin("Performance Stats", flags=flags):
-            # FPS display
-            fps_text = f"FPS: {self._current_fps:.1f}"
-            imgui.push_style_color(imgui.Col_.text, imgui.ImVec4(*fps_color))
-            imgui.text(fps_text)
-            imgui.pop_style_color()
-
-            # Model stats
-            if self.model is not None:
-                imgui.separator()
-                imgui.text(f"Bodies: {self.model.body_count}")
-                imgui.text(f"Shapes: {self.model.shape_count}")
-                imgui.text(f"Joints: {self.model.joint_count}")
-                imgui.text(f"Particles: {self.model.particle_count}")
-                imgui.text(f"Springs: {self.model.spring_count}")
-                imgui.text(f"Triangles: {self.model.tri_count}")
-                imgui.text(f"Edges: {self.model.edge_count}")
-                imgui.text(f"Tetrahedra: {self.model.tet_count}")
-
-            # Rendered objects count
+    def _render_wind_options(self, imgui):
+        """Wind control UI callback."""
+        imgui.set_next_item_open(False, imgui.Cond_.once)
+        if imgui.collapsing_header("Wind"):
             imgui.separator()
-            imgui.text(f"Unique Objects: {len(self.objects)}")
+            changed, amplitude = imgui.slider_float("Wind Amplitude", self.wind.amplitude, -2.0, 2.0, "%.2f")
+            if changed:
+                self.wind.amplitude = amplitude
 
-        # Custom stats
-        for callback in self._ui_callbacks["stats"]:
-            callback(self.ui.imgui)
+            changed, period = imgui.slider_float("Wind Period", self.wind.period, 1.0, 30.0, "%.2f")
+            if changed:
+                self.wind.period = period
 
-        imgui.end()
+            changed, frequency = imgui.slider_float("Wind Frequency", self.wind.frequency, 0.1, 5.0, "%.2f")
+            if changed:
+                self.wind.frequency = frequency
 
-        # Restore bg color if we pushed it
-        if pushed_window_bg:
-            imgui.pop_style_color()
-
-    def _render_selection_panel(self):
-        """
-        Render the selection panel for Newton Model introspection.
-        """
-        imgui = self.ui.imgui
-
-        # Selection Panel section
-        header_flags = 0
-        imgui.set_next_item_open(False, imgui.Cond_.appearing)  # Default to closed
-        if imgui.collapsing_header("Selection API", flags=header_flags):
-            imgui.separator()
-
-            # Check if we have state data available
-            if self._last_state is None:
-                imgui.text("No state data available.")
-                imgui.text("Start simulation to enable selection.")
-                return
-
-            state = self._selection_ui_state
-
-            # Display error message if any
-            if state["error_message"]:
-                imgui.push_style_color(imgui.Col_.text, imgui.ImVec4(1.0, 0.3, 0.3, 1.0))
-                imgui.text(f"Error: {state['error_message']}")
-                imgui.pop_style_color()
-                imgui.separator()
-
-            # Articulation Pattern Input
-            imgui.text("Articulation Pattern:")
-            imgui.push_item_width(200)
-            _changed, state["selected_articulation_pattern"] = imgui.input_text(
-                "##pattern", state["selected_articulation_pattern"]
-            )
-            imgui.pop_item_width()
-            if imgui.is_item_hovered():
-                tooltip = "Pattern to match articulations (e.g., '*', 'robot*', 'cartpole')"
-                imgui.set_tooltip(tooltip)
-
-            # Joint filtering
-            imgui.spacing()
-            imgui.text("Joint Filters (optional):")
-            imgui.push_item_width(150)
-            imgui.text("Include:")
-            imgui.same_line()
-            _, state["include_joints"] = imgui.input_text("##inc_joints", state["include_joints"])
-            if imgui.is_item_hovered():
-                imgui.set_tooltip("Comma-separated joint names/patterns")
-
-            imgui.text("Exclude:")
-            imgui.same_line()
-            _, state["exclude_joints"] = imgui.input_text("##exc_joints", state["exclude_joints"])
-            if imgui.is_item_hovered():
-                imgui.set_tooltip("Comma-separated joint names/patterns")
-            imgui.pop_item_width()
-
-            # Link filtering
-            imgui.spacing()
-            imgui.text("Link Filters (optional):")
-            imgui.push_item_width(150)
-            imgui.text("Include:")
-            imgui.same_line()
-            _, state["include_links"] = imgui.input_text("##inc_links", state["include_links"])
-            if imgui.is_item_hovered():
-                imgui.set_tooltip("Comma-separated link names/patterns")
-
-            imgui.text("Exclude:")
-            imgui.same_line()
-            _, state["exclude_links"] = imgui.input_text("##exc_links", state["exclude_links"])
-            if imgui.is_item_hovered():
-                imgui.set_tooltip("Comma-separated link names/patterns")
-            imgui.pop_item_width()
-
-            # Create View Button
-            imgui.spacing()
-            if imgui.button("Create Articulation View"):
-                self._create_articulation_view()
-
-            # Show view info if created
-            if state["selected_articulation_view"] is not None:
-                view = state["selected_articulation_view"]
-                imgui.separator()
-                imgui.text(f"  Count: {view.count}")
-                imgui.text(f"  Joints: {view.joint_count}")
-                imgui.text(f"  Links: {view.link_count}")
-                imgui.text(f"  DOFs: {view.joint_dof_count}")
-                imgui.text(f"  Fixed base: {view.is_fixed_base}")
-                imgui.text(f"  Floating base: {view.is_floating_base}")
-
-                # Attribute selector
-                imgui.spacing()
-                imgui.text("Select Attribute:")
-                imgui.push_item_width(150)
-                if state["selected_attribute"] in state["attribute_options"]:
-                    current_attr_idx = state["attribute_options"].index(state["selected_attribute"])
-                else:
-                    current_attr_idx = 0
-                _, new_attr_idx = imgui.combo("##attribute", current_attr_idx, state["attribute_options"])
-                state["selected_attribute"] = state["attribute_options"][new_attr_idx]
-                imgui.pop_item_width()
-
-                # Toggle values display
-                _, state["show_values"] = imgui.checkbox("Show Values", state["show_values"])
-
-                # Display attribute values if requested
-                if state["show_values"]:
-                    self._render_attribute_values(view, state["selected_attribute"])
-
-    def _create_articulation_view(self):
-        """
-        Create an ArticulationView based on current UI state.
-        """
-        state = self._selection_ui_state
-
-        try:
-            # Clear any previous error
-            state["error_message"] = ""
-
-            # Parse filter strings
-            if state["include_joints"]:
-                include_joints = [j.strip() for j in state["include_joints"].split(",") if j.strip()]
-            else:
-                include_joints = None
-
-            if state["exclude_joints"]:
-                exclude_joints = [j.strip() for j in state["exclude_joints"].split(",") if j.strip()]
-            else:
-                exclude_joints = None
-
-            if state["include_links"]:
-                include_links = [link.strip() for link in state["include_links"].split(",") if link.strip()]
-            else:
-                include_links = None
-
-            if state["exclude_links"]:
-                exclude_links = [link.strip() for link in state["exclude_links"].split(",") if link.strip()]
-            else:
-                exclude_links = None
-
-            # Create ArticulationView
-            state["selected_articulation_view"] = ArticulationView(
-                model=self.model,
-                pattern=state["selected_articulation_pattern"],
-                include_joints=include_joints,
-                exclude_joints=exclude_joints,
-                include_links=include_links,
-                exclude_links=exclude_links,
-                verbose=False,  # Don't print to console in UI
-            )
-
-        except Exception as e:
-            state["error_message"] = str(e)
-            state["selected_articulation_view"] = None
-
-    def _render_attribute_values(self, view: ArticulationView, attribute_name: str):
-        """
-        Render the values of the selected attribute in the selection panel.
-
-        Args:
-            view (ArticulationView): The current articulation view.
-            attribute_name (str): The attribute to display.
-        """
-        imgui = self.ui.imgui
-        state = self._selection_ui_state
-
-        try:
-            # Determine source based on attribute
-            if attribute_name.startswith("joint_f"):
-                # Forces come from control
-                if hasattr(self, "_last_control") and self._last_control is not None:
-                    source = self._last_control
-                else:
-                    imgui.text("No control data available for forces")
-                    return
-            else:
-                # Other attributes come from state or model
-                source = self._last_state
-
-            # Get the attribute values
-            values = view.get_attribute(attribute_name, source).numpy()
-
-            imgui.separator()
-            imgui.text(f"Attribute: {attribute_name}")
-            imgui.text(f"Shape: {values.shape}")
-            imgui.text(f"Dtype: {values.dtype}")
-
-            # Handle batch dimension selection for 2D arrays
-            if len(values.shape) == 2:
-                batch_size = values.shape[0]
-                imgui.spacing()
-                imgui.text("Batch/World Selection:")
-                imgui.push_item_width(100)
-
-                # Ensure selected batch index is valid
-                state["selected_batch_idx"] = max(0, min(state["selected_batch_idx"], batch_size - 1))
-
-                _, state["selected_batch_idx"] = imgui.slider_int(
-                    "##batch", state["selected_batch_idx"], 0, batch_size - 1
-                )
-                imgui.pop_item_width()
-                imgui.same_line()
-                text = f"World {state['selected_batch_idx']} / {batch_size}"
-                imgui.text(text)
-
-            # Display values as sliders in a scrollable region
-            imgui.spacing()
-            imgui.text("Values:")
-
-            # Create a child window for scrollable content
-            if imgui.begin_child("values_scroll", 0, 300, border=True):
-                if len(values.shape) == 1:
-                    # 1D array - show as sliders with names if available
-                    names = self._get_attribute_names(view, attribute_name)
-                    self._render_value_sliders(values, names, attribute_name, state)
-
-                elif len(values.shape) == 2:
-                    # 2D array - show selected batch with joint names
-                    batch_idx = state["selected_batch_idx"]
-                    selected_batch = values[batch_idx]
-                    names = self._get_attribute_names(view, attribute_name)
-                    self._render_value_sliders(selected_batch, names, attribute_name, state)
-
-                else:
-                    # Higher dimensional - just show summary
-                    shape_str = str(values.shape)
-                    imgui.text(f"Multi-dimensional array with shape {shape_str}")
-
-            imgui.end_child()
-
-            # Show some statistics for numeric data
-            if values.dtype.kind in "biufc":  # numeric types
-                imgui.spacing()
-
-                # Calculate stats on the selected batch for 2D arrays
-                if len(values.shape) == 2:
-                    batch_idx = state["selected_batch_idx"]
-                    stats_data = values[batch_idx]
-                    imgui.text(f"Statistics for World {batch_idx}:")
-                else:
-                    stats_data = values
-                    imgui.text("Statistics:")
-
-                imgui.text(f"  Min: {np.min(stats_data):.6f}")
-                imgui.text(f"  Max: {np.max(stats_data):.6f}")
-                imgui.text(f"  Mean: {np.mean(stats_data):.6f}")
-                if stats_data.size > 1:
-                    imgui.text(f"  Std: {np.std(stats_data):.6f}")
-
-        except Exception as e:
-            imgui.text(f"Error getting attribute: {e!s}")
-
-    def _get_attribute_names(self, view: ArticulationView, attribute_name: str):
-        """
-        Get the names associated with an attribute (joint names, link names, etc.).
-
-        Args:
-            view (ArticulationView): The current articulation view.
-            attribute_name (str): The attribute to get names for.
-
-        Returns:
-            list or None: List of names or None if not available.
-        """
-        try:
-            if attribute_name.startswith("joint_q") or attribute_name.startswith("joint_f"):
-                # For joint positions/velocities/forces, return DOF names or coord names
-                if attribute_name == "joint_q":
-                    return view.joint_coord_names
-                else:  # joint_qd, joint_f
-                    return view.joint_dof_names
-            elif attribute_name.startswith("body_"):
-                # For body attributes, return body/link names
-                return view.body_names
-            else:
-                return None
-        except Exception:
-            return None
-
-    def _render_value_sliders(self, values, names, attribute_name: str, state):
-        """
-        Render values as individual sliders for each DOF.
-
-        Args:
-            values: Array of values to display.
-            names: List of names for each value.
-            attribute_name (str): The attribute being displayed.
-            state (dict): UI state dictionary.
-        """
-        imgui = self.ui.imgui
-
-        # Determine appropriate slider ranges based on attribute type
-        if attribute_name.startswith("joint_q"):
-            # Joint positions - use reasonable angle/position ranges
-            slider_min, slider_max = -3.14159, 3.14159  # Default to ±π
-        elif attribute_name.startswith("joint_qd"):
-            # Joint velocities - use reasonable velocity ranges
-            slider_min, slider_max = -10.0, 10.0
-        elif attribute_name.startswith("joint_f"):
-            # Joint forces - use reasonable force ranges
-            slider_min, slider_max = -100.0, 100.0
-        else:
-            # For other attributes, use data-driven ranges
-            if len(values) > 0 and values.dtype.kind in "biufc":  # numeric
-                val_min, val_max = float(np.min(values)), float(np.max(values))
-                val_range = val_max - val_min
-                if val_range < 1e-6:  # Nearly constant values
-                    slider_min = val_min - 1.0
-                    slider_max = val_max + 1.0
-                else:
-                    # Add 20% padding
-                    padding = val_range * 0.2
-                    slider_min = val_min - padding
-                    slider_max = val_max + padding
-            else:
-                slider_min, slider_max = -1.0, 1.0
-
-        # Initialize slider state if needed
-        if "slider_values" not in state:
-            state["slider_values"] = {}
-
-        slider_key = f"{attribute_name}_sliders"
-        if slider_key not in state["slider_values"]:
-            state["slider_values"][slider_key] = [float(v) for v in values]
-
-        # Ensure slider values array has correct length
-        current_sliders = state["slider_values"][slider_key]
-        while len(current_sliders) < len(values):
-            current_sliders.append(0.0)
-        while len(current_sliders) > len(values):
-            current_sliders.pop()
-
-        # Update slider values to match current data
-        for i, val in enumerate(values):
-            if i < len(current_sliders):
-                current_sliders[i] = float(val)
-
-        # Render sliders
-        for i, val in enumerate(values):
-            name = names[i] if names and i < len(names) else f"[{i}]"
-
-            if isinstance(val, int | float) or hasattr(val, "dtype"):
-                # shorten floating base key for ui
-                # todo: consider doing this in the importers
-                if name.startswith("floating_base"):
-                    name = "base"
-
-                # Truncate name for display but keep full name for tooltip
-                display_name = name[:8] + "..." if len(name) > 8 else name
-                # Pad display name to ensure consistent width
-                display_name = f"{display_name:<11}"
-
-                # Show truncated name with tooltip
-                imgui.text(display_name)
-                if imgui.is_item_hovered() and len(name) > 8:
-                    imgui.set_tooltip(name)
-                imgui.same_line()
-
-                # Use slider for numeric values with fixed width
-                imgui.push_item_width(150)
-                slider_id = f"##{attribute_name}_{i}"
-                _changed, _new_val = imgui.slider_float(slider_id, current_sliders[i], slider_min, slider_max, "%.6f")
-                imgui.pop_item_width()
-                # if changed:
-                #     current_sliders[i] = new_val
-
-            else:
-                # For non-numeric values, just show as text
-                imgui.text(f"{name}: {val}")
+            direction = [self.wind.direction[0], self.wind.direction[1], self.wind.direction[2]]
+            changed, direction = imgui.slider_float3("Wind Direction", direction, -1.0, 1.0, "%.2f")
+            if changed:
+                self.wind.direction = direction
