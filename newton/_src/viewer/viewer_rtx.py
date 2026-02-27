@@ -419,6 +419,8 @@ void main() {
         rp.CreateAttribute("omni:rtx:post:registeredCompositing:invertToneMap", Sdf.ValueTypeNames.Bool).Set(True)
         rp.CreateAttribute("omni:rtx:pt:maxSamplesPerLaunch", Sdf.ValueTypeNames.Int).Set(2073600)
         rp.CreateAttribute("omni:rtx:pt:mgpu:maxPixelsPerRegionExponent", Sdf.ValueTypeNames.Int).Set(12)
+        rp.CreateAttribute("omni:rtx:pt:denoising:enabled", Sdf.ValueTypeNames.Bool).Set(False)
+        rp.CreateAttribute("omni:rtx:pt:samplesPerPixel", Sdf.ValueTypeNames.UInt).Set(1)
         rp.CreateAttribute("omni:rtx:reflections:denoiser:enabled", Sdf.ValueTypeNames.Bool).Set(False)
         rp.CreateAttribute("omni:rtx:rt:ambientLight:color", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.1, 0.1, 0.1))
         rp.CreateAttribute("omni:rtx:rt:demoire", Sdf.ValueTypeNames.Bool).Set(False)
@@ -522,41 +524,47 @@ void main() {
 
     @override
     def begin_frame(self, time):
-        self._t_begin_frame = perf_counter()
-        super().begin_frame(time)
-        self._pending_xforms.clear()
-        self._pending_mesh_points.clear()
-        self._gizmo_log = {}
+        with wp.ScopedTimer("ViewerRTX::begin_frame", use_nvtx=True):
+            self._t_begin_frame = perf_counter()
+            super().begin_frame(time)
+            self._pending_xforms.clear()
+            self._pending_mesh_points.clear()
+            self._gizmo_log = {}
 
-        if self._window and not self._headless:
-            try:
-                self._window.switch_to()
-                self._window.dispatch_events()
-            except Exception:
-                pass
+            if self._window and not self._headless:
+                try:
+                    self._window.switch_to()
+                    self._window.dispatch_events()
+                except Exception:
+                    pass
 
-        now = perf_counter()
-        if self._last_perf_time is not None:
-            dt = min(now - self._last_perf_time, 0.1)
-            if self.gui:
-                self.gui.update_camera_from_keys(dt, lambda k: k in self._keys_down)
-        self._last_perf_time = now
-        self._t_after_begin = perf_counter()
+            now = perf_counter()
+            if self._last_perf_time is not None:
+                dt = min(now - self._last_perf_time, 0.1)
+                if self.gui:
+                    self.gui.update_camera_from_keys(dt, lambda k: k in self._keys_down)
+            self._last_perf_time = now
+            self._t_after_begin = perf_counter()
 
     @override
     def end_frame(self):
         if self._phase == self._PHASE_BUILD:
             self._init_ovrtx()
         elif self._phase == self._PHASE_RENDER:
-            t0 = perf_counter()
-            self._update_ovrtx_camera()
-            t1 = perf_counter()
-            self._update_ovrtx_transforms()
-            t2 = perf_counter()
-            self._update_ovrtx_mesh_points()
-            t3 = perf_counter()
-            self._render_and_display()
-            t4 = perf_counter()
+            with wp.ScopedTimer("ViewerRTX::end_frame", use_nvtx=True):
+                t0 = perf_counter()
+                with wp.ScopedTimer("ViewerRTX::update_camera", use_nvtx=True):
+                    self._update_ovrtx_camera()
+                t1 = perf_counter()
+                with wp.ScopedTimer("ViewerRTX::update_transforms", use_nvtx=True):
+                    self._update_ovrtx_transforms()
+                t2 = perf_counter()
+                with wp.ScopedTimer("ViewerRTX::update_mesh_points", use_nvtx=True):
+                    self._update_ovrtx_mesh_points()
+                t3 = perf_counter()
+                with wp.ScopedTimer("ViewerRTX::render_and_display", use_nvtx=True):
+                    self._render_and_display()
+                t4 = perf_counter()
 
             self._perf_frame_count = getattr(self, "_perf_frame_count", 0) + 1
             if self._perf_frame_count % 60 == 0:
@@ -752,35 +760,21 @@ void main() {
             return
         from ovrtx import Device
 
-        t_step0 = perf_counter()
-        products = self._rtx.step(
-            render_products={self._render_product_path},
-            delta_time=1.0 / self.fps,
-        )
-        t_step1 = perf_counter()
+        with wp.ScopedTimer("ViewerRTX::rtx_step", use_nvtx=True, detailed=True):
+            products = self._rtx.step_async(
+                render_products={self._render_product_path},
+                delta_time=1.0 / self.fps,
+            )
 
         for _pname, product in products.items():
             for frame in product.frames:
                 if "LdrColor" in frame.render_vars:
-                    t_map0 = perf_counter()
-                    with frame.render_vars["LdrColor"].map(device=Device.CPU) as mapping:
-                        t_map1 = perf_counter()
-                        pixels = mapping.tensor.numpy()
-                        t_numpy = perf_counter()
-                        self._blit_to_window(pixels)
-                        t_blit = perf_counter()
-                    t_unmap = perf_counter()
+                    with wp.ScopedTimer("ViewerRTX::fb_map", use_nvtx=True):
+                        with frame.render_vars["LdrColor"].map(device=Device.CPU) as mapping:
+                            pixels = mapping.tensor.numpy()
+                            with wp.ScopedTimer("ViewerRTX::blit_to_window", use_nvtx=True):
+                                self._blit_to_window(pixels)
 
-                    pfc = getattr(self, "_perf_frame_count", 0)
-                    if pfc % 60 == 0:
-                        print(
-                            f"  [render] step={1e3 * (t_step1 - t_step0):.1f}ms  "
-                            f"fb_map={1e3 * (t_map1 - t_map0):.2f}ms  "
-                            f"numpy={1e3 * (t_numpy - t_map1):.2f}ms  "
-                            f"blit={1e3 * (t_blit - t_numpy):.2f}ms  "
-                            f"fb_unmap={1e3 * (t_unmap - t_blit):.2f}ms",
-                            flush=True,
-                        )
                     return
 
     def _blit_to_window(self, pixels: np.ndarray):
@@ -800,32 +794,34 @@ void main() {
         fb_w, fb_h = self._window.get_framebuffer_size()
         gl.glViewport(0, 0, fb_w, fb_h)
 
-        # Upload pixels directly from numpy buffer (no copy)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_texture)
-        gl.glTexSubImage2D(
-            gl.GL_TEXTURE_2D,
-            0,
-            0,
-            0,
-            w,
-            h,
-            gl.GL_RGBA,
-            gl.GL_UNSIGNED_BYTE,
-            pixels.ctypes.data_as(ctypes.POINTER(ctypes.c_ubyte)),
-        )
+        with wp.ScopedTimer("ViewerRTX::gl_tex_upload", use_nvtx=True):
+            gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_texture)
+            gl.glTexSubImage2D(
+                gl.GL_TEXTURE_2D,
+                0,
+                0,
+                0,
+                w,
+                h,
+                gl.GL_RGBA,
+                gl.GL_UNSIGNED_BYTE,
+                pixels.ctypes.data_as(ctypes.POINTER(ctypes.c_ubyte)),
+            )
 
-        # Draw fullscreen triangle with sRGB→linear shader
-        gl.glUseProgram(self._gl_program)
-        gl.glBindVertexArray(self._gl_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
-        gl.glBindVertexArray(0)
-        gl.glUseProgram(0)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+        with wp.ScopedTimer("ViewerRTX::gl_draw", use_nvtx=True):
+            gl.glUseProgram(self._gl_program)
+            gl.glBindVertexArray(self._gl_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            gl.glBindVertexArray(0)
+            gl.glUseProgram(0)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
 
         if self.gui:
-            self.gui.render_frame(update_fps=True)
+            with wp.ScopedTimer("ViewerRTX::gui_render", use_nvtx=True):
+                self.gui.render_frame(update_fps=True)
 
-        self._window.flip()
+        with wp.ScopedTimer("ViewerRTX::swap_buffers", use_nvtx=True):
+            self._window.flip()
 
     # ----------------------------------------------------------- viewer API
 
