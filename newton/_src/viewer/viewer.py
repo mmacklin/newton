@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -28,6 +29,7 @@ from newton.utils import compute_world_offsets, solidify_mesh
 
 from ..core.types import MAXVAL, nparray
 from .kernels import compute_hydro_contact_surface_lines, estimate_world_extents
+from .picking import Picking
 
 
 class ViewerBase(ABC):
@@ -80,6 +82,23 @@ class ViewerBase(ABC):
         self.show_hydro_contact_surface = False  # show hydroelastic contact surface wireframe
         """Whether to show the hydroelastic contact surface wireframe."""
         self.picking_enabled = True  # enable interactive picking via mouse
+        self.picking = None
+        self.show_ui = True
+
+        # Shared simulation/viewer state used by interactive UIs.
+        self._paused = "--paused" in sys.argv
+        self._last_state = None
+        self._last_control = None
+
+        # Shared FPS tracking for GUI overlays.
+        self._fps_history = []
+        self._last_fps_time = time.perf_counter()
+        self._fps_frame_count = 0
+        self._current_fps = 0.0
+
+        # UI callback system - organized by position
+        # positions: "side", "stats", "free"
+        self._ui_callbacks = {"side": [], "stats": [], "free": []}
 
         # cache for hydroelastic contact surface line rendering (lazily allocated)
         self._hydro_surface_line_starts: wp.array | None = None
@@ -118,7 +137,36 @@ class ViewerBase(ABC):
         Returns:
             bool: True when simulation stepping is paused.
         """
-        return False
+        return self._paused
+
+    def _update_fps(self):
+        """Update FPS calculation and rolling history."""
+        current_time = time.perf_counter()
+        self._fps_frame_count += 1
+
+        # Update FPS every second
+        if current_time - self._last_fps_time >= 1.0:
+            time_delta = current_time - self._last_fps_time
+            self._current_fps = self._fps_frame_count / time_delta
+            self._fps_history.append(self._current_fps)
+
+            # Keep only last 60 FPS readings
+            if len(self._fps_history) > 60:
+                self._fps_history.pop(0)
+
+            self._last_fps_time = current_time
+            self._fps_frame_count = 0
+
+    def register_ui_callback(self, callback, position="side"):
+        """Register an ImGui callback for a section of the UI."""
+        if not callable(callback):
+            raise TypeError("callback must be callable")
+
+        if position not in self._ui_callbacks:
+            valid_positions = list(self._ui_callbacks.keys())
+            raise ValueError(f"Invalid position '{position}'. Must be one of: {valid_positions}")
+
+        self._ui_callbacks[position].append(callback)
 
     def is_key_down(self, key: str | int) -> bool:
         """Default key query API. Concrete viewers can override.
@@ -154,6 +202,8 @@ class ViewerBase(ABC):
             # Auto-compute world offsets if not already set
             if self.world_offsets is None:
                 self._auto_compute_world_offsets()
+
+            self.picking = Picking(model, pick_stiffness=10000.0, pick_damping=1000.0, world_offsets=self.world_offsets)
 
     def _should_render_world(self, world_idx: int) -> bool:
         """Check if a world should be rendered based on max_worlds limit."""
@@ -244,6 +294,8 @@ class ViewerBase(ABC):
 
         # Convert to warp array
         self.world_offsets = wp.array(world_offsets, dtype=wp.vec3, device=self.device)
+        if self.picking is not None:
+            self.picking.world_offsets = self.world_offsets
 
     def _get_world_extents(self) -> tuple[float, float, float] | None:
         """Get the maximum extents of all worlds in the model."""
@@ -336,6 +388,7 @@ class ViewerBase(ABC):
         Args:
             state: The current state of the simulation.
         """
+        self._last_state = state
 
         if self.model is None:
             return
@@ -949,15 +1002,14 @@ class ViewerBase(ABC):
         """
         pass
 
-    @abstractmethod
     def apply_forces(self, state: newton.State):
-        """
-        Apply forces to the state from picking and wind (if available).
+        """Apply forces to the state from picking and wind (if available).
 
         Args:
             state: The current state of the simulation.
         """
-        pass
+        if self.picking_enabled and self.picking is not None:
+            self.picking._apply_picking_force(state)
 
     @abstractmethod
     def close(self):
