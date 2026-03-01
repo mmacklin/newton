@@ -9,6 +9,10 @@
   - Add re-exports in the appropriate public module (e.g. `newton/geometry.py`, `newton/solvers.py`, `newton/sensors.py`, etc.).
   - Prefer a single, discoverable public import path. Example: `from newton.geometry import BroadPhaseAllPairs` (not `from newton._src.geometry.broad_phase_all_pairs import BroadPhaseAllPairs`).
 
+## Breaking API changes
+
+- **Breaking changes require a deprecation first.** Do not remove or rename public API symbols without deprecating them in a prior release.
+
 ## API design rules (naming + structure)
 
 - **Prefix-first naming for discoverability (autocomplete).**
@@ -134,6 +138,15 @@ uvx --with virtualenv asv run --launch-method spawn main^!
 # Windows CMD (escape ^ as ^^)
 uvx --with virtualenv asv run --launch-method spawn main^^!
 ```
+
+## Changelog
+
+- **Update `CHANGELOG.md` for every user-facing change** targeting the `[Unreleased]` section.
+- Use **imperative present tense**: "Add X", not "Added X" or "This adds X".
+- Place entries under the correct category: `Added`, `Changed`, `Deprecated`, `Removed`, or `Fixed`.
+- Avoid internal implementation details users wouldn't understand.
+- **For `Deprecated`, `Changed`, and `Removed` entries, include migration guidance.** Tell users what replaces the old behavior so they can update their code.
+  - Example: "Deprecate `Model.geo_meshes` in favor of `Model.shapes`" or "Remove `build_model()` — use `ModelBuilder.finalize()` instead".
 
 ## Commit and Pull Request Guidelines
 
