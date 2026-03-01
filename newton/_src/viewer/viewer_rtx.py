@@ -34,6 +34,8 @@ from .camera import Camera
 from .viewer_gui import ViewerGui
 from .viewer_usd import ViewerUSD
 
+PROFILE_ENABLED = os.environ.get("NEWTON_PROFILE", "0") != "0"
+
 
 class ViewerRTX(ViewerUSD):
     """Real-time ray-traced viewer using NVIDIA OVRTX.
@@ -61,7 +63,7 @@ class ViewerRTX(ViewerUSD):
         if UsdGeom is None:
             raise ImportError("usd-core package is required for ViewerRTX. Install with: pip install usd-core")
 
-        self._tmp_usd_path = os.path.abspath("_tmp_rtx_scene.usda")
+        self._tmp_usd_path = os.path.abspath("_tmp_rtx_scene.usd")
 
         super().__init__(
             output_path=self._tmp_usd_path,
@@ -450,6 +452,20 @@ void main() {
         )
         rs.CreateRelationship("products").SetTargets([Sdf.Path(self._render_product_path)])
 
+    def add_background_usd(self, path: str):
+        """Add a reference to a background USD (e.g. Gaussian splat scan).
+
+        Must be called before the first frame (during the build phase).
+
+        Args:
+            path: Absolute or relative path to a USD file.
+        """
+        path = os.path.abspath(path)
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"Background USD not found: {path}")
+        bg_prim = self.stage.DefinePrim("/root/background")
+        bg_prim.GetReferences().AddReference(path)
+
     # ------------------------------------------------------------- OVRTX init
 
     def _init_ovrtx(self):
@@ -524,8 +540,7 @@ void main() {
 
     @override
     def begin_frame(self, time):
-        with wp.ScopedTimer("ViewerRTX::begin_frame", use_nvtx=True):
-            self._t_begin_frame = perf_counter()
+        with wp.ScopedTimer("ViewerRTX::begin_frame", active=PROFILE_ENABLED, use_nvtx=True):
             super().begin_frame(time)
             self._pending_xforms.clear()
             self._pending_mesh_points.clear()
@@ -544,39 +559,17 @@ void main() {
                 if self.gui:
                     self.gui.update_camera_from_keys(dt, lambda k: k in self._keys_down)
             self._last_perf_time = now
-            self._t_after_begin = perf_counter()
 
     @override
     def end_frame(self):
         if self._phase == self._PHASE_BUILD:
             self._init_ovrtx()
         elif self._phase == self._PHASE_RENDER:
-            with wp.ScopedTimer("ViewerRTX::end_frame", use_nvtx=True):
-                t0 = perf_counter()
-                with wp.ScopedTimer("ViewerRTX::update_camera", use_nvtx=True):
-                    self._update_ovrtx_camera()
-                t1 = perf_counter()
-                with wp.ScopedTimer("ViewerRTX::update_transforms", use_nvtx=True):
-                    self._update_ovrtx_transforms()
-                t2 = perf_counter()
-                with wp.ScopedTimer("ViewerRTX::update_mesh_points", use_nvtx=True):
-                    self._update_ovrtx_mesh_points()
-                t3 = perf_counter()
-                with wp.ScopedTimer("ViewerRTX::render_and_display", use_nvtx=True):
-                    self._render_and_display()
-                t4 = perf_counter()
-
-            self._perf_frame_count = getattr(self, "_perf_frame_count", 0) + 1
-            if self._perf_frame_count % 60 == 0:
-                sim_ms = 1e3 * (t0 - self._t_after_begin)
-                begin_ms = 1e3 * (self._t_after_begin - self._t_begin_frame)
-                print(
-                    f"[perf] begin={begin_ms:.1f}ms  sim+log={sim_ms:.1f}ms  "
-                    f"cam={1e3 * (t1 - t0):.1f}ms  xforms={1e3 * (t2 - t1):.1f}ms  "
-                    f"mesh_pts={1e3 * (t3 - t2):.1f}ms  render+blit={1e3 * (t4 - t3):.1f}ms  "
-                    f"total={1e3 * (t4 - self._t_begin_frame):.1f}ms",
-                    flush=True,
-                )
+            with wp.ScopedTimer("ViewerRTX::end_frame", active=PROFILE_ENABLED, use_nvtx=True):
+                self._update_ovrtx_camera()
+                self._update_ovrtx_transforms()
+                self._update_ovrtx_mesh_points()
+                self._render_and_display()
 
     @override
     def log_mesh(
@@ -633,57 +626,43 @@ void main() {
     def _update_ovrtx_camera(self):
         if self._rtx is None or not self._camera_dirty:
             return
-        import ovrtx.math
+        with wp.ScopedTimer("ViewerRTX::update_camera", active=PROFILE_ENABLED, use_nvtx=True):
+            import ovrtx.math
 
-        mat = self._compute_camera_matrix()
-        cam_mat = ovrtx.math.Matrix4d()
-        for i in range(4):
-            for j in range(4):
-                cam_mat[i][j] = mat[i, j]
+            mat = self._compute_camera_matrix()
+            cam_mat = ovrtx.math.Matrix4d()
+            for i in range(4):
+                for j in range(4):
+                    cam_mat[i][j] = mat[i, j]
 
-        from ovrtx import Semantic
+            from ovrtx import Semantic
 
-        self._rtx.write_attribute(
-            prim_paths=[self._camera_prim_path],
-            attribute_name="omni:xform",
-            tensor=cam_mat.to_dltensor(),
-            semantic=Semantic.XFORM_MAT4x4,
-        )
-        self._camera_dirty = False
+            self._rtx.write_attribute(
+                prim_paths=[self._camera_prim_path],
+                attribute_name="omni:xform",
+                tensor=cam_mat.to_dltensor(),
+                semantic=Semantic.XFORM_MAT4x4,
+            )
+            self._camera_dirty = False
 
     def _update_ovrtx_transforms(self):
         if not self._transform_binding or not self._pending_xforms:
             return
+        with wp.ScopedTimer("ViewerRTX::update_transforms", active=PROFILE_ENABLED, use_nvtx=True):
+            from ovrtx import Device
 
-        from ovrtx import Device
+            with self._transform_binding.map(device=Device.CPU) as mapping:
+                matrices = np.from_dlpack(mapping.tensor)  # (N, 4, 4) float64
 
-        t_map0 = perf_counter()
-        with self._transform_binding.map(device=Device.CPU) as mapping:
-            t_map1 = perf_counter()
-            matrices = np.from_dlpack(mapping.tensor)  # (N, 4, 4) float64
-
-            total_updated = 0
-            offset = 0
-            for name, paths in self._instance_prim_paths.items():
-                count = len(paths)
-                if name in self._pending_xforms:
-                    xf, sc = self._pending_xforms[name]
-                    n = min(count, len(xf))
-                    for i in range(n):
-                        matrices[offset + i] = self._xform_to_mat44(xf[i][:3], xf[i][3:7], sc[i])
-                    total_updated += n
-                offset += count
-            t_compute = perf_counter()
-
-        t_unmap = perf_counter()
-        pfc = getattr(self, "_perf_frame_count", 0)
-        if pfc % 60 == 0:
-            print(
-                f"  [xforms] map={1e3 * (t_map1 - t_map0):.2f}ms  "
-                f"compute({total_updated} prims)={1e3 * (t_compute - t_map1):.2f}ms  "
-                f"unmap={1e3 * (t_unmap - t_compute):.2f}ms",
-                flush=True,
-            )
+                offset = 0
+                for name, paths in self._instance_prim_paths.items():
+                    count = len(paths)
+                    if name in self._pending_xforms:
+                        xf, sc = self._pending_xforms[name]
+                        n = min(count, len(xf))
+                        for i in range(n):
+                            matrices[offset + i] = self._xform_to_mat44(xf[i][:3], xf[i][3:7], sc[i])
+                    offset += count
 
     @staticmethod
     def _make_point3f_dltensor(points_np):
@@ -708,17 +687,17 @@ void main() {
     def _update_ovrtx_mesh_points(self):
         if self._rtx is None or not self._pending_mesh_points:
             return
-
-        for mesh_name, points_np in self._pending_mesh_points.items():
-            prim_path = self._mesh_prim_paths.get(mesh_name)
-            if prim_path is None:
-                continue
-            dl = self._make_point3f_dltensor(points_np)
-            self._rtx.write_array_attribute(
-                prim_paths=[prim_path],
-                attribute_name="points",
-                tensors=[dl],
-            )
+        with wp.ScopedTimer("ViewerRTX::update_mesh_points", active=PROFILE_ENABLED, use_nvtx=True):
+            for mesh_name, points_np in self._pending_mesh_points.items():
+                prim_path = self._mesh_prim_paths.get(mesh_name)
+                if prim_path is None:
+                    continue
+                dl = self._make_point3f_dltensor(points_np)
+                self._rtx.write_array_attribute(
+                    prim_paths=[prim_path],
+                    attribute_name="points",
+                    tensors=[dl],
+                )
 
     @staticmethod
     def _xform_to_mat44(pos, quat, scale):
@@ -758,28 +737,29 @@ void main() {
     def _render_and_display(self):
         if self._rtx is None or self._should_close:
             return
-        from ovrtx import Device
+        with wp.ScopedTimer("ViewerRTX::render_and_display", active=PROFILE_ENABLED, use_nvtx=True):
+            from ovrtx import Device
 
-        with wp.ScopedTimer("ViewerRTX::rtx_step", use_nvtx=True):
-            result = self._rtx.step_async(
-                render_products={self._render_product_path},
-                delta_time=1.0 / self.fps,
-            )
-            products = result.wait()
+            with wp.ScopedTimer("ViewerRTX::rtx_step", active=PROFILE_ENABLED, use_nvtx=True):
+                result = self._rtx.step_async(
+                    render_products={self._render_product_path},
+                    delta_time=1.0 / self.fps,
+                )
+                products = result.wait()
 
-        if products is None:
-            return
+            if products is None:
+                return
 
-        for _pname, product in products.items():
-            for frame in product.frames:
-                if "LdrColor" in frame.render_vars:
-                    with wp.ScopedTimer("ViewerRTX::fb_map", use_nvtx=True):
-                        with frame.render_vars["LdrColor"].map(device=Device.CPU) as mapping:
-                            pixels = mapping.tensor.numpy()
-                            with wp.ScopedTimer("ViewerRTX::blit_to_window", use_nvtx=True):
-                                self._blit_to_window(pixels)
+            for _pname, product in products.items():
+                for frame in product.frames:
+                    if "LdrColor" in frame.render_vars:
+                        with wp.ScopedTimer("ViewerRTX::fb_map", active=PROFILE_ENABLED, use_nvtx=True):
+                            with frame.render_vars["LdrColor"].map(device=Device.CPU) as mapping:
+                                pixels = mapping.tensor.numpy()
+                                with wp.ScopedTimer("ViewerRTX::blit_to_window", active=PROFILE_ENABLED, use_nvtx=True):
+                                    self._blit_to_window(pixels)
 
-                    return
+                        return
 
     def _blit_to_window(self, pixels: np.ndarray):
         """Upload *pixels* to a GL texture and draw a fullscreen triangle (GPU sRGB + flip)."""
@@ -798,7 +778,7 @@ void main() {
         fb_w, fb_h = self._window.get_framebuffer_size()
         gl.glViewport(0, 0, fb_w, fb_h)
 
-        with wp.ScopedTimer("ViewerRTX::gl_tex_upload", use_nvtx=True):
+        with wp.ScopedTimer("ViewerRTX::gl_tex_upload", active=PROFILE_ENABLED, use_nvtx=True):
             gl.glBindTexture(gl.GL_TEXTURE_2D, self._gl_texture)
             gl.glTexSubImage2D(
                 gl.GL_TEXTURE_2D,
@@ -812,7 +792,7 @@ void main() {
                 pixels.ctypes.data_as(ctypes.POINTER(ctypes.c_ubyte)),
             )
 
-        with wp.ScopedTimer("ViewerRTX::gl_draw", use_nvtx=True):
+        with wp.ScopedTimer("ViewerRTX::gl_draw", active=PROFILE_ENABLED, use_nvtx=True):
             gl.glUseProgram(self._gl_program)
             gl.glBindVertexArray(self._gl_vao)
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
@@ -821,10 +801,10 @@ void main() {
             gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
 
         if self.gui:
-            with wp.ScopedTimer("ViewerRTX::gui_render", use_nvtx=True):
+            with wp.ScopedTimer("ViewerRTX::gui_render", active=PROFILE_ENABLED, use_nvtx=True):
                 self.gui.render_frame(update_fps=True)
 
-        with wp.ScopedTimer("ViewerRTX::swap_buffers", use_nvtx=True):
+        with wp.ScopedTimer("ViewerRTX::swap_buffers", active=PROFILE_ENABLED, use_nvtx=True):
             self._window.flip()
 
     # ----------------------------------------------------------- viewer API
