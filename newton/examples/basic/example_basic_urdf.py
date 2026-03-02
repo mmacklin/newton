@@ -34,7 +34,7 @@ import newton.examples
 
 
 class Example:
-    def __init__(self, viewer, world_count, args=None):
+    def __init__(self, viewer, args=None):
         # setup simulation parameters first
         self.fps = 100
         self.frame_dt = 1.0 / self.fps
@@ -42,7 +42,7 @@ class Example:
         self.sim_substeps = 10
         self.sim_dt = self.frame_dt / self.sim_substeps
 
-        self.world_count = world_count
+        self.world_count = getattr(args, "world_count", 100) if args else 100
 
         self.viewer = viewer
 
@@ -160,6 +160,6 @@ if __name__ == "__main__":
     viewer, args = newton.examples.init(parser)
 
     # Create viewer and run
-    example = Example(viewer, args.world_count, args)
+    example = Example(viewer, args)
 
     newton.examples.run(example, args)

@@ -344,6 +344,24 @@ class ViewerGL(ViewerBase):
         self._gizmo_log[name] = transform
 
     @override
+    def clear_model(self):
+        """Clear GL-specific model state so set_model() can be called again (e.g. for example reset)."""
+        self.objects = {}
+        self.lines = {}
+        self.picking = None
+        self.wind = None
+        self._last_state = None
+        self._last_control = None
+        self._packed_groups = []
+        self._capsule_keys = set()
+        self._packed_write_indices = None
+        self._packed_world_xforms = None
+        self._packed_vbo_xforms = None
+        self._packed_vbo_xforms_host = None
+        self._ui_callbacks = {"side": [], "stats": [], "free": []}
+        super().clear_model()
+
+    @override
     def set_model(self, model: nt.Model | None, max_worlds: int | None = None):
         """
         Set the Newton model to visualize.
@@ -1325,6 +1343,9 @@ class ViewerGL(ViewerBase):
         elif symbol == pyglet.window.key.F:
             # Frame camera around model bounds
             self._frame_camera_on_model()
+        elif symbol == pyglet.window.key.R:
+            # Reset example (consumed by run loop)
+            self.request_reset()
         elif symbol == pyglet.window.key.ESCAPE:
             # Exit with Escape key
             self.renderer.close()
@@ -1582,6 +1603,9 @@ class ViewerGL(ViewerBase):
 
                     # Pause simulation checkbox
                     changed, self._paused = imgui.checkbox("Pause", self._paused)
+                    imgui.same_line()
+                    if imgui.button("Reset"):
+                        self.request_reset()
 
                 # Visualization Controls section
                 imgui.set_next_item_open(True, imgui.Cond_.appearing)

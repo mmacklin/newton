@@ -89,7 +89,7 @@ def random_forces_kernel(
 
 
 class Example:
-    def __init__(self, viewer, world_count=16):
+    def __init__(self, viewer, args=None):
         self.fps = 60
         self.frame_dt = 1.0 / self.fps
 
@@ -97,7 +97,7 @@ class Example:
         self.sim_substeps = 10
         self.sim_dt = self.frame_dt / self.sim_substeps
 
-        self.world_count = world_count
+        self.world_count = getattr(args, "world_count", 16) if args else 16
 
         # increase contact stiffness
         contact_ke = 1.0e4
@@ -319,6 +319,6 @@ if __name__ == "__main__":
 
         torch.set_default_device(args.device)
 
-    example = Example(viewer, world_count=args.world_count)
+    example = Example(viewer, args)
 
     newton.examples.run(example, args)

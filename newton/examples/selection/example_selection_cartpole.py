@@ -56,7 +56,7 @@ def apply_forces_kernel(joint_q: wp.array3d(dtype=float), joint_f: wp.array3d(dt
 
 
 class Example:
-    def __init__(self, viewer, world_count=16, max_worlds=None, verbose=True):
+    def __init__(self, viewer, args=None):
         self.fps = 60
         self.frame_dt = 1.0 / self.fps
 
@@ -64,7 +64,9 @@ class Example:
         self.sim_substeps = 10
         self.sim_dt = self.frame_dt / self.sim_substeps
 
-        self.world_count = world_count
+        self.world_count = getattr(args, "world_count", 16) if args else 16
+        max_worlds = getattr(args, "max_worlds", None) if args else None
+        verbose = getattr(args, "verbose", True) if args else True
 
         world = newton.ModelBuilder()
         world.add_usd(
@@ -236,6 +238,6 @@ if __name__ == "__main__":
 
         torch.set_default_device(args.device)
 
-    example = Example(viewer, world_count=args.world_count, max_worlds=args.max_worlds)
+    example = Example(viewer, args)
 
     newton.examples.run(example, args)

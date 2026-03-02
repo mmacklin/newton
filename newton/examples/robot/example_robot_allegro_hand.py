@@ -75,7 +75,7 @@ def move_hand(
 
 
 class Example:
-    def __init__(self, viewer, world_count=4):
+    def __init__(self, viewer, args=None):
         self.fps = 50
         self.frame_dt = 1.0 / self.fps
 
@@ -83,7 +83,7 @@ class Example:
         self.sim_substeps = 8
         self.sim_dt = self.frame_dt / self.sim_substeps
 
-        self.world_count = world_count
+        self.world_count = getattr(args, "world_count", 4) if args else 4
 
         self.viewer = viewer
 
@@ -239,6 +239,6 @@ if __name__ == "__main__":
 
     viewer, args = newton.examples.init(parser)
 
-    example = Example(viewer, args.world_count)
+    example = Example(viewer, args)
 
     newton.examples.run(example, args)

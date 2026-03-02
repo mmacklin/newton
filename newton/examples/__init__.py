@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import os
+import warnings
 from collections.abc import Callable
 
 import numpy as np
@@ -177,15 +178,36 @@ def test_particle_state(
 
 
 def run(example, args):
-    if hasattr(example, "gui") and hasattr(example.viewer, "register_ui_callback"):
-        example.viewer.register_ui_callback(lambda ui: example.gui(ui), position="side")
+    viewer = example.viewer
+    example_class = type(example)
+
+    if hasattr(example, "gui") and hasattr(viewer, "register_ui_callback"):
+        viewer.register_ui_callback(lambda ui: example.gui(ui), position="side")
 
     perform_test = args is not None and args.test
     test_post_step = perform_test and hasattr(example, "test_post_step")
     test_final = perform_test and hasattr(example, "test_final")
 
-    while example.viewer.is_running():
-        if not example.viewer.is_paused():
+    while viewer.is_running():
+        # Handle reset request (ignore in test mode)
+        if not perform_test and hasattr(viewer, "is_reset_requested") and viewer.is_reset_requested():
+            viewer.consume_reset()
+            viewer.clear_model()
+            try:
+                example = example_class(viewer, args)
+            except TypeError:
+                warnings.warn(
+                    "Example does not support reset (constructor expects more than viewer, args).",
+                    stacklevel=2,
+                )
+                if hasattr(example, "model") and example.model is not None:
+                    viewer.set_model(example.model, getattr(example, "max_worlds", None))
+            else:
+                if hasattr(example, "gui") and hasattr(viewer, "register_ui_callback"):
+                    viewer.register_ui_callback(lambda ui, ex=example: ex.gui(ui), position="side")
+            continue
+
+        if not viewer.is_paused():
             with wp.ScopedTimer("step", active=False):
                 example.step()
         if test_post_step:
@@ -200,7 +222,7 @@ def run(example, args):
         elif not (test_post_step or test_final):
             raise NotImplementedError("Example does not have a test_final or test_post_step method")
 
-    example.viewer.close()
+    viewer.close()
 
     if perform_test:
         # generic tests for finiteness of Newton objects

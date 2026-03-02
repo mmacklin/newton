@@ -30,14 +30,14 @@ import newton.examples
 
 
 class Example:
-    def __init__(self, viewer, world_count=8):
+    def __init__(self, viewer, args=None):
         self.fps = 60
         self.frame_dt = 1.0 / self.fps
         self.sim_time = 0.0
         self.sim_substeps = 10
         self.sim_dt = self.frame_dt / self.sim_substeps
 
-        self.world_count = world_count
+        self.world_count = getattr(args, "world_count", 8) if args else 8
 
         self.viewer = viewer
 
@@ -185,6 +185,6 @@ if __name__ == "__main__":
     parser.add_argument("--world-count", type=int, default=100, help="Total number of simulated worlds.")
     viewer, args = newton.examples.init(parser)
 
-    example = Example(viewer, args.world_count)
+    example = Example(viewer, args)
 
     newton.examples.run(example, args)

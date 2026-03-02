@@ -104,6 +104,9 @@ class ViewerBase(ABC):
         # to avoid repeated device->host copies in shape population loops.
         self._shape_sdf_index_host: nparray | None = None
 
+        # Reset request flag (set by Reset button / R key; consumed by run loop)
+        self._reset_requested = False
+
     def is_running(self) -> bool:
         """Report whether the viewer backend should keep running.
 
@@ -131,6 +134,45 @@ class ViewerBase(ABC):
         """
         return False
 
+    def request_reset(self) -> None:
+        """Request that the example be reset on the next frame (e.g. from Reset button or R key)."""
+        self._reset_requested = True
+
+    def is_reset_requested(self) -> bool:
+        """Return True if a reset has been requested and not yet consumed."""
+        return self._reset_requested
+
+    def consume_reset(self) -> None:
+        """Clear the reset request flag (called by run loop after handling reset)."""
+        self._reset_requested = False
+
+    def clear_model(self) -> None:
+        """Clear model-dependent state so set_model() can be called again (e.g. for example reset)."""
+        self.model = None
+        self.model_changed = True
+        self.max_worlds = None
+        self._shape_instances = {}
+        self._geometry_cache = {}
+        self._inertia_box_instances = None
+        self._shape_sdf_index_host = None
+        self._contact_points0 = None
+        self._contact_points1 = None
+        self._joint_points0 = None
+        self._joint_points1 = None
+        self._joint_colors = None
+        self._com_positions = None
+        self._com_colors = None
+        self._com_radii = None
+        self._hydro_surface_line_starts = None
+        self._hydro_surface_line_ends = None
+        self._hydro_surface_line_colors = None
+        self.model_shape_color = None
+        self._shape_to_slot = None
+        self._shape_to_batch = None
+        self._isomesh_cache = {}
+        self._sdf_isomesh_instances = {}
+        self._sdf_isomesh_populated = False
+
     def set_model(self, model: newton.Model | None, max_worlds: int | None = None):
         """
         Set the model to be visualized.
@@ -141,7 +183,7 @@ class ViewerBase(ABC):
                         Useful for performance when training with many environments.
         """
         if self.model is not None:
-            raise RuntimeError("Viewer set_model() can be called only once.")
+            self.clear_model()
 
         self.model = model
         self.max_worlds = max_worlds
