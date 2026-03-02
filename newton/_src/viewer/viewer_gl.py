@@ -262,8 +262,8 @@ class ViewerGL(ViewerBase):
         self.show_ui = True
 
         # UI callback system - organized by position
-        # positions: "side", "stats", "free"
-        self._ui_callbacks = {"side": [], "stats": [], "free": []}
+        # positions: "side", "stats", "free", "panel"
+        self._ui_callbacks = {"side": [], "stats": [], "free": [], "panel": []}
 
         # Initialize PBO (Pixel Buffer Object) resources used in the `get_frame` method.
         self._pbo = None
@@ -292,7 +292,7 @@ class ViewerGL(ViewerBase):
     def register_ui_callback(
         self,
         callback: Callable[[Any], None],
-        position: Literal["side", "stats", "free"] = "side",
+        position: Literal["side", "stats", "free", "panel"] = "side",
     ):
         """
         Register a UI callback to be rendered during the UI phase.
@@ -303,6 +303,7 @@ class ViewerGL(ViewerBase):
                      "side" - Side callback (default)
                      "stats" - Stats/metrics area
                      "free" - Free-floating UI elements
+                     "panel" - Top-level collapsing headers in left panel
         """
         if not callable(callback):
             raise TypeError("callback must be callable")
@@ -358,7 +359,7 @@ class ViewerGL(ViewerBase):
         self._packed_world_xforms = None
         self._packed_vbo_xforms = None
         self._packed_vbo_xforms_host = None
-        self._ui_callbacks = {"side": [], "stats": [], "free": []}
+        self._ui_callbacks = {"side": [], "stats": [], "free": [], "panel": []}
         super().clear_model()
 
     @override
@@ -902,7 +903,7 @@ class ViewerGL(ViewerBase):
         Args:
             state: The current simulation state.
         """
-        if not self.picking_enabled or not self.picking.is_picking():
+        if not self.picking_enabled or self.picking is None or not self.picking.is_picking():
             # Clear the picking line if not picking
             self.log_lines("picking_line", None, None, None)
             return
@@ -989,7 +990,8 @@ class ViewerGL(ViewerBase):
         self._last_time = now
         self._update_camera(dt)
 
-        self.wind.update(dt)
+        if self.wind is not None:
+            self.wind.update(dt)
 
         # If the window was closed during event processing, skip rendering
         if self.renderer.has_exit():
@@ -1247,7 +1249,7 @@ class ViewerGL(ViewerBase):
         import pyglet
 
         # Handle right-click for picking
-        if button == pyglet.window.mouse.RIGHT and self.picking_enabled:
+        if button == pyglet.window.mouse.RIGHT and self.picking_enabled and self.picking is not None:
             fb_x, fb_y = self._to_framebuffer_coords(x, y)
             ray_start, ray_dir = self.camera.get_world_ray(fb_x, fb_y)
             if self._last_state is not None:
@@ -1263,7 +1265,8 @@ class ViewerGL(ViewerBase):
             button: Mouse button released.
             modifiers: Modifier keys.
         """
-        self.picking.release()
+        if self.picking is not None:
+            self.picking.release()
 
     def on_mouse_drag(
         self,
@@ -1304,7 +1307,7 @@ class ViewerGL(ViewerBase):
             fb_x, fb_y = self._to_framebuffer_coords(x, y)
             ray_start, ray_dir = self.camera.get_world_ray(fb_x, fb_y)
 
-            if self.picking.is_picking():
+            if self.picking is not None and self.picking.is_picking():
                 self.picking.update(ray_start, ray_dir)
 
     def on_mouse_motion(self, x: float, y: float, dx: float, dy: float):
@@ -1589,12 +1592,15 @@ class ViewerGL(ViewerBase):
             # Collapsing headers default-open handling (first frame only)
             header_flags = 0
 
+            # Panel callbacks (e.g. example browser) - top-level collapsing headers
+            for callback in self._ui_callbacks["panel"]:
+                callback(self.ui.imgui)
+
             # Model Information section
             if self.model is not None:
                 imgui.set_next_item_open(True, imgui.Cond_.appearing)
                 if imgui.collapsing_header("Model Information", flags=header_flags):
                     imgui.separator()
-                    imgui.text(f"Worlds: {self.model.world_count}")
                     axis_names = ["X", "Y", "Z"]
                     imgui.text(f"Up Axis: {axis_names[self.model.up_axis]}")
                     gravity = self.model.gravity.numpy()[0]
@@ -1708,7 +1714,7 @@ class ViewerGL(ViewerBase):
 
             # Camera Information section
             imgui.set_next_item_open(True, imgui.Cond_.appearing)
-            if imgui.collapsing_header("Camera"):
+            if imgui.collapsing_header("Controls"):
                 imgui.separator()
 
                 pos = self.camera.pos
@@ -1790,6 +1796,7 @@ class ViewerGL(ViewerBase):
             # Model stats
             if self.model is not None:
                 imgui.separator()
+                imgui.text(f"Worlds: {self.model.world_count}")
                 imgui.text(f"Bodies: {self.model.body_count}")
                 imgui.text(f"Shapes: {self.model.shape_count}")
                 imgui.text(f"Joints: {self.model.joint_count}")

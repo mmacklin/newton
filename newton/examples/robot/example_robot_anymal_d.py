@@ -39,7 +39,7 @@ class Example:
         self.sim_substeps = 4
         self.sim_dt = self.frame_dt / self.sim_substeps
 
-        self.world_count = args.world_count if args else 8
+        self.world_count = args.world_count
 
         self.viewer = viewer
 
@@ -90,7 +90,7 @@ class Example:
             ls_iterations=50,
             nconmax=45,
             njmax=100,
-            use_mujoco_contacts=args.use_mujoco_contacts if args else False,
+            use_mujoco_contacts=args.use_mujoco_contacts,
         )
 
         self.state_0 = self.model.state()
@@ -159,11 +159,15 @@ class Example:
                 < 0.25,  # Relaxed from 0.1 - collision pipeline has residual velocities up to ~0.2
             )
 
+    @staticmethod
+    def create_parser():
+        parser = newton.examples.create_parser()
+        parser.set_defaults(world_count=8)
+        return parser
+
 
 if __name__ == "__main__":
-    parser = newton.examples.create_parser()
-    parser.add_argument("--world-count", type=int, default=8, help="Total number of simulated worlds.")
-
+    parser = Example.create_parser()
     viewer, args = newton.examples.init(parser)
 
     example = Example(viewer, args)

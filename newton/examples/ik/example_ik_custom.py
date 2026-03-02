@@ -142,7 +142,7 @@ class CollisionSphereAvoidObjective(ik.IKObjective):
 
 
 class Example:
-    def __init__(self, viewer):
+    def __init__(self, viewer, args=None):
         # frame timing
         self.fps = 60
         self.frame_dt = 1.0 / self.fps
@@ -320,5 +320,5 @@ class Example:
 if __name__ == "__main__":
     # Parse arguments and initialize viewer
     viewer, args = newton.examples.init()
-    example = Example(viewer)
+    example = Example(viewer, args)
     newton.examples.run(example, args)

@@ -64,8 +64,8 @@ class Example:
         self.sim_substeps = 10
         self.sim_dt = self.frame_dt / self.sim_substeps
 
-        self.world_count = args.world_count if args else 16
-        max_worlds = args.max_worlds if args else None
+        self.world_count = args.world_count
+        max_worlds = args.max_worlds
         verbose = True
 
         world = newton.ModelBuilder()
@@ -100,13 +100,13 @@ class Example:
         if USE_TORCH:
             import torch  # noqa: PLC0415
 
-            cart_positions = 2.0 - 4.0 * torch.rand(world_count)
-            pole1_angles = torch.pi / 8.0 - torch.pi / 4.0 * torch.rand(world_count)
-            pole2_angles = torch.pi / 8.0 - torch.pi / 4.0 * torch.rand(world_count)
+            cart_positions = 2.0 - 4.0 * torch.rand(self.world_count)
+            pole1_angles = torch.pi / 8.0 - torch.pi / 4.0 * torch.rand(self.world_count)
+            pole2_angles = torch.pi / 8.0 - torch.pi / 4.0 * torch.rand(self.world_count)
             joint_q = torch.stack([cart_positions, pole1_angles, pole2_angles], dim=1)
         else:
             joint_q = self.cartpoles.get_attribute("joint_q", self.state_0)
-            wp.launch(randomize_states_kernel, dim=world_count, inputs=[joint_q, 42])
+            wp.launch(randomize_states_kernel, dim=self.world_count, inputs=[joint_q, 42])
 
         self.cartpoles.set_attribute("joint_q", self.state_0, joint_q)
 
@@ -221,15 +221,15 @@ class Example:
             indices=[i * num_bodies_per_world + 2 for i in range(self.world_count)],
         )
 
+    @staticmethod
+    def create_parser():
+        parser = newton.examples.create_parser()
+        parser.set_defaults(world_count=16)
+        return parser
+
 
 if __name__ == "__main__":
-    parser = newton.examples.create_parser()
-    parser.add_argument(
-        "--world-count",
-        type=int,
-        default=16,
-        help="Total number of simulated worlds.",
-    )
+    parser = Example.create_parser()
 
     viewer, args = newton.examples.init(parser)
 

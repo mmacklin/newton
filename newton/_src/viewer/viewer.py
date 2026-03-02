@@ -151,6 +151,7 @@ class ViewerBase(ABC):
         self.model = None
         self.model_changed = True
         self.max_worlds = None
+        self.world_offsets = None
         self._shape_instances = {}
         self._geometry_cache = {}
         self._inertia_box_instances = None

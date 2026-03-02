@@ -37,7 +37,7 @@ class Example:
         self.sim_substeps = 10
         self.sim_dt = self.frame_dt / self.sim_substeps
 
-        self.world_count = args.world_count if args else 8
+        self.world_count = args.world_count
 
         self.viewer = viewer
 
@@ -179,10 +179,15 @@ class Example:
             indices=[i * num_bodies_per_world + 2 for i in range(self.world_count)],
         )
 
+    @staticmethod
+    def create_parser():
+        parser = newton.examples.create_parser()
+        parser.set_defaults(world_count=100)
+        return parser
+
 
 if __name__ == "__main__":
-    parser = newton.examples.create_parser()
-    parser.add_argument("--world-count", type=int, default=100, help="Total number of simulated worlds.")
+    parser = Example.create_parser()
     viewer, args = newton.examples.init(parser)
 
     example = Example(viewer, args)

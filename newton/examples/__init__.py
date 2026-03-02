@@ -13,8 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import os
 import warnings
+from collections import defaultdict
 from collections.abc import Callable
 
 import numpy as np
@@ -177,34 +179,111 @@ def test_particle_state(
             raise ValueError(f'Test "{test_name}" failed for {len(failed_particles)} out of {len(indices)} particles')
 
 
+class ExampleBrowser:
+    """Manages the example browser UI and switching/reset logic for the run loop."""
+
+    def __init__(self, viewer):
+        self.viewer = viewer
+        self.switch_target: str | None = None
+        self.callback = None
+
+        if not hasattr(viewer, "register_ui_callback"):
+            return
+
+        examples = get_examples()
+        tree: dict[str, list[tuple[str, str]]] = defaultdict(list)
+        for name, module_path in examples.items():
+            parts = module_path.split(".")
+            category = parts[2] if len(parts) > 2 else "other"
+            tree[category].append((name, module_path))
+        self._tree = dict(sorted(tree.items()))
+
+        def _browser_ui(imgui):
+            imgui.set_next_item_open(False, imgui.Cond_.appearing)
+            if imgui.collapsing_header("Examples"):
+                for category in sorted(self._tree.keys()):
+                    if imgui.tree_node(category):
+                        for name, module_path in self._tree[category]:
+                            clicked, _ = imgui.selectable(name, False)
+                            if clicked:
+                                self.switch_target = module_path
+                        imgui.tree_pop()
+
+        self.callback = _browser_ui
+        viewer.register_ui_callback(_browser_ui, position="panel")
+
+    def _register_ui(self, example):
+        """Re-register UI callbacks for the current example and browser."""
+        if hasattr(example, "gui") and hasattr(self.viewer, "register_ui_callback"):
+            self.viewer.register_ui_callback(lambda ui, ex=example: ex.gui(ui), position="side")
+        if self.callback is not None:
+            self.viewer.register_ui_callback(self.callback, position="panel")
+
+    def switch(self, fallback_class):
+        """Switch to the selected example. Returns (example, example_class) or (None, fallback_class)."""
+        module_path, self.switch_target = self.switch_target, None
+        self.viewer.clear_model()
+        try:
+            mod = importlib.import_module(module_path)
+            parser = getattr(mod.Example, "create_parser", create_parser)()
+            switch_args = default_args(parser)
+            example = mod.Example(self.viewer, switch_args)
+            example_class = type(example)
+        except Exception as e:
+            warnings.warn(f"Failed to load example {module_path}: {e}", stacklevel=2)
+            try:
+                fallback_parser = getattr(fallback_class, "create_parser", create_parser)()
+                example = fallback_class(self.viewer, default_args(fallback_parser))
+                example_class = fallback_class
+            except Exception:
+                return None, fallback_class
+        self._register_ui(example)
+        return example, example_class
+
+    def reset(self, example_class, example):
+        """Reset the current example by re-creating it. Returns the new example."""
+        self.viewer.consume_reset()
+        self.viewer.clear_model()
+        try:
+            parser = getattr(example_class, "create_parser", create_parser)()
+            example = example_class(self.viewer, default_args(parser))
+        except TypeError:
+            warnings.warn(
+                "Example does not support reset (constructor expects more than viewer, args).",
+                stacklevel=2,
+            )
+            if hasattr(example, "model") and example.model is not None:
+                self.viewer.set_model(example.model, getattr(example, "max_worlds", None))
+        else:
+            self._register_ui(example)
+            return example
+        if self.callback is not None:
+            self.viewer.register_ui_callback(self.callback, position="panel")
+        return example
+
+
 def run(example, args):
     viewer = example.viewer
     example_class = type(example)
-
-    if hasattr(example, "gui") and hasattr(viewer, "register_ui_callback"):
-        viewer.register_ui_callback(lambda ui: example.gui(ui), position="side")
 
     perform_test = args is not None and args.test
     test_post_step = perform_test and hasattr(example, "test_post_step")
     test_final = perform_test and hasattr(example, "test_final")
 
+    browser = ExampleBrowser(viewer) if not perform_test else None
+
+    if hasattr(example, "gui") and hasattr(viewer, "register_ui_callback"):
+        viewer.register_ui_callback(lambda ui, ex=example: ex.gui(ui), position="side")
+
     while viewer.is_running():
-        # Handle reset request (ignore in test mode)
-        if not perform_test and hasattr(viewer, "is_reset_requested") and viewer.is_reset_requested():
-            viewer.consume_reset()
-            viewer.clear_model()
-            try:
-                example = example_class(viewer, args)
-            except TypeError:
-                warnings.warn(
-                    "Example does not support reset (constructor expects more than viewer, args).",
-                    stacklevel=2,
-                )
-                if hasattr(example, "model") and example.model is not None:
-                    viewer.set_model(example.model, getattr(example, "max_worlds", None))
-            else:
-                if hasattr(example, "gui") and hasattr(viewer, "register_ui_callback"):
-                    viewer.register_ui_callback(lambda ui, ex=example: ex.gui(ui), position="side")
+        if browser is not None and browser.switch_target is not None:
+            new_example, example_class = browser.switch(example_class)
+            if new_example is not None:
+                example = new_example
+            continue
+
+        if browser is not None and hasattr(viewer, "is_reset_requested") and viewer.is_reset_requested():
+            example = browser.reset(example_class, example)
             continue
 
         if not viewer.is_paused():
@@ -303,6 +382,21 @@ def compute_world_offsets(
     return world_offsets
 
 
+def get_examples() -> dict[str, str]:
+    """Return a dict mapping example short names to their full module paths."""
+    example_map = {}
+    examples_dir = get_source_directory()
+    for module in sorted(os.listdir(examples_dir)):
+        module_dir = os.path.join(examples_dir, module)
+        if not os.path.isdir(module_dir) or module.startswith("_"):
+            continue
+        for filename in sorted(os.listdir(module_dir)):
+            if filename.startswith("example_") and filename.endswith(".py"):
+                example_name = filename[8:-3]
+                example_map[example_name] = f"newton.examples.{module}.{filename[:-3]}"
+    return example_map
+
+
 def create_parser():
     """Create a base argument parser with common parameters for Newton examples.
 
@@ -370,8 +464,26 @@ def create_parser():
         default=False,
         help="Suppress Warp compilation messages.",
     )
+    parser.add_argument(
+        "--world-count",
+        type=int,
+        default=1,
+        help="Number of simulation worlds.",
+    )
 
     return parser
+
+
+def default_args(parser=None):
+    """Return an args namespace populated with defaults from the given parser.
+
+    Used by the example browser to create proper args when switching examples,
+    so that ``Example(viewer, args)`` always receives a fully-populated namespace.
+    If *parser* is ``None``, the base :func:`create_parser` is used.
+    """
+    if parser is None:
+        parser = create_parser()
+    return parser.parse_known_args([])[0]
 
 
 def init(parser=None):
@@ -450,46 +562,26 @@ def main():
     import runpy  # noqa: PLC0415
     import sys  # noqa: PLC0415
 
-    # Map short names to full module paths
-    example_map = {}
-    modules = [
-        "basic",
-        "cable",
-        "cloth",
-        "contacts",
-        "diffsim",
-        "ik",
-        "mpm",
-        "multiphysics",
-        "robot",
-        "selection",
-        "sensors",
-        "softbody",
-    ]
-    for module in sorted(modules):
-        for example in sorted(os.listdir(os.path.join(get_source_directory(), module))):
-            if example.endswith(".py"):
-                example_name = example[8:-3]  # Remove "example_" prefix and ".py" file ext
-                example_map[example_name] = f"newton.examples.{module}.{example[:-3]}"
+    examples = get_examples()
 
     if len(sys.argv) < 2:
         print("Usage: python -m newton.examples <example_name>")
         print("\nAvailable examples:")
-        for name in example_map.keys():
+        for name in examples:
             print(f"  {name}")
         sys.exit(1)
 
     example_name = sys.argv[1]
 
-    if example_name not in example_map:
+    if example_name not in examples:
         print(f"Error: Unknown example '{example_name}'")
         print("\nAvailable examples:")
-        for name in example_map.keys():
+        for name in examples:
             print(f"  {name}")
         sys.exit(1)
 
     # Set up sys.argv for the target script
-    target_module = example_map[example_name]
+    target_module = examples[example_name]
     # Keep the module name as argv[0] and pass remaining args
     sys.argv = [target_module, *sys.argv[2:]]
 
@@ -501,4 +593,4 @@ if __name__ == "__main__":
     main()
 
 
-__all__ = ["create_parser", "init", "run", "test_body_state", "test_particle_state"]
+__all__ = ["create_parser", "default_args", "get_examples", "init", "run", "test_body_state", "test_particle_state"]

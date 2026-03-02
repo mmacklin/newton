@@ -35,7 +35,7 @@ import newton.usd
 
 
 class Example:
-    def __init__(self, viewer, args):
+    def __init__(self, viewer, args=None):
         # setup simulation parameters first
         self.fps = 100
         self.frame_dt = 1.0 / self.fps

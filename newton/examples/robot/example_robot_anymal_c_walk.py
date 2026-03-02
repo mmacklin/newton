@@ -173,11 +173,9 @@ class Example:
 
         self.model = builder.finalize()
 
-        use_mujoco_contacts = args.use_mujoco_contacts if args else False
-
         self.solver = newton.solvers.SolverMuJoCo(
             self.model,
-            use_mujoco_contacts=use_mujoco_contacts,
+            use_mujoco_contacts=args.use_mujoco_contacts,
             solver="newton",
             ls_parallel=False,
             ls_iterations=50,  # Increased from default 10 for determinism
@@ -206,7 +204,7 @@ class Example:
         newton.eval_fk(self.model, self.state_0.joint_q, self.state_0.joint_qd, self.state_0)
 
         # Initialize contacts
-        if use_mujoco_contacts:
+        if args.use_mujoco_contacts:
             self.contacts = None
         else:
             self.contacts = self.model.contacts()

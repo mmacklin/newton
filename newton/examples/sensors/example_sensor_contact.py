@@ -37,7 +37,7 @@ from newton.tests.unittest_utils import find_nonfinite_members
 
 
 class Example:
-    def __init__(self, viewer):
+    def __init__(self, viewer, args=None):
         # setup simulation parameters first
         self.fps = 120
         self.frame_dt = 1.0 / self.fps
@@ -254,6 +254,6 @@ if __name__ == "__main__":
 
     viewer, args = newton.examples.init(parser)
 
-    example = Example(viewer)
+    example = Example(viewer, args)
 
     newton.examples.run(example, args)

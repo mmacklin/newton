@@ -111,19 +111,19 @@ def load_mesh_with_sdf(
 
 
 class Example:
-    def __init__(self, viewer, world_count=1, num_per_world=1, scene="nut_bolt", solver="xpbd", test_mode=False):
+    def __init__(self, viewer, args=None):
+        self.scene = args.scene
         self.fps = 120
         self.frame_dt = 1.0 / self.fps
         self.sim_time = 0.0
         # Use more substeps for gears scene to improve stability
-        self.sim_substeps = 50 if scene == "gears" else 5
+        self.sim_substeps = 50 if self.scene == "gears" else 5
         self.sim_dt = self.frame_dt / self.sim_substeps
 
-        self.world_count = world_count
+        self.world_count = args.world_count
         self.viewer = viewer
-        self.scene = scene
-        self.solver_type = solver
-        self.test_mode = test_mode
+        self.solver_type = args.solver
+        self.test_mode = args.test
 
         # XPBD contact correction (0.0 = no correction, 1.0 = full correction)
         self.xpbd_contact_relaxation = 0.8
@@ -135,9 +135,9 @@ class Example:
         self.ground_plane_offset = -0.01
 
         # Grid dimensions for nut/bolt scene (number of assemblies in X and Y)
-        self.num_per_world = num_per_world
-        self.grid_x = int(np.ceil(np.sqrt(num_per_world)))
-        self.grid_y = int(np.ceil(num_per_world / self.grid_x))
+        self.num_per_world = args.num_per_world
+        self.grid_x = int(np.ceil(np.sqrt(self.num_per_world)))
+        self.grid_y = int(np.ceil(self.num_per_world / self.grid_x))
 
         # Maximum number of rigid contacts to allocate (limits memory usage).
         # Use a per-world budget so default world_count=100 scales appropriately.
@@ -146,12 +146,12 @@ class Example:
         # Broad phase mode: NXN (O(N²)), SAP (O(N log N)), EXPLICIT (precomputed pairs)
         self.broad_phase = "sap"
 
-        if scene == "nut_bolt":
+        if self.scene == "nut_bolt":
             world_builder = self._build_nut_bolt_scene()
-        elif scene == "gears":
+        elif self.scene == "gears":
             world_builder = self._build_gears_scene()
         else:
-            raise ValueError(f"Unknown scene: {scene}")
+            raise ValueError(f"Unknown scene: {self.scene}")
 
         main_scene = newton.ModelBuilder()
         main_scene.default_shape_cfg.gap = 0.01
@@ -225,7 +225,7 @@ class Example:
 
         self.viewer.set_model(self.model)
 
-        if scene == "nut_bolt":
+        if self.scene == "nut_bolt":
             offset = 0.15 * self.scene_scale
             self.viewer.set_world_offsets((offset, offset, 0.0))
             self.viewer.set_camera(pos=wp.vec3(offset, -offset, 0.12 * self.scene_scale), pitch=-15.0, yaw=135.0)
@@ -453,38 +453,33 @@ class Example:
                 f"Nut {i}: did not move downward. Initial z={initial_z:.4f}, min z reached={min_z:.4f}"
             )
 
+    @staticmethod
+    def create_parser():
+        parser = newton.examples.create_parser()
+        parser.set_defaults(world_count=100)
+        parser.add_argument(
+            "--scene",
+            type=str,
+            choices=["nut_bolt", "gears"],
+            default="nut_bolt",
+            help="Scene to run: 'nut_bolt' or 'gears'.",
+        )
+        parser.add_argument(
+            "--solver",
+            type=str,
+            choices=["xpbd", "mujoco"],
+            default="mujoco",
+            help="Solver to use: 'xpbd' (Extended Position-Based Dynamics) or 'mujoco' (MuJoCo constraint solver).",
+        )
+        parser.add_argument("--num-per-world", type=int, default=1, help="Number of assemblies per world.")
+        return parser
+
 
 if __name__ == "__main__":
-    parser = newton.examples.create_parser()
-    parser.add_argument(
-        "--world-count",
-        type=int,
-        default=100,
-        help="Total number of simulated worlds.",
-    )
-    parser.add_argument(
-        "--scene",
-        type=str,
-        choices=["nut_bolt", "gears"],
-        default="nut_bolt",
-        help="Scene to run: 'nut_bolt' or 'gears'.",
-    )
-    parser.add_argument(
-        "--solver",
-        type=str,
-        choices=["xpbd", "mujoco"],
-        default="mujoco",
-        help="Solver to use: 'xpbd' (Extended Position-Based Dynamics) or 'mujoco' (MuJoCo constraint solver).",
-    )
+    parser = Example.create_parser()
 
     viewer, args = newton.examples.init(parser)
 
-    example = Example(
-        viewer,
-        world_count=args.world_count,
-        scene=args.scene,
-        solver=args.solver,
-        test_mode=args.test,
-    )
+    example = Example(viewer, args)
 
     newton.examples.run(example, args)

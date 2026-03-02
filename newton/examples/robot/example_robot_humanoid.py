@@ -38,7 +38,7 @@ class Example:
         self.sim_substeps = 10
         self.sim_dt = self.frame_dt / self.sim_substeps
 
-        self.world_count = args.world_count if args else 4
+        self.world_count = args.world_count
 
         self.viewer = viewer
 
@@ -69,12 +69,11 @@ class Example:
         builder.add_ground_plane()
 
         self.model = builder.finalize()
-        use_mujoco_contacts = args.use_mujoco_contacts if args is not None else False
         self.solver = newton.solvers.SolverMuJoCo(
             self.model,
             njmax=100,
             nconmax=65,
-            use_mujoco_contacts=use_mujoco_contacts,
+            use_mujoco_contacts=args.use_mujoco_contacts,
         )
 
         self.state_0 = self.model.state()
@@ -141,11 +140,15 @@ class Example:
             lambda q, qd: max(abs(qd)) < threshold,
         )
 
+    @staticmethod
+    def create_parser():
+        parser = newton.examples.create_parser()
+        parser.set_defaults(world_count=4)
+        return parser
+
 
 if __name__ == "__main__":
-    parser = newton.examples.create_parser()
-    parser.add_argument("--world-count", type=int, default=4, help="Total number of simulated worlds.")
-
+    parser = Example.create_parser()
     viewer, args = newton.examples.init(parser)
 
     example = Example(viewer, args)

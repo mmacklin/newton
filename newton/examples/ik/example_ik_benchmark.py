@@ -43,16 +43,14 @@ class Example:
     Manages the setup and execution of the IK benchmark.
     """
 
-    def __init__(self, viewer, repeats, batch_sizes, seed: int):
-        # Benchmark parameters from parsed arguments
-        self.batch_sizes = batch_sizes
-        self.repeats = repeats
+    def __init__(self, viewer, args=None):
+        self.batch_sizes = args.batch_sizes
+        self.repeats = args.repeats
         self.iterations = 16
         self.step_size = 1.0
         self.pos_thresh_m = 5e-3
         self.ori_thresh_rad = 0.05
 
-        # Hardcoded Franka configuration
         self.robot_name = "franka"
         self.asset_name = "franka_emika_panda"
         self.asset_file = Path("urdf/fr3.urdf")
@@ -66,7 +64,7 @@ class Example:
         self.model = self._create_robot()
         self.n_coords = self.model.joint_coord_count
         self.results = []
-        self.rng = np.random.default_rng(seed)
+        self.rng = np.random.default_rng(args.seed)
 
     def _create_robot(self) -> newton.Model:
         franka = newton.ModelBuilder()
@@ -285,25 +283,29 @@ class Example:
     def test_final(self):
         pass  # Not used in this benchmark
 
+    @staticmethod
+    def create_parser():
+        parser = newton.examples.create_parser()
+        parser.add_argument("--repeats", type=int, default=3, help="Number of times to run the benchmark.")
+        parser.add_argument(
+            "--batch-sizes",
+            type=int,
+            nargs="+",
+            default=[1, 10, 100, 1_000, 2_000],
+            help="A list of batch sizes (e.g., --batch-sizes 1 10 100).",
+        )
+        parser.add_argument("--seed", type=int, default=123, help="RNG seed for reproducibility.")
+        parser.set_defaults(viewer="null")
+        return parser
+
 
 def main():
-    parser = newton.examples.create_parser()
-    parser.add_argument("--repeats", type=int, default=3, help="Number of times to run the benchmark.")
-    parser.add_argument(
-        "--batch-sizes",
-        type=int,
-        nargs="+",
-        default=[1, 10, 100, 1_000, 2_000],
-        help="A list of batch sizes (e.g., --batch-sizes 1 10 100).",
-    )
-    parser.add_argument("--seed", type=int, default=123, help="RNG seed for reproducibility.")
-    # non-visual example, default to null viewer
-    parser.set_defaults(viewer="null")
+    parser = Example.create_parser()
 
     viewer, args = newton.examples.init(parser)
 
     with wp.ScopedDevice(args.device):
-        example = Example(viewer, repeats=args.repeats, batch_sizes=args.batch_sizes, seed=args.seed)
+        example = Example(viewer, args)
         example.run_benchmark()
         example.print_results()
 

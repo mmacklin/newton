@@ -50,7 +50,7 @@ class ReplayUI:
         viewer.register_ui_callback(replay_ui.render, "free")
     """
 
-    def __init__(self, viewer=None):
+    def __init__(self, viewer=None, args=None):
         """Initialize the ReplayUI extension.
 
         Args:
@@ -205,7 +205,7 @@ class ReplayUI:
 
 
 class Example:
-    def __init__(self, viewer):
+    def __init__(self, viewer, args=None):
         """Initialize the integrated viewer example with replay UI."""
         self.viewer = viewer
 
@@ -236,6 +236,6 @@ if __name__ == "__main__":
     viewer, args = newton.examples.init()
 
     # Create example and run
-    example = Example(viewer)
+    example = Example(viewer, args)
 
     newton.examples.run(example, args)
