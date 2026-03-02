@@ -41,7 +41,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
 
-    <script src="../_static/documentation_options.js?v=938c9ccc"></script>
+    <script src="../_static/documentation_options.js?v=1c471e8e"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -58,7 +58,7 @@
         </script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="newton.usd.from_gfquat" href="_generated/newton.usd.from_gfquat.html" />
+    <link rel="next" title="newton.usd.PrimType" href="_generated/newton.usd.PrimType.html" />
     <link rel="prev" title="newton.eval_mass_matrix" href="_generated/newton.eval_mass_matrix.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -132,7 +132,7 @@
     <img src="../_static/newton-logo-dark.png" class="logo__image only-dark pst-js-only" alt="Newton Physics Logo"/>
   
   
-    <p class="title logo__title">Newton Physics <span style='font-size: 0.8em; color: #888;'>(0.2.0)</span></p>
+    <p class="title logo__title">Newton Physics <span style='font-size: 0.8em; color: #888;'>(1.1.0.dev0)</span></p>
   
 </a></div>
     
@@ -800,52 +800,72 @@
   <section id="newton-usd">
 <h1>newton.usd<a class="headerlink" href="#newton-usd" title="Link to this heading">#</a></h1>
 <p>Utilities for working with the Universal Scene Description (USD) format.</p>
+<p>This module provides both low-level USD utility helpers and public schema
+resolver types used by <a class="reference internal" href="_generated/newton.ModelBuilder.html#newton.ModelBuilder.add_usd" title="newton.ModelBuilder.add_usd"><code class="xref py py-meth docutils literal notranslate"><span class="pre">newton.ModelBuilder.add_usd()</span></code></a>.</p>
+<p class="rubric">Classes</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.PrimType.html#newton.usd.PrimType" title="newton.usd.PrimType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PrimType</span></code></a></p></td>
+<td><p>Enumeration of USD prim types that can be resolved by schema resolvers.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.usd.SchemaResolver.html#newton.usd.SchemaResolver" title="newton.usd.SchemaResolver"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SchemaResolver</span></code></a></p></td>
+<td><p>Base class mapping USD schema attributes to Newton attributes.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.SchemaResolverMjc.html#newton.usd.SchemaResolverMjc" title="newton.usd.SchemaResolverMjc"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SchemaResolverMjc</span></code></a></p></td>
+<td><p>Schema resolver for MuJoCo USD attributes.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.usd.SchemaResolverNewton.html#newton.usd.SchemaResolverNewton" title="newton.usd.SchemaResolverNewton"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SchemaResolverNewton</span></code></a></p></td>
+<td><p>Schema resolver for Newton-authored USD attributes.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.SchemaResolverPhysx.html#newton.usd.SchemaResolverPhysx" title="newton.usd.SchemaResolverPhysx"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SchemaResolverPhysx</span></code></a></p></td>
+<td><p>Schema resolver for PhysX USD attributes.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
 <p class="rubric">Functions</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.from_gfquat.html#newton.usd.from_gfquat" title="newton.usd.from_gfquat"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_gfquat</span></code></a>(gfquat)</p></td>
-<td><p>Convert a USD Gf.Quat to a normalized Warp quaternion.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.usd.get_attribute.html#newton.usd.get_attribute" title="newton.usd.get_attribute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_attribute</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.get_attribute.html#newton.usd.get_attribute" title="newton.usd.get_attribute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_attribute</span></code></a>()</p></td>
 <td><p>Get an attribute value from a USD prim, returning a default if not found.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.get_attributes_in_namespace.html#newton.usd.get_attributes_in_namespace" title="newton.usd.get_attributes_in_namespace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_attributes_in_namespace</span></code></a>(prim, namespace)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.usd.get_attributes_in_namespace.html#newton.usd.get_attributes_in_namespace" title="newton.usd.get_attributes_in_namespace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_attributes_in_namespace</span></code></a>(prim, namespace)</p></td>
 <td><p>Get all attributes in a namespace from a USD prim.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.usd.get_custom_attribute_declarations.html#newton.usd.get_custom_attribute_declarations" title="newton.usd.get_custom_attribute_declarations"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_custom_attribute_declarations</span></code></a>(prim)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.get_custom_attribute_declarations.html#newton.usd.get_custom_attribute_declarations" title="newton.usd.get_custom_attribute_declarations"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_custom_attribute_declarations</span></code></a>(prim)</p></td>
 <td><p>Get custom attribute declarations from a USD prim, typically from a <code class="docutils literal notranslate"><span class="pre">PhysicsScene</span></code> prim.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.get_custom_attribute_values.html#newton.usd.get_custom_attribute_values" title="newton.usd.get_custom_attribute_values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_custom_attribute_values</span></code></a>(prim, ...[, context])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.usd.get_custom_attribute_values.html#newton.usd.get_custom_attribute_values" title="newton.usd.get_custom_attribute_values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_custom_attribute_values</span></code></a>(prim, ...[, context])</p></td>
 <td><p>Get custom attribute values from a USD prim and a set of known custom attributes.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.usd.get_float.html#newton.usd.get_float" title="newton.usd.get_float"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_float</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.get_float.html#newton.usd.get_float" title="newton.usd.get_float"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_float</span></code></a>()</p></td>
 <td><p>Get a float attribute value from a USD prim, validating that it's finite.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.get_gprim_axis.html#newton.usd.get_gprim_axis" title="newton.usd.get_gprim_axis"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_gprim_axis</span></code></a>(prim[, name, default])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.usd.get_gprim_axis.html#newton.usd.get_gprim_axis" title="newton.usd.get_gprim_axis"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_gprim_axis</span></code></a>(prim[, name, default])</p></td>
 <td><p>Get an axis attribute from a USD prim and convert it to an <a class="reference internal" href="_generated/newton.Axis.html#newton.Axis" title="newton.Axis"><code class="xref py py-class docutils literal notranslate"><span class="pre">Axis</span></code></a> enum.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.usd.get_mesh.html#newton.usd.get_mesh" title="newton.usd.get_mesh"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_mesh</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.get_mesh.html#newton.usd.get_mesh" title="newton.usd.get_mesh"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_mesh</span></code></a>()</p></td>
 <td><p>Load a triangle mesh from a USD prim that has the <code class="docutils literal notranslate"><span class="pre">UsdGeom.Mesh</span></code> schema.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.get_quat.html#newton.usd.get_quat" title="newton.usd.get_quat"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_quat</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.usd.get_quat.html#newton.usd.get_quat" title="newton.usd.get_quat"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_quat</span></code></a>()</p></td>
 <td><p>Get a quaternion attribute value from a USD prim, validating that it's finite and non-zero.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.usd.get_scale.html#newton.usd.get_scale" title="newton.usd.get_scale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_scale</span></code></a>(prim[, local, xform_cache])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.get_scale.html#newton.usd.get_scale" title="newton.usd.get_scale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_scale</span></code></a>(prim[, local, xform_cache])</p></td>
 <td><p>Extract the scale component from a USD prim's transformation.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.get_transform.html#newton.usd.get_transform" title="newton.usd.get_transform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_transform</span></code></a>(prim[, local, xform_cache])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.usd.get_transform.html#newton.usd.get_transform" title="newton.usd.get_transform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_transform</span></code></a>(prim[, local, xform_cache])</p></td>
 <td><p>Extract the transform (position and rotation) from a USD Xform prim.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.usd.has_applied_api_schema.html#newton.usd.has_applied_api_schema" title="newton.usd.has_applied_api_schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_applied_api_schema</span></code></a>(prim, schema_name)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.has_applied_api_schema.html#newton.usd.has_applied_api_schema" title="newton.usd.has_applied_api_schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_applied_api_schema</span></code></a>(prim, schema_name)</p></td>
 <td><p>Check if a USD prim has an applied API schema, even if the schema is not registered with USD's schema registry.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.has_attribute.html#newton.usd.has_attribute" title="newton.usd.has_attribute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_attribute</span></code></a>(prim, name)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.usd.has_attribute.html#newton.usd.has_attribute" title="newton.usd.has_attribute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_attribute</span></code></a>(prim, name)</p></td>
 <td><p>Check if a USD prim has a valid and authored attribute.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.usd.type_to_warp.html#newton.usd.type_to_warp" title="newton.usd.type_to_warp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">type_to_warp</span></code></a>(v)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.type_to_warp.html#newton.usd.type_to_warp" title="newton.usd.type_to_warp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">type_to_warp</span></code></a>(v)</p></td>
 <td><p>Determine the Warp type, e.g. wp.quat, wp.vec3, or wp.float32, from a USD value.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.usd.value_to_warp.html#newton.usd.value_to_warp" title="newton.usd.value_to_warp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">value_to_warp</span></code></a>(v[, warp_dtype])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.usd.value_to_warp.html#newton.usd.value_to_warp" title="newton.usd.value_to_warp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">value_to_warp</span></code></a>(v[, warp_dtype])</p></td>
 <td><p>Convert a USD value (such as Gf.Quat, Gf.Vec3, or float) to a Warp value.</p></td>
 </tr>
 </tbody>
