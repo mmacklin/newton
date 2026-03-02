@@ -104,9 +104,6 @@ class ViewerBase(ABC):
         # to avoid repeated device->host copies in shape population loops.
         self._shape_sdf_index_host: nparray | None = None
 
-        # Reset request flag (set by Reset button / R key; consumed by run loop)
-        self._reset_requested = False
-
     def is_running(self) -> bool:
         """Report whether the viewer backend should keep running.
 
@@ -133,18 +130,6 @@ class ViewerBase(ABC):
             bool: Always False by default.
         """
         return False
-
-    def request_reset(self) -> None:
-        """Request that the example be reset on the next frame (e.g. from Reset button or R key)."""
-        self._reset_requested = True
-
-    def is_reset_requested(self) -> bool:
-        """Return True if a reset has been requested and not yet consumed."""
-        return self._reset_requested
-
-    def consume_reset(self) -> None:
-        """Clear the reset request flag (called by run loop after handling reset)."""
-        self._reset_requested = False
 
     def clear_model(self) -> None:
         """Clear model-dependent state so set_model() can be called again (e.g. for example reset)."""

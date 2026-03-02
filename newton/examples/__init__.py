@@ -185,6 +185,7 @@ class ExampleBrowser:
     def __init__(self, viewer):
         self.viewer = viewer
         self.switch_target: str | None = None
+        self._reset_requested = False
         self.callback = None
 
         if not hasattr(viewer, "register_ui_callback"):
@@ -208,6 +209,9 @@ class ExampleBrowser:
                             if clicked:
                                 self.switch_target = module_path
                         imgui.tree_pop()
+                imgui.separator()
+                if imgui.button("Reset"):
+                    self._reset_requested = True
 
         self.callback = _browser_ui
         viewer.register_ui_callback(_browser_ui, position="panel")
@@ -242,7 +246,7 @@ class ExampleBrowser:
 
     def reset(self, example_class, example):
         """Reset the current example by re-creating it. Returns the new example."""
-        self.viewer.consume_reset()
+        self._reset_requested = False
         self.viewer.clear_model()
         try:
             parser = getattr(example_class, "create_parser", create_parser)()
@@ -282,7 +286,7 @@ def run(example, args):
                 example = new_example
             continue
 
-        if browser is not None and hasattr(viewer, "is_reset_requested") and viewer.is_reset_requested():
+        if browser is not None and browser._reset_requested:
             example = browser.reset(example_class, example)
             continue
 
