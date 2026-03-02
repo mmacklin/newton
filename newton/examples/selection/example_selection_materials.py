@@ -75,7 +75,7 @@ class Example:
         self.sim_substeps = 10
         self.sim_dt = self.frame_dt / self.sim_substeps
 
-        self.world_count = getattr(args, "world_count", 16) if args else 16
+        self.world_count = args.world_count if args else 16
 
         world_template = newton.ModelBuilder()
         world_template.add_mjcf(

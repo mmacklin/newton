@@ -64,9 +64,9 @@ class Example:
         self.sim_substeps = 10
         self.sim_dt = self.frame_dt / self.sim_substeps
 
-        self.world_count = getattr(args, "world_count", 16) if args else 16
-        max_worlds = getattr(args, "max_worlds", None) if args else None
-        verbose = getattr(args, "verbose", True) if args else True
+        self.world_count = args.world_count if args else 16
+        max_worlds = args.max_worlds if args else None
+        verbose = True
 
         world = newton.ModelBuilder()
         world.add_usd(

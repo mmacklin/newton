@@ -83,7 +83,7 @@ class Example:
         self.sim_substeps = 8
         self.sim_dt = self.frame_dt / self.sim_substeps
 
-        self.world_count = getattr(args, "world_count", 4) if args else 4
+        self.world_count = args.world_count if args else 4
 
         self.viewer = viewer
 
