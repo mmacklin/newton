@@ -392,15 +392,14 @@ def init(parser=None):
         wp.set_device(args.device)
 
     # Create viewer based on type
-    paused = getattr(args, "paused", False)
     if args.viewer == "gl":
-        viewer = newton.viewer.ViewerGL(headless=args.headless, paused=paused)
+        viewer = newton.viewer.ViewerGL(headless=args.headless)
     elif args.viewer == "usd":
         if args.output_path is None:
             raise ValueError("--output-path is required when using usd viewer")
-        viewer = newton.viewer.ViewerUSD(output_path=args.output_path, num_frames=args.num_frames, paused=paused)
+        viewer = newton.viewer.ViewerUSD(output_path=args.output_path, num_frames=args.num_frames)
     elif args.viewer == "rtx":
-        viewer = newton.viewer.ViewerRTX(headless=args.headless, paused=paused)
+        viewer = newton.viewer.ViewerRTX(headless=args.headless)
     elif args.viewer == "rerun":
         viewer = newton.viewer.ViewerRerun(address=args.rerun_address)
     elif args.viewer == "null":
