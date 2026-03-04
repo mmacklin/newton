@@ -60,6 +60,14 @@ class ViewerRTX(ViewerUSD):
         except ImportError as e:
             raise ImportError("ovrtx package is required for ViewerRTX. Install with: pip install ovrtx") from e
 
+        # Patch the ovrtx library loader to use RTLD_DEEPBIND on Linux.
+        # This isolates ovrtx's bundled USD symbols from the pxr (usd-core)
+        # symbols already loaded in this process, preventing a native crash.
+        import sys
+
+        if sys.platform.startswith("linux"):
+            self._patch_ovrtx_loader_for_pxr_compat()
+
         if UsdGeom is None:
             raise ImportError("usd-core package is required for ViewerRTX. Install with: pip install usd-core")
 
@@ -112,6 +120,43 @@ class ViewerRTX(ViewerUSD):
 
         # Window is deferred until _init_ovrtx to avoid pyglet/Warp
         # kernel compilation deadlock on Windows.
+
+    @staticmethod
+    def _patch_ovrtx_loader_for_pxr_compat():
+        """Monkey-patch ovrtx's library loader to use RTLD_DEEPBIND.
+
+        When pxr (usd-core) is imported before ovrtx, their bundled USD
+        native libraries conflict.  RTLD_DEEPBIND makes the ovrtx shared
+        library resolve its USD symbols from its own dependencies first,
+        avoiding the collision.
+        """
+        import ovrtx._src.bindings as bmod
+
+        loader = bmod._ovrtx_loader
+        if loader.is_loaded:
+            return  # already loaded, nothing to patch
+
+        def _load_with_deepbind(self, extra_paths=None):
+            search_paths = []
+            if extra_paths:
+                search_paths.extend([p.resolve() for p in extra_paths if p.exists() and p.is_dir()])
+            search_paths.extend(self._lib_search_paths)
+            lib_paths = [p / self._lib_name for p in search_paths]
+            last_error = None
+            for lib_path in lib_paths:
+                if lib_path.exists() and lib_path.is_file():
+                    try:
+                        return ctypes.CDLL(str(lib_path), mode=os.RTLD_DEEPBIND)
+                    except Exception as e:
+                        last_error = e
+                        continue
+            paths_str = "\n  ".join(str(p) for p in lib_paths)
+            error_msg = f"Failed to load {self._lib_name}. Tried:\n  {paths_str}"
+            if last_error:
+                error_msg += f"\nLast error: {last_error}"
+            raise RuntimeError(error_msg)
+
+        bmod._LibraryLoader._load_library = _load_with_deepbind
 
     # ------------------------------------------------------------------ window
 
@@ -681,6 +726,7 @@ void main() {
         shape_arr = (ctypes.c_int64 * 1)(n)
         dl.shape = ctypes.cast(shape_arr, ctypes.POINTER(ctypes.c_int64))
         dl._point3f_shape = shape_arr  # prevent GC
+        dl._point3f_data = flat  # prevent GC of underlying data
         return dl
 
     def _update_ovrtx_mesh_points(self):
