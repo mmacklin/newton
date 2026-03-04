@@ -1358,10 +1358,6 @@ class ViewerGL(ViewerBase):
             if changed:
                 self.wind.direction = direction
 
-        # Restore bg color if we pushed it
-        if pushed_window_bg:
-            imgui.pop_style_color()
-
     def _render_selection_panel(self):
         """
         Render the selection panel for Newton Model introspection.
