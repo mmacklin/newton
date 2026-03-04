@@ -26,9 +26,9 @@ import newton
 from ..core.types import nparray, override
 
 try:
-    from pxr import Gf, Sdf, Usd, UsdGeom, Vt
+    from pxr import Gf, Sdf, Usd, UsdGeom, UsdShade, Vt
 except ImportError:
-    Gf = Sdf = Usd = UsdGeom = Vt = None
+    Gf = Sdf = Usd = UsdGeom = UsdShade = Vt = None
 
 from .viewer import ViewerBase
 
@@ -151,6 +151,7 @@ class ViewerUSD(ViewerBase):
         self._meshes = {}  # mesh_name -> prototype_path
         self._instancers = {}  # instancer_name -> UsdGeomPointInstancer
         self._points = {}  # point_name -> UsdGeomPoints
+        self._mesh_materials = {}  # mesh_name -> True (tracks which meshes have materials)
 
         # Track current frame
         self._frame_index = 0
@@ -208,6 +209,78 @@ class ViewerUSD(ViewerBase):
         if self.output_path:
             print(f"USD output saved in: {os.path.abspath(self.output_path)}")
 
+    def _create_material(self, mesh_prim, name, texture):
+        """Create an OmniPBR material with a diffuse texture and bind it to the mesh.
+
+        Args:
+            mesh_prim: The UsdGeom.Mesh prim to bind the material to.
+            name: Mesh name (used for generating texture file names).
+            texture: Either a numpy array (RGBA/RGB image) or a string (absolute file path).
+        """
+        # Resolve texture to an absolute file path
+        if isinstance(texture, np.ndarray):
+            from PIL import Image
+
+            output_dir = os.path.dirname(self.output_path)
+            tex_filename = name.replace("/", "_") + "_diffuse.png"
+            tex_path = os.path.join(output_dir, tex_filename)
+            img = Image.fromarray(texture)
+            img.save(tex_path)
+            tex_path = os.path.abspath(tex_path)
+        else:
+            tex_path = os.path.abspath(str(texture))
+
+        # Create Material and Shader prims as children of the mesh prim
+        mesh_path = mesh_prim.GetPath()
+        mat_path = mesh_path.AppendChild("Material")
+        shader_path = mat_path.AppendChild("Shader")
+
+        material = UsdShade.Material.Define(self.stage, mat_path)
+        shader = UsdShade.Shader.Define(self.stage, shader_path)
+
+        # Configure OmniPBR shader
+        shader.GetImplementationSourceAttr().Set(UsdShade.Tokens.sourceAsset)
+        shader.SetSourceAsset(Sdf.AssetPath("OmniPBR.mdl"), "mdl")
+        shader.SetSourceAssetSubIdentifier("OmniPBR", "mdl")
+
+        # Create shader output and connect to material surface, displacement, and volume
+        shader_output = shader.CreateOutput("out", Sdf.ValueTypeNames.Token)
+        material.CreateSurfaceOutput("mdl").ConnectToSource(shader_output)
+        material.CreateDisplacementOutput("mdl").ConnectToSource(shader_output)
+        material.CreateVolumeOutput("mdl").ConnectToSource(shader_output)
+
+        # Set diffuse texture input
+        shader.CreateInput("diffuse_texture", Sdf.ValueTypeNames.Asset).Set(Sdf.AssetPath(tex_path))
+
+        # Disable projected UVW so explicit primvars:st is used
+        shader.CreateInput("project_uvw", Sdf.ValueTypeNames.Bool).Set(False)
+
+        # Set mesh properties for correct rendering
+        mesh_prim.GetDoubleSidedAttr().Set(True)
+        mesh_prim.GetSubdivisionSchemeAttr().Set("none")
+
+        # Bind material to mesh using MaterialBindingAPI
+        UsdShade.MaterialBindingAPI.Apply(mesh_prim.GetPrim())
+        UsdShade.MaterialBindingAPI(mesh_prim).Bind(material)
+
+    @staticmethod
+    def _compute_smooth_normals(points_np, indices_np):
+        """Compute per-vertex smooth normals by accumulating face normals."""
+        tri_idx = indices_np.reshape(-1, 3)
+        v0 = points_np[tri_idx[:, 0]]
+        v1 = points_np[tri_idx[:, 1]]
+        v2 = points_np[tri_idx[:, 2]]
+        face_normals = np.cross(v1 - v0, v2 - v0)
+        fn_len = np.linalg.norm(face_normals, axis=1, keepdims=True)
+        face_normals = np.where(fn_len > 1e-8, face_normals / fn_len, 0.0)
+        vtx_normals = np.zeros_like(points_np)
+        np.add.at(vtx_normals, tri_idx[:, 0], face_normals)
+        np.add.at(vtx_normals, tri_idx[:, 1], face_normals)
+        np.add.at(vtx_normals, tri_idx[:, 2], face_normals)
+        vn_len = np.linalg.norm(vtx_normals, axis=1, keepdims=True)
+        vtx_normals = np.where(vn_len > 1e-8, vtx_normals / vn_len, 0.0)
+        return np.ascontiguousarray(vtx_normals, dtype=np.float32)
+
     def _get_path(self, name):
         # Handle both absolute and relative paths correctly
         if name.startswith("/"):
@@ -250,27 +323,37 @@ class ViewerUSD(ViewerBase):
 
             mesh_prim = UsdGeom.Mesh.Define(self.stage, self._get_path(name))
 
-            # setup topology once (do not set every frame)
-            face_vertex_counts = [3] * (len(indices_np) // 3)
-            mesh_prim.GetFaceVertexCountsAttr().Set(face_vertex_counts)
-            mesh_prim.GetFaceVertexIndicesAttr().Set(indices_np)
-
             # Store the prototype path
             self._meshes[name] = mesh_prim
 
         mesh_prim = self._meshes[name]
+
+        # Time-sample topology and points (indices can change every frame with tet surface extraction)
+        face_vertex_counts = [3] * (len(indices_np) // 3)
+        mesh_prim.GetFaceVertexCountsAttr().Set(face_vertex_counts, self._frame_index)
+        mesh_prim.GetFaceVertexIndicesAttr().Set(indices_np, self._frame_index)
         mesh_prim.GetPointsAttr().Set(points_np, self._frame_index)
 
-        # Set normals if provided
+        # Set normals — compute smooth normals if none provided
         if normals is not None:
             normals_np = normals.numpy().astype(np.float32)
-            mesh_prim.GetNormalsAttr().Set(normals_np, self._frame_index)
-            mesh_prim.SetNormalsInterpolation(UsdGeom.Tokens.vertex)
+        else:
+            normals_np = self._compute_smooth_normals(points_np, indices_np)
+        mesh_prim.GetNormalsAttr().Set(normals_np, self._frame_index)
+        mesh_prim.SetNormalsInterpolation(UsdGeom.Tokens.vertex)
 
-        # Set UVs if provided (simplified for now)
-        if uvs is not None:
-            # TODO: Implement UV support for USD meshes
-            pass
+        # Set UVs and texture/material once (first frame only)
+        if uvs is not None and name not in self._mesh_materials:
+            uvs_np = uvs.numpy().astype(np.float32) if isinstance(uvs, wp.array) else np.asarray(uvs, dtype=np.float32)
+            st = UsdGeom.PrimvarsAPI(mesh_prim).CreatePrimvar(
+                "st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.vertex
+            )
+            st.Set(uvs_np)
+
+            if texture is not None:
+                self._create_material(mesh_prim, name, texture)
+
+            self._mesh_materials[name] = True
 
         # how to hide the prototype mesh but not the instances in USD?
         mesh_prim.GetVisibilityAttr().Set("inherited" if not hidden else "invisible", self._frame_index)

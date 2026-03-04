@@ -103,6 +103,8 @@ class ViewerRTX(ViewerUSD):
 
         # Mesh prim paths for deforming-mesh point updates
         self._mesh_prim_paths: dict[str, str] = {}
+        # Mapping from mesh prototype name → instance prim paths (for writing points to instances)
+        self._mesh_instance_paths: dict[str, list[str]] = {}
 
         # Per-frame pending data (cleared each begin_frame)
         self._pending_xforms: dict[str, tuple[np.ndarray, np.ndarray]] = {}
@@ -638,6 +640,10 @@ void main() {
                 count = len(xforms)
                 paths = [self._get_path(name) + f"/instance_{i}" for i in range(count)]
                 self._instance_prim_paths[name] = paths
+                # Track which instance paths correspond to each mesh prototype
+                if mesh not in self._mesh_instance_paths:
+                    self._mesh_instance_paths[mesh] = []
+                self._mesh_instance_paths[mesh].extend(paths)
         else:
             if xforms is not None:
                 xf = xforms.numpy() if isinstance(xforms, wp.array) else np.asarray(xforms)
@@ -734,15 +740,27 @@ void main() {
             return
         with wp.ScopedTimer("ViewerRTX::update_mesh_points", active=PROFILE_ENABLED, use_nvtx=True):
             for mesh_name, points_np in self._pending_mesh_points.items():
-                prim_path = self._mesh_prim_paths.get(mesh_name)
-                if prim_path is None:
-                    continue
-                dl = self._make_point3f_dltensor(points_np)
-                self._rtx.write_array_attribute(
-                    prim_paths=[prim_path],
-                    attribute_name="points",
-                    tensors=[dl],
-                )
+                # Write to instance prim paths if they exist (OVRTX resolves
+                # USD references at load time, so the prototype's points
+                # don't propagate to instances in Fabric).
+                instance_paths = self._mesh_instance_paths.get(mesh_name)
+                if instance_paths:
+                    dl = self._make_point3f_dltensor(points_np)
+                    self._rtx.write_array_attribute(
+                        prim_paths=instance_paths,
+                        attribute_name="points",
+                        tensors=[dl] * len(instance_paths),
+                    )
+                else:
+                    prim_path = self._mesh_prim_paths.get(mesh_name)
+                    if prim_path is None:
+                        continue
+                    dl = self._make_point3f_dltensor(points_np)
+                    self._rtx.write_array_attribute(
+                        prim_paths=[prim_path],
+                        attribute_name="points",
+                        tensors=[dl],
+                    )
 
     @staticmethod
     def _xform_to_mat44(pos, quat, scale):
