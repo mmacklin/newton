@@ -1200,7 +1200,7 @@ If None, uses the model’s <a class="reference internal" href="#newton.Model.re
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>gravity</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>] </em><em>| </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em> | </em><a class="reference external" href="https://nvidia.github.io/warp/api_reference/_generated/warp.vec3f.html#warp.vec3f" title="(in Warp v1.11.1)"><em>vec3f</em></a><em> | </em><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)"><em>ndarray</em></a>) – Gravity vector (3,) or per-world array (world_count, 3).</p></li>
+<li><p><strong>gravity</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>] </em><em>| </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em> | </em><a class="reference external" href="https://nvidia.github.io/warp/api_reference/_generated/warp.vec3f.html#warp.vec3f" title="(in Warp v1.12.0)"><em>vec3f</em></a><em> | </em><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)"><em>ndarray</em></a>) – Gravity vector (3,) or per-world array (world_count, 3).</p></li>
 <li><p><strong>world</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> | </em><em>None</em>) – If provided, set gravity only for this world.</p></li>
 </ul>
 </dd>
@@ -1313,6 +1313,12 @@ or custom frequencies for custom entity types (e.g., <code class="docutils liter
 <dt class="sig sig-object py" id="newton.Model.body_count">
 <span class="sig-name descname"><span class="pre">body_count</span></span><a class="headerlink" href="#newton.Model.body_count" title="Link to this definition">#</a></dt>
 <dd><p>Total number of bodies in the system.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="newton.Model.body_flags">
+<span class="sig-name descname"><span class="pre">body_flags</span></span><a class="headerlink" href="#newton.Model.body_flags" title="Link to this definition">#</a></dt>
+<dd><p>Rigid body flags (<a class="reference internal" href="newton.BodyFlags.html#newton.BodyFlags" title="newton.BodyFlags"><code class="xref py py-class docutils literal notranslate"><span class="pre">BodyFlags</span></code></a>), shape [body_count], int.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -2552,6 +2558,7 @@ Stored per-element; kernels multiply by rest area internally.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.body_colors"><code class="docutils literal notranslate"><span class="pre">Model.body_colors</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.body_com"><code class="docutils literal notranslate"><span class="pre">Model.body_com</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.body_count"><code class="docutils literal notranslate"><span class="pre">Model.body_count</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.body_flags"><code class="docutils literal notranslate"><span class="pre">Model.body_flags</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.body_inertia"><code class="docutils literal notranslate"><span class="pre">Model.body_inertia</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.body_inv_inertia"><code class="docutils literal notranslate"><span class="pre">Model.body_inv_inertia</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.body_inv_mass"><code class="docutils literal notranslate"><span class="pre">Model.body_inv_mass</span></code></a></li>
