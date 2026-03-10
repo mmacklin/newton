@@ -25,8 +25,6 @@ from ..geometry import GeoType, ShapeFlags
 from ..sim import Model, State
 from .warp_raytrace import ClearData, GaussianRenderMode, RenderContext, RenderLightType, RenderOrder
 
-DEFAULT_CLEAR_DATA = ClearData(clear_color=0xFF666666, clear_albedo=0xFF000000)
-
 
 @wp.kernel(enable_backward=False)
 def convert_newton_transform(
@@ -110,6 +108,10 @@ class SensorTiledCamera:
     RenderLightType = RenderLightType
     RenderOrder = RenderOrder
     GaussianRenderMode = GaussianRenderMode
+    ClearData = ClearData
+
+    DEFAULT_CLEAR_DATA = ClearData()
+    GRAY_CLEAR_DATA = ClearData(clear_color=0xFF666666, clear_albedo=0xFF000000)
 
     @dataclass
     class Config:
