@@ -39,7 +39,7 @@ from newton._src.solvers.kamino._src.geometry.aggregation import ContactAggregat
 from newton._src.solvers.kamino._src.solver_kamino_impl import SolverKaminoImpl
 from newton._src.solvers.kamino._src.utils import logger as msg
 from newton._src.solvers.kamino._src.utils.sim import Simulator
-from newton._src.viewer import ViewerGL
+from newton._src.viewer import ViewerGL, ViewerRTX
 
 
 class SimulatorFromNewton:
@@ -192,6 +192,7 @@ class RigidBodySim:
         video_folder: str | None = None,
         async_save: bool = True,
         max_contacts_per_pair: int | None = None,
+        viewer_type: str = "gl",
     ):
         # ----- Device setup -----
         self._device = wp.get_device(device)
@@ -273,13 +274,15 @@ class RigidBodySim:
         self._extract_metadata()
 
         # ----- Viewer -----
-        self.viewer: ViewerGL | None = None
+        self.viewer: ViewerGL | ViewerRTX | None = None
         self._newton_state: newton.State | None = None
         if not headless:
             msg.notif("Creating the 3D viewer ...")
-            self.viewer = ViewerGL()
+            if viewer_type == "rtx":
+                self.viewer = ViewerRTX()
+            else:
+                self.viewer = ViewerGL()
             self.viewer.set_model(self._newton_model)
-            # Newton state used only for rendering (body_q synced from Kamino each frame)
             self._newton_state = self._newton_model.state()
 
         # ----- CUDA graphs -----

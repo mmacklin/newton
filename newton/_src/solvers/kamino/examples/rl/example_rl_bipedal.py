@@ -42,23 +42,8 @@ from newton._src.solvers.kamino.examples.rl.simulation import RigidBodySim
 from newton._src.solvers.kamino.examples.rl.simulation_runner import SimulationRunner
 from newton._src.solvers.kamino.examples.rl.utils import _load_policy_checkpoint, quat_to_projected_yaw
 
-# Asset root relative to this file
-_ASSETS_DIR = os.path.normpath(
-    os.path.join(
-        os.path.dirname(__file__),
-        "..",
-        "..",
-        "..",
-        "..",
-        "..",
-        "..",
-        "..",
-        "walking-character-rl",
-        "walking_rl_kamino",
-        "assets",
-        "usd",
-    )
-)
+# Asset directory next to this file
+_ASSETS_DIR = os.path.join(os.path.dirname(__file__), "bipedal")
 
 # ---------------------------------------------------------------------------
 # Bipedal joint normalization
@@ -114,6 +99,7 @@ class Example:
         device: wp.DeviceLike = None,
         policy=None,
         headless: bool = False,
+        viewer_type: str = "gl",
     ):
         # Timing
         self.sim_dt = 0.02
@@ -122,7 +108,7 @@ class Example:
         self.env_dt = self.sim_dt * self.control_decimation
 
         # USD model path
-        USD_MODEL_PATH = os.path.join(_ASSETS_DIR, "bipedal", "bdx_merged.usda")
+        USD_MODEL_PATH = os.path.join(_ASSETS_DIR, "bdx_merged.usda")
 
         # Create generic articulated body simulator
         self.sim_wrapper = RigidBodySim(
@@ -133,6 +119,7 @@ class Example:
             headless=headless,
             body_pose_offset=(0.0, 0.0, 0.33, 0.0, 0.0, 0.0, 1.0),
             use_cuda_graph=True,
+            viewer_type=viewer_type,
         )
 
         # Override PD gains
@@ -273,6 +260,13 @@ if __name__ == "__main__":
         help="Run in headless mode",
     )
     parser.add_argument(
+        "--viewer",
+        type=str,
+        default="gl",
+        choices=["gl", "rtx"],
+        help="Viewer type: gl (OpenGL) or rtx (ray-traced)",
+    )
+    parser.add_argument(
         "--mode",
         choices=["sync", "async"],
         default="sync",
@@ -301,8 +295,8 @@ if __name__ == "__main__":
     torch_device = "cuda" if device.is_cuda else "cpu"
 
     # Load trained policy
-    POLICY_PATH = os.path.join(_ASSETS_DIR, "bipedal", "model.pt")
-    PHASE_RATE_POLICY_PATH = os.path.join(_ASSETS_DIR, "bipedal", "phase_rate.pt")
+    POLICY_PATH = os.path.join(_ASSETS_DIR, "model.pt")
+    PHASE_RATE_POLICY_PATH = os.path.join(_ASSETS_DIR, "phase_rate.pt")
     policy = _load_policy_checkpoint(POLICY_PATH, device=torch_device)
     msg.info(f"Loaded policy from: {POLICY_PATH}")
 
@@ -310,6 +304,7 @@ if __name__ == "__main__":
         device=device,
         policy=policy,
         headless=args.headless,
+        viewer_type=args.viewer,
     )
 
     try:
