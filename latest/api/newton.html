@@ -168,15 +168,15 @@
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../guide/key-concepts.html">
-    Key Concepts
+  <a class="nav-link nav-internal" href="../guide/tutorials.html">
+    Tutorials
   </a>
 </li>
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../guide/tutorials.html">
-    Tutorials
+  <a class="nav-link nav-internal" href="../guide/development.html">
+    Development
   </a>
 </li>
 
@@ -189,13 +189,6 @@
                 <ul id="pst-nav-more-links" class="dropdown-menu">
                     
 <li class=" ">
-  <a class="nav-link dropdown-item nav-internal" href="../guide/development.html">
-    Development
-  </a>
-</li>
-
-
-<li class=" ">
   <a class="nav-link dropdown-item nav-internal" href="../concepts/worlds.html">
     Worlds
   </a>
@@ -205,6 +198,13 @@
 <li class=" ">
   <a class="nav-link dropdown-item nav-internal" href="../concepts/articulations.html">
     Articulations
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../concepts/mass_inertia.html">
+    Mass and Inertia
   </a>
 </li>
 
@@ -469,13 +469,6 @@
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../guide/key-concepts.html">
-    Key Concepts
-  </a>
-</li>
-
-
-<li class="nav-item ">
   <a class="nav-link nav-internal" href="../guide/tutorials.html">
     Tutorials
   </a>
@@ -499,6 +492,13 @@
 <li class="nav-item ">
   <a class="nav-link nav-internal" href="../concepts/articulations.html">
     Articulations
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../concepts/mass_inertia.html">
+    Mass and Inertia
   </a>
 </li>
 
@@ -701,7 +701,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../guide/overview.html">Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/visualization.html">Visualization</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../guide/key-concepts.html">Key Concepts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/tutorials.html">Tutorials</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../guide/development.html">Development</a></li>
 </ul>
@@ -709,6 +708,7 @@
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../concepts/worlds.html">Worlds</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../concepts/articulations.html">Articulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../concepts/mass_inertia.html">Mass and Inertia</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../concepts/sites.html">Sites</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../concepts/sensors.html">Sensors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../concepts/conventions.html">Conventions</a></li>
@@ -834,40 +834,43 @@
 <tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.EqType.html#newton.EqType" title="newton.EqType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EqType</span></code></a></p></td>
 <td><p>Enumeration of equality constraint types between bodies or joints.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.GeoType.html#newton.GeoType" title="newton.GeoType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GeoType</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.Gaussian.html#newton.Gaussian" title="newton.Gaussian"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Gaussian</span></code></a></p></td>
+<td><p>Represents a Gaussian splat asset for rendering and rigid body attachment.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.GeoType.html#newton.GeoType" title="newton.GeoType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GeoType</span></code></a></p></td>
 <td><p>Enumeration of geometric shape types supported in Newton.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.Heightfield.html#newton.Heightfield" title="newton.Heightfield"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Heightfield</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.Heightfield.html#newton.Heightfield" title="newton.Heightfield"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Heightfield</span></code></a></p></td>
 <td><p>Represents a heightfield (2D elevation grid) for terrain and large static surfaces.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.JointTargetMode.html#newton.JointTargetMode" title="newton.JointTargetMode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">JointTargetMode</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.JointTargetMode.html#newton.JointTargetMode" title="newton.JointTargetMode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">JointTargetMode</span></code></a></p></td>
 <td><p>Enumeration of actuator modes for joint degrees of freedom.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.JointType.html#newton.JointType" title="newton.JointType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">JointType</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.JointType.html#newton.JointType" title="newton.JointType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">JointType</span></code></a></p></td>
 <td><p>Enumeration of joint types supported in Newton.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.Mesh.html#newton.Mesh" title="newton.Mesh"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Mesh</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.Mesh.html#newton.Mesh" title="newton.Mesh"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Mesh</span></code></a></p></td>
 <td><p>Represents a triangle mesh for collision and simulation.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.Model.html#newton.Model" title="newton.Model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Model</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.Model.html#newton.Model" title="newton.Model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Model</span></code></a></p></td>
 <td><p>Represents the static (non-time-varying) definition of a simulation model in Newton.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.ModelBuilder.html#newton.ModelBuilder" title="newton.ModelBuilder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelBuilder</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.ModelBuilder.html#newton.ModelBuilder" title="newton.ModelBuilder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelBuilder</span></code></a></p></td>
 <td><p>A helper class for building simulation models at runtime.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.ParticleFlags.html#newton.ParticleFlags" title="newton.ParticleFlags"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ParticleFlags</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.ParticleFlags.html#newton.ParticleFlags" title="newton.ParticleFlags"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ParticleFlags</span></code></a></p></td>
 <td><p>Flags for particle properties.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.SDF.html#newton.SDF" title="newton.SDF"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SDF</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.SDF.html#newton.SDF" title="newton.SDF"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SDF</span></code></a></p></td>
 <td><p>Opaque SDF container owning kernel payload and runtime references.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.ShapeFlags.html#newton.ShapeFlags" title="newton.ShapeFlags"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ShapeFlags</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.ShapeFlags.html#newton.ShapeFlags" title="newton.ShapeFlags"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ShapeFlags</span></code></a></p></td>
 <td><p>Flags for shape properties.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.State.html#newton.State" title="newton.State"><code class="xref py py-obj docutils literal notranslate"><span class="pre">State</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.State.html#newton.State" title="newton.State"><code class="xref py py-obj docutils literal notranslate"><span class="pre">State</span></code></a></p></td>
 <td><p>Represents the time-varying state of a <a class="reference internal" href="_generated/newton.Model.html#newton.Model" title="newton.Model"><code class="xref py py-class docutils literal notranslate"><span class="pre">Model</span></code></a> in a simulation.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_generated/newton.TetMesh.html#newton.TetMesh" title="newton.TetMesh"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TetMesh</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/newton.TetMesh.html#newton.TetMesh" title="newton.TetMesh"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TetMesh</span></code></a></p></td>
 <td><p>Represents a tetrahedral mesh for volumetric deformable simulation.</p></td>
 </tr>
 </tbody>
