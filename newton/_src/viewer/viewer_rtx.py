@@ -122,6 +122,7 @@ class ViewerRTX(ViewerUSD):
         # Pyglet window state
         self._window = None
         self._pyglet_app = None
+        self._pyglet_event_loop_started = False
         self._should_close = False
         self._camera_dirty = True
 
@@ -186,6 +187,21 @@ class ViewerRTX(ViewerUSD):
             vsync=self._vsync_init,
         )
         self._pyglet_app = pyglet.app
+
+        if not self._headless:
+            # Match the GL viewer's synchronous event-loop setup so the Win32
+            # backend is pumping messages before we start dispatching events.
+            from pyglet.window import Window
+
+            Window._enable_event_queue = False
+            self._window.dispatch_pending_events()
+            try:
+                self._pyglet_app.platform_event_loop.start()
+            except RuntimeError:
+                # Pyglet raises if the platform loop is already running.
+                pass
+            else:
+                self._pyglet_event_loop_started = True
 
         # ---- GL texture + shader for zero-copy blit --------------------------
         self._window.switch_to()
@@ -646,6 +662,8 @@ void main() {
                 semantic=Semantic.XFORM_MAT4x4,
                 prim_mode=PrimMode.MUST_EXIST,
             )
+        else:
+            self._transform_binding = None
 
         # Create the presentation window now that all Warp kernels have been
         # compiled.  Doing this earlier causes a deadlock on Windows because
@@ -654,6 +672,14 @@ void main() {
         self._init_window()
 
         self._phase = self._PHASE_RENDER
+
+    def _require_transform_binding(self):
+        if self._transform_binding is None:
+            raise RuntimeError(
+                "ViewerRTX cannot update instanced transforms because the OVRTX "
+                "transform binding was not initialized during the build phase."
+            )
+        return self._transform_binding
 
     # ------------------------------------------------ ViewerUSD overrides
 
@@ -792,6 +818,9 @@ void main() {
                 self._instance_prim_paths[name] = paths
         else:
             if xforms is not None:
+                if len(xforms) == 0:
+                    return
+                self._require_transform_binding()
                 if scales is None:
                     scales = wp.ones(len(xforms), dtype=wp.vec3)
                 self._pending_xforms[name] = (xforms, scales)
@@ -839,12 +868,13 @@ void main() {
             self._camera_dirty = False
 
     def _update_ovrtx_transforms(self):
-        if not self._transform_binding or not self._pending_xforms:
+        if not self._pending_xforms:
             return
+        transform_binding = self._require_transform_binding()
         with wp.ScopedTimer("ViewerRTX::update_transforms", active=PROFILE_ENABLED, use_nvtx=True):
             from ovrtx import Device
 
-            with self._transform_binding.map(device=Device.CUDA) as mapping:
+            with transform_binding.map(device=Device.CUDA) as mapping:
                 matrices = wp.from_dlpack(mapping.tensor, dtype=wp.mat44d)  # (N, 4, 4) float64
 
                 offset = 0
@@ -856,7 +886,9 @@ void main() {
                         wp.launch(write_transforms, dim=n, inputs=[xf, sc, offset, matrices], device=matrices.device)
                     offset += count
 
-                mapping.unmap(stream=matrices.device.stream.cuda_stream)
+                stream = getattr(matrices.device, "stream", None)
+                cuda_stream = getattr(stream, "cuda_stream", None)
+                mapping.unmap(stream=cuda_stream)
 
     @staticmethod
     def _make_point3f_dltensor(points_np):
@@ -893,39 +925,6 @@ void main() {
                     tensors=[dl],
                 )
 
-    @staticmethod
-    def _xform_to_mat44(pos, quat, scale):
-        """Convert (pos, quaternion_xyzw, scale) to 4x4 row-major matrix (float64).
-
-        Matches the USD GfMatrix4d / OVRTX fabric convention where the
-        translation lives in the last row and basis vectors in the first three.
-        """
-        x, y, z, w = float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3])
-        sx, sy, sz = float(scale[0]), float(scale[1]), float(scale[2])
-
-        xx, yy, zz = x * x, y * y, z * z
-        xy, xz, yz = x * y, x * z, y * z
-        wx, wy, wz = w * x, w * y, w * z
-
-        mat = np.empty((4, 4), dtype=np.float64)
-        mat[0, 0] = (1.0 - 2.0 * (yy + zz)) * sx
-        mat[0, 1] = (2.0 * (xy + wz)) * sx
-        mat[0, 2] = (2.0 * (xz - wy)) * sx
-        mat[0, 3] = 0.0
-        mat[1, 0] = (2.0 * (xy - wz)) * sy
-        mat[1, 1] = (1.0 - 2.0 * (xx + zz)) * sy
-        mat[1, 2] = (2.0 * (yz + wx)) * sy
-        mat[1, 3] = 0.0
-        mat[2, 0] = (2.0 * (xz + wy)) * sz
-        mat[2, 1] = (2.0 * (yz - wx)) * sz
-        mat[2, 2] = (1.0 - 2.0 * (xx + yy)) * sz
-        mat[2, 3] = 0.0
-        mat[3, 0] = float(pos[0])
-        mat[3, 1] = float(pos[1])
-        mat[3, 2] = float(pos[2])
-        mat[3, 3] = 1.0
-        return mat
-
     # ------------------------------------------------------- render + display
 
     def _update_fps(self):
@@ -951,16 +950,23 @@ void main() {
                 products = self._render_result.wait() if self._render_result is not None else None
 
             if products is not None:
-                for _pname, product in products.items():
-                    for frame in product.frames:
-                        if "LdrColor" in frame.render_vars:
-                            with wp.ScopedTimer("ViewerRTX::fb_map", active=PROFILE_ENABLED, use_nvtx=True):
-                                with frame.render_vars["LdrColor"].map(device=Device.CPU) as mapping:
-                                    pixels = np.from_dlpack(mapping.tensor)
-                                    with wp.ScopedTimer(
-                                        "ViewerRTX::blit_to_window", active=PROFILE_ENABLED, use_nvtx=True
-                                    ):
-                                        self._blit_to_window(pixels)
+                try:
+                    for _pname, product in products.items():
+                        for frame in product.frames:
+                            if "LdrColor" in frame.render_vars:
+                                with wp.ScopedTimer("ViewerRTX::fb_map", active=PROFILE_ENABLED, use_nvtx=True):
+                                    with frame.render_vars["LdrColor"].map(device=Device.CPU) as mapping:
+                                        pixels = np.from_dlpack(mapping.tensor)
+                                        with wp.ScopedTimer(
+                                            "ViewerRTX::blit_to_window", active=PROFILE_ENABLED, use_nvtx=True
+                                        ):
+                                            self._blit_to_window(pixels)
+                finally:
+                    products.destroy()
+
+            if not self.is_running():
+                self._render_result = None
+                return
 
             # kick off next async rendering frame
             with wp.ScopedTimer("ViewerRTX::rtx_step", active=PROFILE_ENABLED, use_nvtx=True):
@@ -1060,6 +1066,15 @@ void main() {
 
     @override
     def close(self):
+        if self._render_result is not None:
+            try:
+                products = self._render_result.wait(step_timeout_ns=5_000_000_000, fetch_timeout_ns=5_000_000_000)
+                if products is not None:
+                    products.destroy()
+            except Exception:
+                pass
+            self._render_result = None
+
         if self._transform_binding is not None:
             self._transform_binding.unbind()
             self._transform_binding = None
@@ -1069,7 +1084,7 @@ void main() {
             self.ui.shutdown()
 
         if self._window is not None:
-            if not self._headless:
+            if not self._headless and self._pyglet_event_loop_started and self._pyglet_app is not None:
                 try:
                     self._pyglet_app.event_loop.dispatch_event("on_exit")
                     self._pyglet_app.platform_event_loop.stop()
@@ -1077,3 +1092,4 @@ void main() {
                     pass
             self._window.close()
             self._window = None
+            self._pyglet_event_loop_started = False
