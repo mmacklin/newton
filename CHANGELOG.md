@@ -5,6 +5,7 @@
 ### Added
 
 - Interactive example browser in the GL viewer with tree-view navigation and switch/reset support
+- Add box pyramid example and ASV benchmark for dense convex-on-convex contacts
 
 ### Changed
 
