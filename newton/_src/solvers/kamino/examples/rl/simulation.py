@@ -279,7 +279,7 @@ class RigidBodySim:
         if not headless:
             msg.notif("Creating the 3D viewer ...")
             if viewer_type == "rtx":
-                self.viewer = ViewerRTX()
+                self.viewer = ViewerRTX(environment="studio")
             else:
                 self.viewer = ViewerGL()
             self.viewer.set_model(self._newton_model)
