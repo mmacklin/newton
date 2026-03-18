@@ -11,6 +11,7 @@
 - Support kinematic bodies in VBD solver
 - Add brick stacking example
 - Add box pyramid example and ASV benchmark for dense convex-on-convex contacts
+- Add plotting example showing how to access and visualize per-step simulation diagnostics
 - Add `exposure` property to GL renderer
 - Expose `gizmo_is_using` attribute to detect whether a gizmo is actively being dragged
 - Add per-axis gizmo filtering via `translate`/`rotate` parameters on `log_gizmo`
@@ -27,6 +28,8 @@
 ### Deprecated
 
 ### Removed
+
+- Remove `robot_humanoid` example in favor of `basic_plotting` which uses the same humanoid model with diagnostics visualization
 
 ### Fixed
 
