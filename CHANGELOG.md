@@ -16,6 +16,7 @@
 - Add `snap_to` argument to `ViewerGL.log_gizmo()` to snap gizmos to a target world transform when the user releases them
 - Expose `gizmo_is_using` attribute to detect whether a gizmo is actively being dragged
 - Add per-axis gizmo filtering via `translate`/`rotate` parameters on `log_gizmo`
+- Add conceptual overview and MuJoCo Warp integration primer to collision documentation
 - Add configurable velocity basis for implicit MPM (`velocity_basis`, default `"Q1"`) with GIMP quadrature option (`integration_scheme="gimp"`)
 - Add plastic viscosity, dilatancy, hardening and softening rate as per-particle MPM material properties (`mpm:viscosity`, `mpm:dilatancy`, `mpm:hardening_rate`, `mpm:softening_rate`)
 - Add MPM beam twist, snow ball, and viscous coiling examples
