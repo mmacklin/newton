@@ -338,6 +338,9 @@ class GlobalContactReducerData:
     # contact_area: area of contact surface element (per contact)
     contact_area: wp.array(dtype=wp.float32)
 
+    # Cached normal-bin hashtable entry index per contact
+    contact_nbin_entry: wp.array(dtype=wp.int32)
+
     # Effective stiffness coefficient k_a*k_b/(k_a+k_b) per hashtable entry
     # Constant for a given shape pair, stored once per entry instead of per contact
     entry_k_eff: wp.array(dtype=wp.float32)
@@ -355,6 +358,12 @@ class GlobalContactReducerData:
     # Weight sum per hashtable entry (for anchor contact normalization)
     # Accumulates sum(area * depth) for penetrating contacts
     weight_sum: wp.array(dtype=wp.float32)
+
+    # Total depth of reduced (winning) contacts per normal bin entry.
+    total_depth_reduced: wp.array(dtype=wp.float32)
+
+    # Total depth-weighted normal of reduced (winning) contacts per normal bin entry.
+    total_normal_reduced: wp.array(dtype=wp.vec3)
 
     # Hashtable arrays
     ht_keys: wp.array(dtype=wp.uint64)
@@ -376,6 +385,11 @@ def _clear_active_kernel(
     weighted_pos_sum: wp.array(dtype=wp.vec3),
     weight_sum: wp.array(dtype=wp.float32),
     entry_k_eff: wp.array(dtype=wp.float32),
+    total_depth_reduced: wp.array(dtype=wp.float32),
+    total_normal_reduced: wp.array(dtype=wp.vec3),
+    agg_moment_unreduced: wp.array(dtype=wp.float32),
+    agg_moment_reduced: wp.array(dtype=wp.float32),
+    agg_moment2_reduced: wp.array(dtype=wp.float32),
     ht_capacity: int,
     values_per_key: int,
     num_threads: int,
@@ -413,6 +427,12 @@ def _clear_active_kernel(
                 weighted_pos_sum[entry_idx] = wp.vec3(0.0, 0.0, 0.0)
                 weight_sum[entry_idx] = 0.0
                 entry_k_eff[entry_idx] = 0.0
+                total_depth_reduced[entry_idx] = 0.0
+                total_normal_reduced[entry_idx] = wp.vec3(0.0, 0.0, 0.0)
+                if agg_moment_unreduced.shape[0] > 0:
+                    agg_moment_unreduced[entry_idx] = 0.0
+                    agg_moment_reduced[entry_idx] = 0.0
+                    agg_moment2_reduced[entry_idx] = 0.0
 
         # Clear this value slot (slot-major layout)
         value_idx = local_idx * ht_capacity + entry_idx
@@ -485,6 +505,7 @@ class GlobalContactReducer:
         capacity: int,
         device: str | None = None,
         store_hydroelastic_data: bool = False,
+        store_moment_data: bool = False,
     ):
         """Initialize the global contact reducer.
 
@@ -492,6 +513,8 @@ class GlobalContactReducer:
             capacity: Maximum number of contacts to store
             device: Warp device (e.g., "cuda:0", "cpu")
             store_hydroelastic_data: If True, allocate arrays for contact_area and entry_k_eff
+            store_moment_data: If True, allocate moment accumulator arrays for friction
+                moment matching. Only needed when ``moment_matching=True``.
         """
         self.capacity = capacity
         self.device = device
@@ -508,8 +531,10 @@ class GlobalContactReducer:
         # Optional hydroelastic data arrays
         if store_hydroelastic_data:
             self.contact_area = wp.zeros(capacity, dtype=wp.float32, device=device)
+            self.contact_nbin_entry = wp.zeros(capacity, dtype=wp.int32, device=device)
         else:
             self.contact_area = wp.zeros(0, dtype=wp.float32, device=device)
+            self.contact_nbin_entry = wp.zeros(0, dtype=wp.int32, device=device)
 
         # Per-contact dedup flags for cross-entry deduplication during export
         self.exported_flags = wp.zeros(capacity, dtype=wp.int32, device=device)
@@ -540,11 +565,29 @@ class GlobalContactReducer:
             self.weight_sum = wp.zeros(self.hashtable.capacity, dtype=wp.float32, device=device)
             # k_eff per entry (constant per shape pair, set once on first insert)
             self.entry_k_eff = wp.zeros(self.hashtable.capacity, dtype=wp.float32, device=device)
+            # Total depth of reduced contacts per normal bin (accumulated from all winning contacts)
+            self.total_depth_reduced = wp.zeros(self.hashtable.capacity, dtype=wp.float32, device=device)
+            # Total depth-weighted normal of reduced contacts per normal bin
+            self.total_normal_reduced = wp.zeros(self.hashtable.capacity, dtype=wp.vec3, device=device)
+            # Moment accumulators for moment matching (friction scale adjustment)
+            if store_moment_data:
+                self.agg_moment_unreduced = wp.zeros(self.hashtable.capacity, dtype=wp.float32, device=device)
+                self.agg_moment_reduced = wp.zeros(self.hashtable.capacity, dtype=wp.float32, device=device)
+                self.agg_moment2_reduced = wp.zeros(self.hashtable.capacity, dtype=wp.float32, device=device)
+            else:
+                self.agg_moment_unreduced = wp.zeros(0, dtype=wp.float32, device=device)
+                self.agg_moment_reduced = wp.zeros(0, dtype=wp.float32, device=device)
+                self.agg_moment2_reduced = wp.zeros(0, dtype=wp.float32, device=device)
         else:
             self.agg_force = wp.zeros(0, dtype=wp.vec3, device=device)
             self.weighted_pos_sum = wp.zeros(0, dtype=wp.vec3, device=device)
             self.weight_sum = wp.zeros(0, dtype=wp.float32, device=device)
             self.entry_k_eff = wp.zeros(0, dtype=wp.float32, device=device)
+            self.total_depth_reduced = wp.zeros(0, dtype=wp.float32, device=device)
+            self.total_normal_reduced = wp.zeros(0, dtype=wp.vec3, device=device)
+            self.agg_moment_unreduced = wp.zeros(0, dtype=wp.float32, device=device)
+            self.agg_moment_reduced = wp.zeros(0, dtype=wp.float32, device=device)
+            self.agg_moment2_reduced = wp.zeros(0, dtype=wp.float32, device=device)
 
     def clear(self):
         """Clear all contacts and reset the reducer (full clear)."""
@@ -574,6 +617,11 @@ class GlobalContactReducer:
                 self.weighted_pos_sum,
                 self.weight_sum,
                 self.entry_k_eff,
+                self.total_depth_reduced,
+                self.total_normal_reduced,
+                self.agg_moment_unreduced,
+                self.agg_moment_reduced,
+                self.agg_moment2_reduced,
                 self.hashtable.capacity,
                 self.values_per_key,
                 num_threads,
@@ -607,10 +655,13 @@ class GlobalContactReducer:
         data.contact_count = self.contact_count
         data.capacity = self.capacity
         data.contact_area = self.contact_area
+        data.contact_nbin_entry = self.contact_nbin_entry
         data.entry_k_eff = self.entry_k_eff
         data.agg_force = self.agg_force
         data.weighted_pos_sum = self.weighted_pos_sum
         data.weight_sum = self.weight_sum
+        data.total_depth_reduced = self.total_depth_reduced
+        data.total_normal_reduced = self.total_normal_reduced
         data.ht_keys = self.hashtable.keys
         data.ht_values = self.ht_values
         data.ht_active_slots = self.hashtable.active_slots
