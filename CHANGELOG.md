@@ -22,6 +22,7 @@
 - Add MPM beam twist, snow ball, and viscous coiling examples
 - Add support for textures in `SensorTiledCamera` via `Config.enable_textures`
 - Add `enable_ambient_lighting` and `enable_particles` options to `SensorTiledCamera.Config`
+- Add per-shape display colors via `ModelBuilder.shape_color`, `Model.shape_color`, and `color=` on `ModelBuilder.add_shape_*`; mesh shapes fall back to `Mesh.color` when available and viewers honor runtime `Model.shape_color` updates
 - Add `ModelBuilder.inertia_tolerance` to configure the eigenvalue positivity and triangle inequality threshold used during inertia correction in `finalize()`
 
 ### Changed
@@ -39,6 +40,7 @@
 - Simplify `SensorContact` force output: add `total_force` (aggregate per sensing object) and `force_matrix` (per-counterpart breakdown, `None` when no counterparts)
 - Add `sensing_obj_idx` (`list[int]`), `counterpart_indices` (`list[list[int]]`), `sensing_obj_type`, and `counterpart_type` attributes. Rename `include_total` to `measure_total`
 - Replace verbose Apache 2.0 boilerplate with two-line SPDX-only license headers across all source and documentation files
+- Add `custom_attributes` argument to `ModelBuilder.add_shape_convex_hull()`
 - Improve wrench preservation in hydroelastic contacts with contact reduction.
 
 ### Deprecated
@@ -48,6 +50,7 @@
 - Deprecate `SensorContact.sensing_objs` in favor of `SensorContact.sensing_obj_idx`
 - Deprecate `SensorContact.counterparts` and `SensorContact.reading_indices` in favor of `SensorContact.counterpart_indices`
 - Deprecate `SensorContact.shape` (use `total_force.shape` and `force_matrix.shape` instead) 
+- Deprecate `Viewer.update_shape_colors()` in favor of writing directly to `Model.shape_color`
 
 ### Removed
 
@@ -76,6 +79,7 @@
 - Decompose loop joint constraints by DOF type (WELD for fixed, CONNECT-pair for revolute, single CONNECT for ball) instead of always emitting 2x CONNECT
 - Fix inertia box wireframe rotation for isotropic and axisymmetric bodies in viewer
 - Implicit MPM solver now uses `mass=0` for kinematic particles instead of `ACTIVE` flag
+- Fix `ModelBuilder.approximate_meshes()` to handle the duplication of per-shape custom attributes that results from convex decomposition
 - Fix `get_tetmesh()` winding order for left-handed USD meshes
 - Fix contact force conversion in `SolverMuJoCo` to include friction (tangential) components
 
