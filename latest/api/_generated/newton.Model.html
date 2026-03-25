@@ -810,7 +810,7 @@
 <h1>newton.Model<a class="headerlink" href="#newton-model" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="newton.Model">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">newton.</span></span><span class="sig-name descname"><span class="pre">Model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/newton-physics/newton/blob/main/newton/_src/sim/model.py#L39"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#newton.Model" title="Link to this definition">#</a></dt>
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">newton.</span></span><span class="sig-name descname"><span class="pre">Model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/newton-physics/newton/blob/main/newton/_src/sim/model.py#L26"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#newton.Model" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Represents the static (non-time-varying) definition of a simulation model in Newton.</p>
 <p>The Model class encapsulates all geometry, constraints, and parameters that describe a physical system
@@ -1611,8 +1611,14 @@ and the last element stores the total equality constraint count.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="newton.Model.heightfield_elevation_data">
-<span class="sig-name descname"><span class="pre">heightfield_elevation_data</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">wp.array</span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="pre">wp.float32</span><span class="p"><span class="pre">)</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><a class="headerlink" href="#newton.Model.heightfield_elevation_data" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="newton.Model.heightfield_data">
+<span class="sig-name descname"><span class="pre">heightfield_data</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">wp.array</span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="pre">HeightfieldData</span><span class="p"><span class="pre">)</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><a class="headerlink" href="#newton.Model.heightfield_data" title="Link to this definition">#</a></dt>
+<dd><p>Compact array of HeightfieldData structs, one per actual heightfield shape.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="newton.Model.heightfield_elevations">
+<span class="sig-name descname"><span class="pre">heightfield_elevations</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">wp.array</span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="pre">wp.float32</span><span class="p"><span class="pre">)</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><a class="headerlink" href="#newton.Model.heightfield_elevations" title="Link to this definition">#</a></dt>
 <dd><p>Concatenated 1D elevation array for all heightfields. Kernels index via HeightfieldData.data_offset.</p>
 </dd></dl>
 
@@ -1760,7 +1766,7 @@ stores the total joint DOF count.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="newton.Model.joint_enabled">
 <span class="sig-name descname"><span class="pre">joint_enabled</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">wp.array</span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="pre">wp.bool</span><span class="p"><span class="pre">)</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><a class="headerlink" href="#newton.Model.joint_enabled" title="Link to this definition">#</a></dt>
-<dd><p>Controls which joint is simulated (bodies become disconnected if False, only supported by <a class="reference internal" href="newton.solvers.SolverXPBD.html#newton.solvers.SolverXPBD" title="newton.solvers.SolverXPBD"><code class="xref py py-class docutils literal notranslate"><span class="pre">SolverXPBD</span></code></a> and <a class="reference internal" href="newton.solvers.SolverSemiImplicit.html#newton.solvers.SolverSemiImplicit" title="newton.solvers.SolverSemiImplicit"><code class="xref py py-class docutils literal notranslate"><span class="pre">SolverSemiImplicit</span></code></a>), shape [joint_count], bool.</p>
+<dd><p>Controls which joint is simulated (bodies become disconnected if False, supported by <a class="reference internal" href="newton.solvers.SolverXPBD.html#newton.solvers.SolverXPBD" title="newton.solvers.SolverXPBD"><code class="xref py py-class docutils literal notranslate"><span class="pre">SolverXPBD</span></code></a>, <a class="reference internal" href="newton.solvers.SolverVBD.html#newton.solvers.SolverVBD" title="newton.solvers.SolverVBD"><code class="xref py py-class docutils literal notranslate"><span class="pre">SolverVBD</span></code></a>, and <a class="reference internal" href="newton.solvers.SolverSemiImplicit.html#newton.solvers.SolverSemiImplicit" title="newton.solvers.SolverSemiImplicit"><code class="xref py py-class docutils literal notranslate"><span class="pre">SolverSemiImplicit</span></code></a>), shape [joint_count], bool.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -2116,27 +2122,9 @@ stores the total particle count.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="newton.Model.sdf_coarse_volume">
-<span class="sig-name descname"><span class="pre">sdf_coarse_volume</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><span class="pre">wp.Volume</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#newton.Model.sdf_coarse_volume" title="Link to this definition">#</a></dt>
-<dd><p>Coarse SDF volumes matching sdf_data by index. Kept for reference counting.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="newton.Model.sdf_data">
-<span class="sig-name descname"><span class="pre">sdf_data</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">wp.array</span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="pre">SDFData</span><span class="p"><span class="pre">)</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><a class="headerlink" href="#newton.Model.sdf_data" title="Link to this definition">#</a></dt>
-<dd><p>Compact array of SDFData structs, shape [num_sdfs].</p>
-</dd></dl>
-
-<dl class="py attribute">
 <dt class="sig sig-object py" id="newton.Model.sdf_index2blocks">
 <span class="sig-name descname"><span class="pre">sdf_index2blocks</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">wp.array</span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="pre">wp.vec2i</span><span class="p"><span class="pre">)</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><a class="headerlink" href="#newton.Model.sdf_index2blocks" title="Link to this definition">#</a></dt>
 <dd><p>Per-SDF [start, end) indices into sdf_block_coords, shape [num_sdfs, 2].</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="newton.Model.sdf_volume">
-<span class="sig-name descname"><span class="pre">sdf_volume</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><span class="pre">wp.Volume</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#newton.Model.sdf_volume" title="Link to this definition">#</a></dt>
-<dd><p>Sparse SDF volumes matching sdf_data by index. Kept for reference counting.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -2221,9 +2209,9 @@ during contact margin calculations). Used for voxel-based contact reduction.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="newton.Model.shape_heightfield_data">
-<span class="sig-name descname"><span class="pre">shape_heightfield_data</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">wp.array</span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="pre">HeightfieldData</span><span class="p"><span class="pre">)</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><a class="headerlink" href="#newton.Model.shape_heightfield_data" title="Link to this definition">#</a></dt>
-<dd><p>Array of HeightfieldData structs, shape [shape_count]. Contains grid metadata for collision kernels.</p>
+<dt class="sig sig-object py" id="newton.Model.shape_heightfield_index">
+<span class="sig-name descname"><span class="pre">shape_heightfield_index</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">wp.array</span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="pre">wp.int32</span><span class="p"><span class="pre">)</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><a class="headerlink" href="#newton.Model.shape_heightfield_index" title="Link to this definition">#</a></dt>
+<dd><p>Per-shape heightfield index, shape [shape_count]. -1 means shape has no heightfield.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -2469,6 +2457,30 @@ Stored per-element; kernels multiply by rest volume internally.</p>
 </dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="newton.Model.texture_sdf_coarse_textures">
+<span class="sig-name descname"><span class="pre">texture_sdf_coarse_textures</span></span><a class="headerlink" href="#newton.Model.texture_sdf_coarse_textures" title="Link to this definition">#</a></dt>
+<dd><p>Coarse 3D textures matching texture_sdf_data by index. Kept for reference counting.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="newton.Model.texture_sdf_data">
+<span class="sig-name descname"><span class="pre">texture_sdf_data</span></span><a class="headerlink" href="#newton.Model.texture_sdf_data" title="Link to this definition">#</a></dt>
+<dd><p>Compact array of TextureSDFData structs, shape [num_sdfs].</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="newton.Model.texture_sdf_subgrid_start_slots">
+<span class="sig-name descname"><span class="pre">texture_sdf_subgrid_start_slots</span></span><a class="headerlink" href="#newton.Model.texture_sdf_subgrid_start_slots" title="Link to this definition">#</a></dt>
+<dd><p>Subgrid start slot arrays matching texture_sdf_data by index. Kept for reference counting.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="newton.Model.texture_sdf_subgrid_textures">
+<span class="sig-name descname"><span class="pre">texture_sdf_subgrid_textures</span></span><a class="headerlink" href="#newton.Model.texture_sdf_subgrid_textures" title="Link to this definition">#</a></dt>
+<dd><p>Subgrid 3D textures matching texture_sdf_data by index. Kept for reference counting.</p>
+</dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="newton.Model.tri_activations">
 <span class="sig-name descname"><span class="pre">tri_activations</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">wp.array</span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="pre">wp.float32</span><span class="p"><span class="pre">)</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></em><a class="headerlink" href="#newton.Model.tri_activations" title="Link to this definition">#</a></dt>
 <dd><p>Triangle element activations, shape [tri_count], float.</p>
@@ -2650,7 +2662,8 @@ Stored per-element; kernels multiply by rest area internally.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.gaussians_count"><code class="docutils literal notranslate"><span class="pre">gaussians_count</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.gaussians_data"><code class="docutils literal notranslate"><span class="pre">gaussians_data</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.gravity"><code class="docutils literal notranslate"><span class="pre">gravity</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.heightfield_elevation_data"><code class="docutils literal notranslate"><span class="pre">heightfield_elevation_data</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.heightfield_data"><code class="docutils literal notranslate"><span class="pre">heightfield_data</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.heightfield_elevations"><code class="docutils literal notranslate"><span class="pre">heightfield_elevations</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.joint_X_c"><code class="docutils literal notranslate"><span class="pre">joint_X_c</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.joint_X_p"><code class="docutils literal notranslate"><span class="pre">joint_X_p</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.joint_act"><code class="docutils literal notranslate"><span class="pre">joint_act</span></code></a></li>
@@ -2723,10 +2736,7 @@ Stored per-element; kernels multiply by rest area internally.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.requires_grad"><code class="docutils literal notranslate"><span class="pre">requires_grad</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.rigid_contact_max"><code class="docutils literal notranslate"><span class="pre">rigid_contact_max</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.sdf_block_coords"><code class="docutils literal notranslate"><span class="pre">sdf_block_coords</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.sdf_coarse_volume"><code class="docutils literal notranslate"><span class="pre">sdf_coarse_volume</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.sdf_data"><code class="docutils literal notranslate"><span class="pre">sdf_data</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.sdf_index2blocks"><code class="docutils literal notranslate"><span class="pre">sdf_index2blocks</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.sdf_volume"><code class="docutils literal notranslate"><span class="pre">sdf_volume</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_body"><code class="docutils literal notranslate"><span class="pre">shape_body</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_collision_aabb_lower"><code class="docutils literal notranslate"><span class="pre">shape_collision_aabb_lower</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_collision_aabb_upper"><code class="docutils literal notranslate"><span class="pre">shape_collision_aabb_upper</span></code></a></li>
@@ -2739,7 +2749,7 @@ Stored per-element; kernels multiply by rest area internally.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_filter"><code class="docutils literal notranslate"><span class="pre">shape_filter</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_flags"><code class="docutils literal notranslate"><span class="pre">shape_flags</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_gap"><code class="docutils literal notranslate"><span class="pre">shape_gap</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_heightfield_data"><code class="docutils literal notranslate"><span class="pre">shape_heightfield_data</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_heightfield_index"><code class="docutils literal notranslate"><span class="pre">shape_heightfield_index</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_is_solid"><code class="docutils literal notranslate"><span class="pre">shape_is_solid</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_label"><code class="docutils literal notranslate"><span class="pre">shape_label</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.shape_margin"><code class="docutils literal notranslate"><span class="pre">shape_margin</span></code></a></li>
@@ -2777,6 +2787,10 @@ Stored per-element; kernels multiply by rest area internally.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.tet_indices"><code class="docutils literal notranslate"><span class="pre">tet_indices</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.tet_materials"><code class="docutils literal notranslate"><span class="pre">tet_materials</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.tet_poses"><code class="docutils literal notranslate"><span class="pre">tet_poses</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.texture_sdf_coarse_textures"><code class="docutils literal notranslate"><span class="pre">texture_sdf_coarse_textures</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.texture_sdf_data"><code class="docutils literal notranslate"><span class="pre">texture_sdf_data</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.texture_sdf_subgrid_start_slots"><code class="docutils literal notranslate"><span class="pre">texture_sdf_subgrid_start_slots</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.texture_sdf_subgrid_textures"><code class="docutils literal notranslate"><span class="pre">texture_sdf_subgrid_textures</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.tri_activations"><code class="docutils literal notranslate"><span class="pre">tri_activations</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.tri_areas"><code class="docutils literal notranslate"><span class="pre">tri_areas</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#newton.Model.tri_count"><code class="docutils literal notranslate"><span class="pre">tri_count</span></code></a></li>
