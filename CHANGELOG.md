@@ -50,6 +50,9 @@
 - Deprecate `SensorContact.sensing_objs` in favor of `SensorContact.sensing_obj_idx`
 - Deprecate `SensorContact.counterparts` and `SensorContact.reading_indices` in favor of `SensorContact.counterpart_indices`
 - Deprecate `SensorContact.shape` (use `total_force.shape` and `force_matrix.shape` instead) 
+- Deprecate `SensorTiledCamera.render_context`; prefer `SensorTiledCamera.utils` and `SensorTiledCamera.render_config`.
+- Deprecate `SensorTiledCamera.RenderContext`; use `SensorTiledCamera.RenderConfig` for config types and `SensorTiledCamera.render_config` / `SensorTiledCamera.utils` for runtime access.
+- Deprecate `SensorTiledCamera.Config`; prefer `SensorTiledCamera.RenderConfig` and `SensorTiledCamera.utils`.
 - Deprecate `Viewer.update_shape_colors()` in favor of writing directly to `Model.shape_color`
 
 ### Removed
