@@ -43,6 +43,7 @@ from .particle_vbd_kernels import (
     build_edge_n_ring_edge_collision_filter,
     build_vertex_n_ring_tris_collision_filter,
     # Solver kernels (particle VBD)
+    chebyshev_accelerate_positions,
     forward_step,
     set_to_csr,
     solve_elasticity,
@@ -288,6 +289,14 @@ class SolverVBD(SolverBase):
         self.track_convergence = False
         self._convergence_data = []  # list of per-step records
         self._step_counter = 0
+
+        # Chebyshev semi-iterative acceleration (Wang & Yang 2015, VBD paper Sec. 5.3)
+        # Set chebyshev_rho > 0 to enable. rho is the estimated spectral radius (0, 1).
+        # Common values: 0.95-0.99 for stiff systems, 0.8-0.9 for well-conditioned.
+        self.chebyshev_rho = 0.0  # 0 = disabled
+        if model.particle_count > 0:
+            self._cheb_pos_prev = wp.zeros_like(model.particle_q, device=self.device)
+            self._cheb_pos_prev2 = wp.zeros_like(model.particle_q, device=self.device)
 
         # Rigid integration mode: when True, rigid bodies are integrated by an external
         # solver (one-way coupling). SolverVBD will not move rigid bodies, but can still
@@ -1402,6 +1411,14 @@ class SolverVBD(SolverBase):
             # Store position before iterations for total displacement measurement
             pos_before_iterations = state_in.particle_q.numpy().copy()
 
+        # Chebyshev acceleration state
+        use_chebyshev = self.chebyshev_rho > 0.0 and self.model.particle_count > 0
+        if use_chebyshev:
+            rho = self.chebyshev_rho
+            omega = 1.0  # omega_1
+            wp.copy(self._cheb_pos_prev2, state_in.particle_q)
+            wp.copy(self._cheb_pos_prev, state_in.particle_q)
+
         for iter_num in range(self.iterations):
             self._solve_rigid_body_iteration(state_in, state_out, control, contacts, dt)
 
@@ -1409,6 +1426,38 @@ class SolverVBD(SolverBase):
                 pos_before = state_in.particle_q.numpy().copy()
 
             self._solve_particle_iteration(state_in, state_out, contacts, dt, iter_num)
+
+            # Apply Chebyshev semi-iterative acceleration after each full iteration
+            if use_chebyshev and iter_num >= 1:
+                # Update omega: omega_2 = 2/(2-rho^2), omega_n = 4/(4-rho^2*omega_{n-1})
+                if iter_num == 1:
+                    omega = 2.0 / (2.0 - rho * rho)
+                else:
+                    omega = 4.0 / (4.0 - rho * rho * omega)
+
+                # x^(n) = omega * (x_bar^(n) - x^(n-2)) + x^(n-2)
+                # Here state_out.particle_q has x_bar^(n), _cheb_pos_prev2 has x^(n-2)
+                wp.launch(
+                    kernel=chebyshev_accelerate_positions,
+                    dim=self.model.particle_count,
+                    inputs=[
+                        omega,
+                        state_out.particle_q,   # current GS result
+                        self._cheb_pos_prev2,    # position from 2 iterations ago
+                        self.pos_prev_collision_detection,
+                        self.model.particle_flags,
+                        self.model.particle_mass,
+                    ],
+                    outputs=[
+                        state_in.particle_q,     # write accelerated result back
+                        self.particle_displacements,  # keep displacements consistent
+                    ],
+                    device=self.device,
+                )
+                # Update history: prev2 <- prev, prev <- current accelerated
+                wp.copy(self._cheb_pos_prev2, self._cheb_pos_prev)
+                wp.copy(self._cheb_pos_prev, state_in.particle_q)
+                wp.copy(state_out.particle_q, state_in.particle_q)
 
             if self.track_convergence and self.model.particle_count > 0:
                 pos_after = state_out.particle_q.numpy()

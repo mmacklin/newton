@@ -3612,3 +3612,38 @@ def accumulate_contact_force_and_hessian(
             )
             wp.atomic_add(particle_forces, particle_idx, body_contact_force)
             wp.atomic_add(particle_hessians, particle_idx, body_contact_hessian)
+
+
+# ---------------------------------------------------------------------------
+# Chebyshev semi-iterative acceleration (Wang & Yang 2015, VBD paper Eq.18-19)
+# ---------------------------------------------------------------------------
+
+@wp.kernel
+def chebyshev_accelerate_positions(
+    omega: float,
+    pos_current: wp.array(dtype=wp.vec3),
+    pos_two_ago: wp.array(dtype=wp.vec3),
+    pos_prev_cd: wp.array(dtype=wp.vec3),
+    particle_flags: wp.array(dtype=wp.int32),
+    mass: wp.array(dtype=float),
+    # output
+    pos_out: wp.array(dtype=wp.vec3),
+    displacements_out: wp.array(dtype=wp.vec3),
+):
+    """Apply Chebyshev semi-iterative acceleration to particle positions.
+
+    x^(n) = omega * (x_bar^(n) - x^(n-2)) + x^(n-2)
+
+    Also updates the displacement buffer to be consistent:
+    displacement = accelerated_pos - pos_prev_collision_detection
+    """
+    i = wp.tid()
+    if not particle_flags[i] & ParticleFlags.ACTIVE or mass[i] == 0.0:
+        pos_out[i] = pos_current[i]
+        if displacements_out:
+            displacements_out[i] = pos_current[i] - pos_prev_cd[i]
+        return
+    accel_pos = omega * (pos_current[i] - pos_two_ago[i]) + pos_two_ago[i]
+    pos_out[i] = accel_pos
+    if displacements_out:
+        displacements_out[i] = accel_pos - pos_prev_cd[i]

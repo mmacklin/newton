@@ -41,6 +41,7 @@ def create_scenario(
     stiffness_scale: float = 1.0,
     drop_height_range: tuple = (40.0, 120.0),
     rotation_range: float = np.pi,
+    chebyshev_rho: float = 0.0,
 ):
     """Build one randomized t-shirt drop scenario.
 
@@ -132,6 +133,8 @@ def create_scenario(
         particle_enable_self_contact=False,  # Simpler for convergence analysis
     )
     solver.track_convergence = True
+    if chebyshev_rho > 0:
+        solver.chebyshev_rho = chebyshev_rho
 
     state_0 = model.state()
     state_1 = model.state()
@@ -160,6 +163,7 @@ def create_scenario(
         "sim_substeps": sim_substeps,
         "particle_count": model.particle_count,
         "tri_count": model.tri_count,
+        "chebyshev_rho": chebyshev_rho,
     }
 
     return {
@@ -246,6 +250,8 @@ def main():
                         help="Stiffness scale factors to test")
     parser.add_argument("--iteration-counts", type=int, nargs="+", default=None,
                         help="Multiple iteration counts to compare")
+    parser.add_argument("--chebyshev-rho", type=float, default=0.0,
+                        help="Chebyshev acceleration spectral radius (0=disabled)")
     args = parser.parse_args()
 
     wp.init()
@@ -278,6 +284,7 @@ def main():
                             material_model=args.material,
                             gravity_scale=gravity_scale,
                             stiffness_scale=stiffness_scale,
+                            chebyshev_rho=args.chebyshev_rho,
                         )
                         result = run_scenario(scenario, num_frames=args.num_frames)
                         all_results.append(result)
