@@ -42,6 +42,9 @@ def create_scenario(
     drop_height_range: tuple = (40.0, 120.0),
     rotation_range: float = np.pi,
     chebyshev_rho: float = 0.0,
+    jacobi_mode: bool = False,
+    step_length: float = 1.0,
+    enable_self_contact: bool = False,
 ):
     """Build one randomized t-shirt drop scenario.
 
@@ -126,15 +129,32 @@ def create_scenario(
     model.soft_contact_kd = 1e-2
     model.soft_contact_mu = 0.25
 
+    self_contact_kwargs = {}
+    if enable_self_contact:
+        self_contact_kwargs = dict(
+            particle_self_contact_radius=0.2,
+            particle_self_contact_margin=0.2,
+            particle_topological_contact_filter_threshold=1,
+            particle_rest_shape_contact_exclusion_radius=0.5,
+            particle_vertex_contact_buffer_size=16,
+            particle_edge_contact_buffer_size=20,
+            particle_collision_detection_interval=-1,
+        )
+
     solver = SolverVBD(
         model,
         iterations=iterations,
         particle_tri_material_model=material_model,
-        particle_enable_self_contact=False,  # Simpler for convergence analysis
+        particle_enable_self_contact=enable_self_contact,
+        **self_contact_kwargs,
     )
     solver.track_convergence = True
     if chebyshev_rho == "auto" or (isinstance(chebyshev_rho, (int, float)) and chebyshev_rho > 0):
         solver.chebyshev_rho = chebyshev_rho
+    if jacobi_mode:
+        solver.jacobi_mode = True
+    if step_length < 1.0:
+        solver.step_length = step_length
 
     state_0 = model.state()
     state_1 = model.state()
@@ -164,6 +184,9 @@ def create_scenario(
         "particle_count": model.particle_count,
         "tri_count": model.tri_count,
         "chebyshev_rho": chebyshev_rho,
+        "jacobi_mode": jacobi_mode,
+        "step_length": step_length,
+        "enable_self_contact": enable_self_contact,
     }
 
     return {
@@ -252,6 +275,11 @@ def main():
                         help="Multiple iteration counts to compare")
     parser.add_argument("--chebyshev-rho", type=str, default="0.0",
                         help="Chebyshev acceleration spectral radius (0=disabled, auto=adaptive, float=manual)")
+    parser.add_argument("--jacobi", action="store_true", help="Use Jacobi mode (non-GS)")
+    parser.add_argument("--step-length", type=float, default=1.0,
+                        help="Newton step length (under-relaxation, e.g. 0.7, 0.5)")
+    parser.add_argument("--self-contact", action="store_true",
+                        help="Enable self-contact (matching franka cloth example)")
     args = parser.parse_args()
 
     # Parse chebyshev_rho
@@ -291,6 +319,9 @@ def main():
                             gravity_scale=gravity_scale,
                             stiffness_scale=stiffness_scale,
                             chebyshev_rho=args.chebyshev_rho_val,
+                            jacobi_mode=args.jacobi,
+                            step_length=args.step_length,
+                            enable_self_contact=args.self_contact,
                         )
                         result = run_scenario(scenario, num_frames=args.num_frames)
                         all_results.append(result)

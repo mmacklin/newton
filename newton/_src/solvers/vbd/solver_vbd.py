@@ -301,11 +301,20 @@ class SolverVBD(SolverBase):
         if model.particle_count > 0:
             self._cheb_pos_prev = wp.zeros_like(model.particle_q, device=self.device)
             self._cheb_pos_prev2 = wp.zeros_like(model.particle_q, device=self.device)
+            self._step_pos_before = wp.zeros_like(model.particle_q, device=self.device)
 
         # Early stopping: stop iterating when max displacement falls below threshold.
         # Set to 0 to disable. Units match simulation scale (cm for cm-scale sims).
         self.early_stop_threshold = 0.0  # 0 = disabled
         self._early_stop_count = 0  # number of times early stopping triggered (for stats)
+
+        # Jacobi mode: when True, apply position updates once after all color groups
+        # instead of after each color group (Gauss-Seidel).
+        self.jacobi_mode = False
+
+        # Step length (under-relaxation): scale Newton displacements by this factor.
+        # 1.0 = full step (default), <1.0 = under-relaxation for stability.
+        self.step_length = 1.0
 
         # Rigid integration mode: when True, rigid bodies are integrated by an external
         # solver (one-way coupling). SolverVBD will not move rigid bodies, but can still
@@ -1445,7 +1454,32 @@ class SolverVBD(SolverBase):
             if self.track_convergence and self.model.particle_count > 0:
                 pos_before = state_in.particle_q.numpy().copy()
 
+            # Store positions before particle solve for under-relaxation
+            if self.step_length < 1.0 and self.model.particle_count > 0:
+                wp.copy(self._step_pos_before, state_in.particle_q)
+
             self._solve_particle_iteration(state_in, state_out, contacts, dt, iter_num)
+
+            # Under-relaxation: blend positions toward the GS result
+            if self.step_length < 1.0 and self.model.particle_count > 0:
+                wp.launch(
+                    kernel=chebyshev_accelerate_positions,
+                    dim=self.model.particle_count,
+                    inputs=[
+                        self.step_length,
+                        state_out.particle_q,
+                        self._step_pos_before,
+                        self.pos_prev_collision_detection,
+                        self.model.particle_flags,
+                        self.model.particle_mass,
+                    ],
+                    outputs=[
+                        state_in.particle_q,
+                        self.particle_displacements,
+                    ],
+                    device=self.device,
+                )
+                wp.copy(state_out.particle_q, state_in.particle_q)
 
             # Track displacement for auto rho estimation
             if use_chebyshev and self._cheb_rho_auto and iter_num == 0:
@@ -2084,6 +2118,10 @@ class SolverVBD(SolverBase):
                     ],
                     device=self.device,
                 )
+            if not self.jacobi_mode:
+                self._penetration_free_truncation(state_in.particle_q)
+
+        if self.jacobi_mode:
             self._penetration_free_truncation(state_in.particle_q)
 
         wp.copy(state_out.particle_q, state_in.particle_q)
