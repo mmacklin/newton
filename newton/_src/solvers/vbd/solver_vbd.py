@@ -284,6 +284,11 @@ class SolverVBD(SolverBase):
         self.iterations = iterations
         self.friction_epsilon = friction_epsilon
 
+        # Convergence analysis instrumentation
+        self.track_convergence = False
+        self._convergence_data = []  # list of per-step records
+        self._step_counter = 0
+
         # Rigid integration mode: when True, rigid bodies are integrated by an external
         # solver (one-way coupling). SolverVBD will not move rigid bodies, but can still
         # participate in particle-rigid interaction on the particle side.
@@ -1384,12 +1389,91 @@ class SolverVBD(SolverBase):
         self._initialize_rigid_bodies(state_in, control, contacts, dt, update_rigid_history)
         self._initialize_particles(state_in, state_out, dt)
 
+        if self.track_convergence and self.model.particle_count > 0:
+            step_record = {
+                "step": self._step_counter,
+                "dt": dt,
+                "iteration_residuals": [],
+                "iteration_displacement_norms": [],
+                "iteration_max_displacement": [],
+                "iteration_energy": [],
+                "particle_count": self.model.particle_count,
+            }
+            # Store position before iterations for total displacement measurement
+            pos_before_iterations = state_in.particle_q.numpy().copy()
+
         for iter_num in range(self.iterations):
             self._solve_rigid_body_iteration(state_in, state_out, control, contacts, dt)
+
+            if self.track_convergence and self.model.particle_count > 0:
+                pos_before = state_in.particle_q.numpy().copy()
+
             self._solve_particle_iteration(state_in, state_out, contacts, dt, iter_num)
+
+            if self.track_convergence and self.model.particle_count > 0:
+                pos_after = state_out.particle_q.numpy()
+                mass_np = self.model.particle_mass.numpy()
+                inertia_np = self.inertia.numpy()
+                flags_np = self.model.particle_flags.numpy()
+                dt_sqr_recip = 1.0 / (dt * dt)
+
+                # Compute displacement from this iteration
+                disp = pos_after - pos_before
+                disp_norms = np.linalg.norm(disp, axis=1)
+
+                # Compute the inertial force residual: f_inertia = m/dt^2 * (y - x)
+                # This is the gradient of the variational energy at current position
+                inertia_force = mass_np[:, None] * (inertia_np - pos_after) * dt_sqr_recip
+                inertia_force_norms = np.linalg.norm(inertia_force, axis=1)
+
+                # Mask inactive/zero-mass particles
+                active_mask = (flags_np & 1).astype(bool) & (mass_np > 0)
+                active_disp = disp_norms[active_mask]
+                active_inertia_force = inertia_force_norms[active_mask]
+
+                step_record["iteration_residuals"].append({
+                    "mean_displacement": float(np.mean(active_disp)) if len(active_disp) > 0 else 0.0,
+                    "max_displacement": float(np.max(active_disp)) if len(active_disp) > 0 else 0.0,
+                    "rms_displacement": float(np.sqrt(np.mean(active_disp**2))) if len(active_disp) > 0 else 0.0,
+                    "mean_inertia_residual": float(np.mean(active_inertia_force)) if len(active_inertia_force) > 0 else 0.0,
+                    "max_inertia_residual": float(np.max(active_inertia_force)) if len(active_inertia_force) > 0 else 0.0,
+                    "rms_inertia_residual": float(np.sqrt(np.mean(active_inertia_force**2))) if len(active_inertia_force) > 0 else 0.0,
+                    "p50_displacement": float(np.percentile(active_disp, 50)) if len(active_disp) > 0 else 0.0,
+                    "p95_displacement": float(np.percentile(active_disp, 95)) if len(active_disp) > 0 else 0.0,
+                    "p99_displacement": float(np.percentile(active_disp, 99)) if len(active_disp) > 0 else 0.0,
+                })
+
+        if self.track_convergence and self.model.particle_count > 0:
+            # Total displacement across all iterations
+            total_disp = state_out.particle_q.numpy() - pos_before_iterations
+            total_disp_norms = np.linalg.norm(total_disp, axis=1)
+            active_total = total_disp_norms[active_mask]
+
+            step_record["total_mean_displacement"] = float(np.mean(active_total)) if len(active_total) > 0 else 0.0
+            step_record["total_max_displacement"] = float(np.max(active_total)) if len(active_total) > 0 else 0.0
+
+            # Check for NaNs
+            has_nan = bool(np.any(np.isnan(state_out.particle_q.numpy())))
+            step_record["has_nan"] = has_nan
+
+            self._convergence_data.append(step_record)
+            self._step_counter += 1
 
         self._finalize_rigid_bodies(state_out, dt)
         self._finalize_particles(state_out, dt)
+
+    def get_convergence_data(self):
+        """Return a copy of the convergence tracking data collected so far.
+
+        Returns:
+            list: List of per-step convergence records, each containing per-iteration residual metrics.
+        """
+        return list(self._convergence_data)
+
+    def reset_convergence_data(self):
+        """Clear all collected convergence data and reset step counter."""
+        self._convergence_data = []
+        self._step_counter = 0
 
     def _penetration_free_truncation(self, particle_q_out=None):
         """
