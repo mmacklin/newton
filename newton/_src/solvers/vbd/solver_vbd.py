@@ -293,7 +293,11 @@ class SolverVBD(SolverBase):
         # Chebyshev semi-iterative acceleration (Wang & Yang 2015, VBD paper Sec. 5.3)
         # Set chebyshev_rho > 0 to enable. rho is the estimated spectral radius (0, 1).
         # Common values: 0.95-0.99 for stiff systems, 0.8-0.9 for well-conditioned.
-        self.chebyshev_rho = 0.0  # 0 = disabled
+        # Set to "auto" for adaptive estimation.
+        self.chebyshev_rho = 0.0  # 0 = disabled, (0,1) = manual, "auto" = adaptive
+        self._cheb_rho_auto = False  # internal flag for auto mode
+        self._cheb_rho_estimate = 0.9  # current estimate for auto mode
+        self._cheb_rho_alpha = 0.1  # exponential smoothing factor for rho
         if model.particle_count > 0:
             self._cheb_pos_prev = wp.zeros_like(model.particle_q, device=self.device)
             self._cheb_pos_prev2 = wp.zeros_like(model.particle_q, device=self.device)
@@ -1412,12 +1416,23 @@ class SolverVBD(SolverBase):
             pos_before_iterations = state_in.particle_q.numpy().copy()
 
         # Chebyshev acceleration state
-        use_chebyshev = self.chebyshev_rho > 0.0 and self.model.particle_count > 0
+        if isinstance(self.chebyshev_rho, str) and self.chebyshev_rho == "auto":
+            use_chebyshev = self.model.particle_count > 0
+            rho = self._cheb_rho_estimate
+            self._cheb_rho_auto = True
+        elif isinstance(self.chebyshev_rho, (int, float)) and self.chebyshev_rho > 0.0:
+            use_chebyshev = self.model.particle_count > 0
+            rho = float(self.chebyshev_rho)
+            self._cheb_rho_auto = False
+        else:
+            use_chebyshev = False
+            rho = 0.0
+
         if use_chebyshev:
-            rho = self.chebyshev_rho
             omega = 1.0  # omega_1
             wp.copy(self._cheb_pos_prev2, state_in.particle_q)
             wp.copy(self._cheb_pos_prev, state_in.particle_q)
+            prev_disp_norm = None  # for auto rho estimation
 
         for iter_num in range(self.iterations):
             self._solve_rigid_body_iteration(state_in, state_out, control, contacts, dt)
@@ -1426,6 +1441,26 @@ class SolverVBD(SolverBase):
                 pos_before = state_in.particle_q.numpy().copy()
 
             self._solve_particle_iteration(state_in, state_out, contacts, dt, iter_num)
+
+            # Track displacement for auto rho estimation
+            if use_chebyshev and self._cheb_rho_auto and iter_num == 0:
+                disp_diff = state_out.particle_q.numpy() - self._cheb_pos_prev.numpy()
+                prev_disp_norm = float(np.sqrt(np.mean(np.sum(disp_diff**2, axis=1))))
+
+            # Auto-estimate spectral radius from displacement ratio
+            if use_chebyshev and self._cheb_rho_auto and iter_num >= 1:
+                # Estimate rho from ratio of displacement norms
+                disp_diff = state_out.particle_q.numpy() - self._cheb_pos_prev.numpy()
+                curr_disp_norm = float(np.sqrt(np.mean(np.sum(disp_diff**2, axis=1))))
+                if prev_disp_norm is not None and prev_disp_norm > 1e-15:
+                    rho_sample = min(0.999, max(0.1, curr_disp_norm / prev_disp_norm))
+                    # Exponential moving average
+                    self._cheb_rho_estimate = (
+                        (1 - self._cheb_rho_alpha) * self._cheb_rho_estimate
+                        + self._cheb_rho_alpha * rho_sample
+                    )
+                    rho = self._cheb_rho_estimate
+                prev_disp_norm = curr_disp_norm
 
             # Apply Chebyshev semi-iterative acceleration after each full iteration
             if use_chebyshev and iter_num >= 1:

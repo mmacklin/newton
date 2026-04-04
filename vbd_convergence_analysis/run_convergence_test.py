@@ -133,7 +133,7 @@ def create_scenario(
         particle_enable_self_contact=False,  # Simpler for convergence analysis
     )
     solver.track_convergence = True
-    if chebyshev_rho > 0:
+    if chebyshev_rho == "auto" or (isinstance(chebyshev_rho, (int, float)) and chebyshev_rho > 0):
         solver.chebyshev_rho = chebyshev_rho
 
     state_0 = model.state()
@@ -250,9 +250,15 @@ def main():
                         help="Stiffness scale factors to test")
     parser.add_argument("--iteration-counts", type=int, nargs="+", default=None,
                         help="Multiple iteration counts to compare")
-    parser.add_argument("--chebyshev-rho", type=float, default=0.0,
-                        help="Chebyshev acceleration spectral radius (0=disabled)")
+    parser.add_argument("--chebyshev-rho", type=str, default="0.0",
+                        help="Chebyshev acceleration spectral radius (0=disabled, auto=adaptive, float=manual)")
     args = parser.parse_args()
+
+    # Parse chebyshev_rho
+    if args.chebyshev_rho == "auto":
+        args.chebyshev_rho_val = "auto"
+    else:
+        args.chebyshev_rho_val = float(args.chebyshev_rho)
 
     wp.init()
 
@@ -284,7 +290,7 @@ def main():
                             material_model=args.material,
                             gravity_scale=gravity_scale,
                             stiffness_scale=stiffness_scale,
-                            chebyshev_rho=args.chebyshev_rho,
+                            chebyshev_rho=args.chebyshev_rho_val,
                         )
                         result = run_scenario(scenario, num_frames=args.num_frames)
                         all_results.append(result)
