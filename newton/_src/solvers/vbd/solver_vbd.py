@@ -302,6 +302,11 @@ class SolverVBD(SolverBase):
             self._cheb_pos_prev = wp.zeros_like(model.particle_q, device=self.device)
             self._cheb_pos_prev2 = wp.zeros_like(model.particle_q, device=self.device)
 
+        # Early stopping: stop iterating when max displacement falls below threshold.
+        # Set to 0 to disable. Units match simulation scale (cm for cm-scale sims).
+        self.early_stop_threshold = 0.0  # 0 = disabled
+        self._early_stop_count = 0  # number of times early stopping triggered (for stats)
+
         # Rigid integration mode: when True, rigid bodies are integrated by an external
         # solver (one-way coupling). SolverVBD will not move rigid bodies, but can still
         # participate in particle-rigid interaction on the particle side.
@@ -1526,6 +1531,19 @@ class SolverVBD(SolverBase):
                     "p95_displacement": float(np.percentile(active_disp, 95)) if len(active_disp) > 0 else 0.0,
                     "p99_displacement": float(np.percentile(active_disp, 99)) if len(active_disp) > 0 else 0.0,
                 })
+
+            # Early stopping check (can use convergence tracking data)
+            if self.early_stop_threshold > 0.0 and self.model.particle_count > 0:
+                if self.track_convergence:
+                    max_disp = step_record["iteration_residuals"][-1]["max_displacement"]
+                else:
+                    # Lightweight check without full tracking
+                    pos_after_es = state_out.particle_q.numpy()
+                    pos_before_es = state_in.particle_q.numpy() if not hasattr(self, '_es_pos_before') else self._es_pos_before
+                    max_disp = float(np.max(np.linalg.norm(pos_after_es - pos_before_es, axis=1)))
+                if max_disp < self.early_stop_threshold:
+                    self._early_stop_count += 1
+                    break
 
         if self.track_convergence and self.model.particle_count > 0:
             # Total displacement across all iterations
