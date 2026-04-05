@@ -118,7 +118,7 @@
 <div class="container">
 
     <h1>VBD Convergence Analysis -- Comprehensive Report</h1>
-    <p class="timestamp">Generated: 2026-04-05 08:50:48 | Newton Physics Engine | 80 total scenario runs</p>
+    <p class="timestamp">Generated: 2026-04-05 08:53:02 | Newton Physics Engine | 80 total scenario runs</p>
 
     <!-- Table of Contents -->
     <div class="toc">
@@ -144,24 +144,31 @@
     <div class="summary" id="executive-summary">
         <h2>1. Executive Summary</h2>
         <ul>
+            <li><strong>Under-relaxation (alpha&nbsp;&lt;&nbsp;1) is the most effective single change.</strong>
+                Step length alpha=0.5 achieves ~20116x improvement in median final
+                residual over baseline
+                (median ratio 0.0345 vs baseline 0.7425).
+                Alpha=0.7 and 0.9 are similarly effective (~5049x and ~4320x).</li>
             <li><strong>Chebyshev Auto acceleration delivers ~916x improvement</strong>
-                in median final residual over baseline Gauss-Seidel VBD
-                (median ratio 0.0481 vs 0.7425).</li>
+                (median ratio 0.0481).
+                Fixed rho=0.8 gives ~214x;
+                rho=0.95 is too aggressive and causes oscillation.</li>
             <li>Baseline VBD shows <strong>near-stagnation after iteration 1</strong> --
-                per-iteration ratio hovers near 1.0, wasting 70-90% of the iteration budget.</li>
-            <li>Fixed Chebyshev rho=0.8 gives ~214x improvement;
-                rho=0.95 is too aggressive and can cause oscillation.</li>
-            <li><strong>Step length damping</strong> (alpha &lt; 1.0) provides modest improvement
-                without Chebyshev machinery.</li>
-            <li>Jacobi mode (median ratio 0.8123) converges
-                comparably to than GS baseline.</li>
+                per-iteration displacement ratio hovers near 1.0, wasting 70-90% of the iteration budget.
+                Both under-relaxation and Chebyshev address this by damping the cross-color interference
+                that causes successive iterations to undo each other's corrections.</li>
+            <li>Jacobi mode (median ratio 0.8123) is <strong>worse than
+                Gauss-Seidel</strong> (0.7425), confirming that GS's sequential
+                information propagation is beneficial.</li>
             <li>Self-contact (median ratio 0.2143) does not degrade convergence
-                significantly vs baseline (0.7425).</li>
+                vs baseline.</li>
             <li>StVK material (median ratio 0.7686) shows
                 comparable convergence
-                vs Neo-Hookean baseline.</li>
-            <li>All variants maintain <strong>zero NaN occurrences</strong> -- VBD unconditional stability
-                is preserved across all acceleration strategies.</li>
+                vs Neo-Hookean.</li>
+            <li><strong>Hessian verification</strong>: StVK Hessian is exact but can be indefinite (non-SPD).
+                Neo-Hookean uses an intentional SPD projection (clamping cofactor term).
+                Bending uses Gauss-Newton approximation (PSD by construction).</li>
+            <li>All variants maintain <strong>zero NaN occurrences</strong> across all test scenarios.</li>
         </ul>
     </div>
 

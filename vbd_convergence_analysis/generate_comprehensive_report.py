@@ -686,6 +686,9 @@ def generate_report(
     jacobi_m = compute_metrics(all_data.get("Jacobi", []), iters_filter=10)
     sc_m = compute_metrics(all_data.get("Self-Contact", []), iters_filter=10)
     stvk_m = compute_metrics(all_data.get("StVK", []), iters_filter=10)
+    a05_m = compute_metrics(all_data.get("Alpha 0.5", []), iters_filter=10)
+    a07_m = compute_metrics(all_data.get("Alpha 0.7", []), iters_filter=10)
+    a09_m = compute_metrics(all_data.get("Alpha 0.9", []), iters_filter=10)
 
     # Relative improvement for executive summary
     def _improvement(method_m: dict) -> str:
@@ -860,24 +863,31 @@ def generate_report(
     <div class="summary" id="executive-summary">
         <h2>1. Executive Summary</h2>
         <ul>
+            <li><strong>Under-relaxation (alpha&nbsp;&lt;&nbsp;1) is the most effective single change.</strong>
+                Step length alpha=0.5 achieves ~{_improvement(a05_m)} improvement in median final
+                residual over baseline
+                (median ratio {a05_m['median_ratio']:.4f} vs baseline {bl_m['median_ratio']:.4f}).
+                Alpha=0.7 and 0.9 are similarly effective (~{_improvement(a07_m)} and ~{_improvement(a09_m)}).</li>
             <li><strong>Chebyshev Auto acceleration delivers ~{_improvement(cheb_auto_m)} improvement</strong>
-                in median final residual over baseline Gauss-Seidel VBD
-                (median ratio {cheb_auto_m['median_ratio']:.4f} vs {bl_m['median_ratio']:.4f}).</li>
+                (median ratio {cheb_auto_m['median_ratio']:.4f}).
+                Fixed rho=0.8 gives ~{_improvement(cheb08_m)};
+                rho=0.95 is too aggressive and causes oscillation.</li>
             <li>Baseline VBD shows <strong>near-stagnation after iteration 1</strong> --
-                per-iteration ratio hovers near 1.0, wasting 70-90% of the iteration budget.</li>
-            <li>Fixed Chebyshev rho=0.8 gives ~{_improvement(cheb08_m)} improvement;
-                rho=0.95 is too aggressive and can cause oscillation.</li>
-            <li><strong>Step length damping</strong> (alpha &lt; 1.0) provides modest improvement
-                without Chebyshev machinery.</li>
-            <li>Jacobi mode (median ratio {jacobi_m['median_ratio']:.4f}) converges
-                {'faster' if jacobi_m['median_ratio'] < bl_m['median_ratio'] else 'comparably to'} than GS baseline.</li>
+                per-iteration displacement ratio hovers near 1.0, wasting 70-90% of the iteration budget.
+                Both under-relaxation and Chebyshev address this by damping the cross-color interference
+                that causes successive iterations to undo each other's corrections.</li>
+            <li>Jacobi mode (median ratio {jacobi_m['median_ratio']:.4f}) is <strong>worse than
+                Gauss-Seidel</strong> ({bl_m['median_ratio']:.4f}), confirming that GS's sequential
+                information propagation is beneficial.</li>
             <li>Self-contact (median ratio {sc_m['median_ratio']:.4f}) does not degrade convergence
-                significantly vs baseline ({bl_m['median_ratio']:.4f}).</li>
+                vs baseline.</li>
             <li>StVK material (median ratio {stvk_m['median_ratio']:.4f}) shows
                 {'improved' if stvk_m['median_ratio'] < bl_m['median_ratio'] else 'comparable'} convergence
-                vs Neo-Hookean baseline.</li>
-            <li>All variants maintain <strong>zero NaN occurrences</strong> -- VBD unconditional stability
-                is preserved across all acceleration strategies.</li>
+                vs Neo-Hookean.</li>
+            <li><strong>Hessian verification</strong>: StVK Hessian is exact but can be indefinite (non-SPD).
+                Neo-Hookean uses an intentional SPD projection (clamping cofactor term).
+                Bending uses Gauss-Newton approximation (PSD by construction).</li>
+            <li>All variants maintain <strong>zero NaN occurrences</strong> across all test scenarios.</li>
         </ul>
     </div>
 
