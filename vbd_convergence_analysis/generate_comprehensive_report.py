@@ -172,7 +172,10 @@ def make_comparison_table(all_data: dict[str, list]) -> str:
         if baseline_metrics and label != "Baseline GS":
             bm_final = baseline_metrics["median_final_rms"]
             m_final = m["median_final_rms"]
-            if m_final > 1e-20 and bm_final > 0:
+            if m_final < 1e-12:
+                # Solver converged to machine zero — effectively perfect
+                improvement = "converged"
+            elif bm_final > 0:
                 imp = bm_final / m_final
                 if imp >= 1:
                     improvement = f"{imp:.0f}x better"
@@ -686,8 +689,11 @@ def generate_report(
 
     # Relative improvement for executive summary
     def _improvement(method_m: dict) -> str:
-        if bl_m["median_final_rms"] > 0 and method_m["median_final_rms"] > 1e-20:
-            imp = bl_m["median_final_rms"] / method_m["median_final_rms"]
+        m_final = method_m["median_final_rms"]
+        if m_final < 1e-12:
+            return "converged to zero"
+        if bl_m["median_final_rms"] > 0 and m_final > 0:
+            imp = bl_m["median_final_rms"] / m_final
             return f"{imp:.0f}x" if imp >= 1 else f"{1/imp:.1f}x worse"
         return "N/A"
 
