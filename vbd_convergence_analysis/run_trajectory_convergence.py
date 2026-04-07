@@ -22,6 +22,7 @@ if WORKTREE not in sys.path:
 import warp as wp
 
 from vbd_convergence_analysis.run_convergence_test import create_scenario
+from newton._src.solvers.vbd.particle_vbd_kernels import compute_force_residual
 
 
 # ---------------------------------------------------------------------------
@@ -29,9 +30,10 @@ from vbd_convergence_analysis.run_convergence_test import create_scenario
 # ---------------------------------------------------------------------------
 
 SEEDS = [42, 123, 456, 789]
-NUM_FRAMES = 30
+NUM_FRAMES = 60
 SNAPSHOT_INTERVAL = 10  # save every Nth substep
 ITERATIONS = 10
+DROP_HEIGHT_RANGE = (5.0, 20.0)  # low drop to ensure ground contact within simulation
 
 METHODS = {
     "Baseline GS": dict(step_length=1.0),
@@ -55,6 +57,7 @@ def record_reference_trajectory(seed: int, num_frames: int = NUM_FRAMES) -> list
     """
     scenario = create_scenario(
         seed=seed, iterations=ITERATIONS, enable_self_contact=True,
+        drop_height_range=DROP_HEIGHT_RANGE,
     )
     solver = scenario["solver"]
     state0 = scenario["state_0"]
@@ -73,10 +76,12 @@ def record_reference_trajectory(seed: int, num_frames: int = NUM_FRAMES) -> list
     for frame in range(num_frames):
         for sub in range(substeps):
             if substep_idx % SNAPSHOT_INTERVAL == 0:
+                pos_snap = state0.particle_q.numpy().copy()
                 snapshots.append({
                     "substep_idx": substep_idx,
-                    "particle_q": state0.particle_q.numpy().copy(),
+                    "particle_q": pos_snap,
                     "particle_qd": state0.particle_qd.numpy().copy(),
+                    "z_min": float(pos_snap[:, 2].min()),
                 })
             state0.clear_forces()
             state1.clear_forces()
@@ -86,6 +91,56 @@ def record_reference_trajectory(seed: int, num_frames: int = NUM_FRAMES) -> list
             substep_idx += 1
 
     return snapshots
+
+
+# ---------------------------------------------------------------------------
+# Energy decomposition
+# ---------------------------------------------------------------------------
+
+def compute_energy_decomposition(solver, state, dt: float) -> dict:
+    """Evaluate per-energy-type force residual at the current state.
+
+    Runs the residual kernel with different energy subsets zeroed out.
+    Returns dict with RMS residual for each component.
+    """
+    model = solver.model
+    n = model.particle_count
+    flags = model.particle_flags.numpy()
+    mass = model.particle_mass.numpy()
+    active = (flags & 1).astype(bool) & (mass > 0)
+
+    if active.sum() == 0:
+        return {"full": 0.0, "inertia_only": 0.0, "no_bending": 0.0, "no_elastic": 0.0}
+
+    buf = solver._force_residual_norms
+    zero_tri = wp.zeros_like(model.tri_materials)
+    zero_edge = wp.zeros_like(model.edge_bending_properties)
+
+    def _eval(tri_mats, edge_props):
+        solver.particle_forces.zero_()
+        wp.launch(
+            kernel=compute_force_residual, dim=n,
+            inputs=[
+                dt, solver.particle_q_prev, state.particle_q,
+                model.particle_mass, solver.inertia, model.particle_flags,
+                model.tri_indices, model.tri_poses, tri_mats, model.tri_areas,
+                solver._tri_material_model,
+                model.edge_indices, model.edge_rest_angle, model.edge_rest_length,
+                edge_props,
+                model.tet_indices, model.tet_poses, model.tet_materials,
+                solver.particle_adjacency, solver.particle_forces,
+            ],
+            outputs=[buf], device=solver.device,
+        )
+        r = buf.numpy()
+        return float(np.sqrt(np.mean(r[active] ** 2)))
+
+    return {
+        "full": _eval(model.tri_materials, model.edge_bending_properties),
+        "inertia_only": _eval(zero_tri, zero_edge),
+        "no_bending": _eval(model.tri_materials, zero_edge),
+        "no_elastic": _eval(zero_tri, model.edge_bending_properties),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +164,7 @@ def evaluate_method_on_snapshots(
             seed=seed,
             iterations=ITERATIONS,
             enable_self_contact=True,
+            drop_height_range=DROP_HEIGHT_RANGE,
             **method_config,
         )
         solver = scenario["solver"]
@@ -153,9 +209,21 @@ def evaluate_method_on_snapshots(
         else:
             curve = []
 
+        # Compute per-energy decomposition at the final state (after iterations)
+        # The solver's internal state (inertia, particle_q_prev) is still valid
+        energy_decomp = compute_energy_decomposition(solver, state1, dt)
+
+        # Also check ground contact count
+        try:
+            n_contacts = int(contacts.soft_contact_count.numpy()[0])
+        except Exception:
+            n_contacts = 0
+
         results.append({
             "substep_idx": snap["substep_idx"],
             "iteration_residuals": curve,
+            "energy_decomposition": energy_decomp,
+            "contact_count": n_contacts,
         })
 
     return results
@@ -205,6 +273,9 @@ def main():
         print(f"\n=== Evaluating: {method_name} ===")
         all_curves = []
 
+        all_decomps = []
+        all_contacts = []
+
         for seed in args.seeds:
             print(f"  Seed {seed}...")
             t0 = time.time()
@@ -216,6 +287,9 @@ def main():
             for r in results:
                 if r["iteration_residuals"]:
                     all_curves.append(r["iteration_residuals"])
+                if "energy_decomposition" in r:
+                    all_decomps.append(r["energy_decomposition"])
+                all_contacts.append(r.get("contact_count", 0))
 
             print(f"    {len(results)} snapshots in {elapsed:.1f}s")
 
@@ -229,6 +303,8 @@ def main():
         all_results["methods"][method_name] = {
             "config": method_config,
             "curves": all_curves,
+            "energy_decompositions": all_decomps,
+            "contact_counts": all_contacts,
         }
 
     # Save

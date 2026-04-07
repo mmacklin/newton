@@ -28,8 +28,9 @@ from vbd_convergence_analysis.run_convergence_test import create_scenario
 # ---------------------------------------------------------------------------
 
 SEEDS = [42, 123, 456, 789]
-NUM_FRAMES = 30
+NUM_FRAMES = 60
 ITERATIONS = 10
+DROP_HEIGHT_RANGE = (5.0, 20.0)  # low drop to ensure ground contact within simulation
 
 METHODS = {
     "Baseline GS": dict(step_length=1.0),
@@ -56,6 +57,7 @@ def run_rollout(seed: int, method_config: dict, num_frames: int = NUM_FRAMES) ->
         seed=seed,
         iterations=ITERATIONS,
         enable_self_contact=True,
+        drop_height_range=DROP_HEIGHT_RANGE,
         **method_config,
     )
     solver = scenario["solver"]
@@ -72,6 +74,7 @@ def run_rollout(seed: int, method_config: dict, num_frames: int = NUM_FRAMES) ->
         seed=seed,
         iterations=1,
         enable_self_contact=True,
+        drop_height_range=DROP_HEIGHT_RANGE,
     )
     probe_solver = probe_scenario["solver"]
     probe_state0 = probe_scenario["state_0"]

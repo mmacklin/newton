@@ -284,6 +284,124 @@ def make_rollout_plot(rollout_data: dict, plot_id: str = "rollout_plot") -> str:
     <script>Plotly.newPlot('{plot_id}', [{",".join(traces)}], {layout});</script>"""
 
 
+def make_energy_decomposition_plot(traj_data: dict, plot_id: str = "energy_decomp") -> str:
+    """Bar chart showing per-energy-type residual breakdown."""
+    if not traj_data:
+        return f'<p id="{plot_id}"><em>No energy decomposition data.</em></p>'
+
+    # Aggregate energy decompositions across methods (use baseline)
+    bl = traj_data["methods"].get("Baseline GS", {})
+    decomps = bl.get("energy_decompositions", [])
+    contacts = bl.get("contact_counts", [])
+
+    if not decomps:
+        return f'<p id="{plot_id}"><em>No energy decomposition data.</em></p>'
+
+    # Separate by contact/no-contact
+    full_vals, inertia_vals, elastic_vals, bending_vals = [], [], [], []
+    full_contact, inertia_contact, elastic_contact, bending_contact = [], [], [], []
+
+    for i, d in enumerate(decomps):
+        has_contact = contacts[i] > 0 if i < len(contacts) else False
+        full = d["full"]
+        inertia = d["inertia_only"]
+        elastic = abs(d["no_bending"] - d["inertia_only"])  # approximate
+        bending = abs(d["no_elastic"] - d["inertia_only"])
+
+        target = (full_contact if has_contact else full_vals,
+                  inertia_contact if has_contact else inertia_vals,
+                  elastic_contact if has_contact else elastic_vals,
+                  bending_contact if has_contact else bending_vals)
+        target[0].append(full)
+        target[1].append(inertia)
+        target[2].append(elastic)
+        target[3].append(bending)
+
+    categories = ["Full", "Inertia", "Elastic", "Bending"]
+    colors = ["#1976D2", "#F57C00", "#43A047", "#AB47BC"]
+
+    traces = []
+    # No-contact bars
+    if full_vals:
+        medians_nc = [
+            float(np.median(full_vals)), float(np.median(inertia_vals)),
+            float(np.median(elastic_vals)), float(np.median(bending_vals)),
+        ]
+        traces.append(f"""{{
+            x: {json.dumps(categories)},
+            y: {json.dumps(medians_nc)},
+            type: 'bar', name: 'No Contact ({len(full_vals)} snapshots)',
+            marker: {{color: {json.dumps(colors)}, opacity: 0.7}}
+        }}""")
+
+    # Contact bars
+    if full_contact:
+        medians_c = [
+            float(np.median(full_contact)), float(np.median(inertia_contact)),
+            float(np.median(elastic_contact)), float(np.median(bending_contact)),
+        ]
+        traces.append(f"""{{
+            x: {json.dumps(categories)},
+            y: {json.dumps(medians_c)},
+            type: 'bar', name: 'With Contact ({len(full_contact)} snapshots)',
+            marker: {{color: {json.dumps(colors)}, opacity: 1.0,
+                      pattern: {{shape: '/'}} }}
+        }}""")
+
+    layout = """{
+        title: 'Force Residual Decomposition by Energy Type (Baseline GS)',
+        xaxis: {title: 'Energy Component'},
+        yaxis: {title: 'Median RMS Force Residual', type: 'log'},
+        barmode: 'group',
+        width: 800, height: 450,
+        margin: {l: 70, r: 30, t: 50, b: 50}
+    }"""
+
+    return f"""<div id="{plot_id}"></div>
+    <script>Plotly.newPlot('{plot_id}', [{",".join(traces)}], {layout});</script>"""
+
+
+def make_stiffness_table(traj_data: dict) -> str:
+    """Generate stiffness ratio analysis table from metadata."""
+    meta = traj_data.get("metadata", {})
+    # These are hardcoded from the scenario setup — ideally would come from metadata
+    # but we can compute them from the known parameters
+    dt = 1.0 / 600.0  # 60fps, 10 substeps
+    dt2 = dt * dt
+    density = 0.02
+    mu = 10000.0
+    lmbd = 10000.0
+    bend_k = 5.0
+    # Approximate median mass per vertex (from typical t-shirt mesh)
+    approx_m = 0.0146  # median from earlier measurement
+    m_dt2 = approx_m / dt2
+
+    kappa = max(mu, lmbd, m_dt2) / bend_k
+    conv_rate = (kappa - 1) / (kappa + 1)
+    iters_10x = int(np.log(10) / np.log(1 / conv_rate)) if conv_rate < 1.0 else 99999
+
+    return f"""<table>
+    <tr><th>Component</th><th>Stiffness</th><th>Source</th></tr>
+    <tr><td>Elastic membrane (mu)</td><td><strong>{mu:.0f}</strong></td><td>tri_ke parameter</td></tr>
+    <tr><td>Elastic membrane (lambda)</td><td><strong>{lmbd:.0f}</strong></td><td>tri_ka parameter</td></tr>
+    <tr><td>Inertia (m/h&sup2;)</td><td><strong>{m_dt2:.0f}</strong></td>
+        <td>mass={approx_m:.4f}, dt={dt:.6f}</td></tr>
+    <tr><td>Bending</td><td><strong>{bend_k:.1f}</strong></td><td>edge_ke parameter</td></tr>
+    <tr><td>Contact penalty (ke)</td><td><strong>10000</strong></td><td>soft_contact_ke</td></tr>
+    <tr><td colspan="3" style="border-top:2px solid #333;"></td></tr>
+    <tr><td><strong>Condition number &kappa;</strong></td>
+        <td><strong>{kappa:.0f}</strong></td>
+        <td>max(elastic, inertia) / bending</td></tr>
+    <tr><td>Block GS convergence rate</td>
+        <td>{conv_rate:.6f}</td>
+        <td>(&kappa;&minus;1) / (&kappa;+1)</td></tr>
+    <tr><td>Residual reduction in 10 iters</td>
+        <td>{conv_rate**10:.4f} ({(1-conv_rate**10)*100:.2f}%)</td><td></td></tr>
+    <tr><td>Iterations for 10x reduction</td>
+        <td><strong>{iters_10x}</strong></td><td></td></tr>
+    </table>"""
+
+
 def make_alpha_sweep_plot(metrics: list[dict], plot_id: str = "alpha_sweep") -> str:
     """Convergence curves for alpha sweep only."""
     alpha_methods = ["Baseline GS", "Alpha 0.3", "Alpha 0.5", "Alpha 0.7", "Alpha 0.9"]
@@ -522,10 +640,31 @@ self-contact {'enabled' if meta.get('self_contact') else 'disabled'}</p>
 </div>
 """
 
-    # Section 4: Method details
+    # Section 4: Stiffness analysis
     html += """
 <!-- ============================================================ -->
-<h2>4. Method Details</h2>
+<h2>4. Stiffness Ratio Analysis</h2>
+<div class="card">
+    <p>VBD convergence is bounded by the condition number of the per-vertex system.
+    The stiffness ratio between the stiffest energy (elastic membrane) and softest
+    (bending) determines the theoretical convergence rate.</p>
+"""
+    html += make_stiffness_table(traj_data) if traj_data else ""
+    html += """
+</div>
+<div class="card">
+    <p>Decomposition of the force residual by energy type, showing how much each
+    component contributes to the overall residual. Split by contact/no-contact snapshots.</p>
+"""
+    html += make_energy_decomposition_plot(traj_data)
+    html += """
+</div>
+"""
+
+    # Section 5: Method details
+    html += """
+<!-- ============================================================ -->
+<h2>5. Method Details</h2>
 
 <h3>Alpha Sweep</h3>
 <div class="card">
@@ -551,7 +690,7 @@ self-contact {'enabled' if meta.get('self_contact') else 'disabled'}</p>
     # Section 5: Methodology
     html += f"""
 <!-- ============================================================ -->
-<h2>5. Methodology</h2>
+<h2>6. Methodology</h2>
 <div class="card">
     <h3>Test Setup</h3>
     <ul>
