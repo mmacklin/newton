@@ -118,7 +118,7 @@
 <div class="container">
 
     <h1>VBD Convergence Analysis -- Comprehensive Report</h1>
-    <p class="timestamp">Generated: 2026-04-05 08:53:02 | Newton Physics Engine | 80 total scenario runs</p>
+    <p class="timestamp">Generated: 2026-04-07 01:48:57 | Newton Physics Engine | 96 total scenario runs</p>
 
     <!-- Table of Contents -->
     <div class="toc">
@@ -143,28 +143,32 @@
     <!-- ================================================================ -->
     <div class="summary" id="executive-summary">
         <h2>1. Executive Summary</h2>
+        <p><strong>Metric:</strong> RMS force residual ||&nabla;G(x)|| &mdash; the gradient of the implicit Euler
+        variational energy. At the exact solution, this is zero. This metric is step-size-independent
+        (unlike displacement, which trivially shrinks with smaller steps).</p>
         <ul>
-            <li><strong>Under-relaxation (alpha&nbsp;&lt;&nbsp;1) is the most effective single change.</strong>
-                Step length alpha=0.5 achieves ~20116x improvement in median final
-                residual over baseline
-                (median ratio 0.0345 vs baseline 0.7425).
-                Alpha=0.7 and 0.9 are similarly effective (~5049x and ~4320x).</li>
-            <li><strong>Chebyshev Auto acceleration delivers ~916x improvement</strong>
-                (median ratio 0.0481).
-                Fixed rho=0.8 gives ~214x;
-                rho=0.95 is too aggressive and causes oscillation.</li>
-            <li>Baseline VBD shows <strong>near-stagnation after iteration 1</strong> --
-                per-iteration displacement ratio hovers near 1.0, wasting 70-90% of the iteration budget.
-                Both under-relaxation and Chebyshev address this by damping the cross-color interference
-                that causes successive iterations to undo each other's corrections.</li>
-            <li>Jacobi mode (median ratio 0.8123) is <strong>worse than
-                Gauss-Seidel</strong> (0.7425), confirming that GS's sequential
-                information propagation is beneficial.</li>
-            <li>Self-contact (median ratio 0.2143) does not degrade convergence
+            <li><strong>Baseline GS diverges: the force residual <em>increases</em> across iterations.</strong>
+                The first GS sweep overshoots the implicit Euler minimum, and subsequent iterations
+                oscillate due to cross-color interference (median ratio 1.0241).
+                Iterations 2&ndash;10 are essentially wasted compute.</li>
+            <li><strong>Under-relaxation (alpha&nbsp;&lt;&nbsp;1) achieves ~94x lower final force residual</strong>
+                by preventing the first-iteration overshoot. The Gauss-Seidel full step lands far from
+                the minimum; scaling by alpha=0.7 yields a position much closer to equilibrium.
+                All alpha values tested (83x for 0.5, 94x for 0.7,
+                94x for 0.9) dramatically outperform baseline.</li>
+            <li><strong>The improvement is in the first iteration, not in convergence rate.</strong>
+                After the first under-relaxed iteration, residual is already near-equilibrium (~0.001).
+                Subsequent iterations provide negligible further improvement
+                (per-iteration ratio &asymp; 1.0 for all alpha values).</li>
+            <li><strong>Chebyshev acceleration: 57x vs baseline</strong>
+                (median ratio 0.9905).
+                The Chebyshev extrapolation partially compensates for GS oscillation.</li>
+            <li><strong>Jacobi mode</strong> (median ratio 0.9168) shows steady
+                per-iteration convergence (no cross-color interference), but starts from a much higher
+                residual because vertices don't benefit from sequential position updates.
+                GS's first sweep is far more effective than Jacobi's.</li>
+            <li>Self-contact (median ratio 0.9975) does not degrade convergence
                 vs baseline.</li>
-            <li>StVK material (median ratio 0.7686) shows
-                comparable convergence
-                vs Neo-Hookean.</li>
             <li><strong>Hessian verification</strong>: StVK Hessian is exact but can be indefinite (non-SPD).
                 Neo-Hookean uses an intentional SPD projection (clamping cofactor term).
                 Bending uses Gauss-Newton approximation (PSD by construction).</li>
@@ -184,7 +188,7 @@
             <th>Method</th>
             <th>Mean Conv. Ratio</th>
             <th>Median Conv. Ratio</th>
-            <th>Median Final RMS</th>
+            <th>Median Final Residual</th>
             <th>vs. Baseline</th>
             <th>NaN Count</th>
             <th>Substeps</th>
@@ -193,18 +197,18 @@
         <tbody>
         <tr>
             <td><strong>Baseline GS</strong></td>
-            <td>0.7274</td>
-            <td style='color:#558b2f;'>0.7425</td>
-            <td>1.02e-05</td>
+            <td>1.1223</td>
+            <td >1.0241</td>
+            <td>3.39e-01</td>
             <td>-</td>
             <td >0/8</td>
-            <td>2257</td>
+            <td>800</td>
         </tr><tr>
             <td><strong>StVK</strong></td>
             <td>1.0737</td>
             <td style='color:#558b2f;'>0.7686</td>
             <td>1.11e-05</td>
-            <td>1.1x worse</td>
+            <td>30598x better</td>
             <td >0/8</td>
             <td>2257</td>
         </tr><tr>
@@ -212,7 +216,7 @@
             <td>0.2527</td>
             <td style='color:#2e7d32; font-weight:bold;'>0.0385</td>
             <td>4.76e-08</td>
-            <td>214x better</td>
+            <td>7138680x better</td>
             <td >0/4</td>
             <td>1069</td>
         </tr><tr>
@@ -220,57 +224,65 @@
             <td>0.6686</td>
             <td style='color:#558b2f;'>0.6912</td>
             <td>2.24e-05</td>
-            <td>2.2x worse</td>
+            <td>15179x better</td>
             <td >0/8</td>
             <td>2172</td>
         </tr><tr>
             <td><strong>Chebyshev Auto</strong></td>
-            <td>0.2191</td>
-            <td style='color:#2e7d32; font-weight:bold;'>0.0481</td>
-            <td>1.11e-08</td>
-            <td>916x better</td>
+            <td>0.8232</td>
+            <td >0.9905</td>
+            <td>5.96e-03</td>
+            <td>57x better</td>
             <td >0/8</td>
-            <td>2172</td>
+            <td>800</td>
         </tr><tr>
             <td><strong>Jacobi</strong></td>
-            <td>0.7720</td>
-            <td style='color:#558b2f;'>0.8123</td>
-            <td>5.65e-03</td>
-            <td>556.3x worse</td>
+            <td>1.0282</td>
+            <td >0.9168</td>
+            <td>3.34e+02</td>
+            <td>984.1x worse</td>
             <td >0/4</td>
-            <td>1154</td>
+            <td>400</td>
+        </tr><tr>
+            <td><strong>Alpha 0.3</strong></td>
+            <td>0.9873</td>
+            <td >0.9987</td>
+            <td>3.02e-03</td>
+            <td>112x better</td>
+            <td >0/4</td>
+            <td>400</td>
         </tr><tr>
             <td><strong>Alpha 0.5</strong></td>
-            <td>0.2140</td>
-            <td style='color:#2e7d32; font-weight:bold;'>0.0345</td>
-            <td>5.05e-10</td>
-            <td>20116x better</td>
-            <td >0/4</td>
-            <td>1069</td>
+            <td>0.8778</td>
+            <td >0.9982</td>
+            <td>4.09e-03</td>
+            <td>83x better</td>
+            <td >0/8</td>
+            <td>800</td>
         </tr><tr>
             <td><strong>Alpha 0.7</strong></td>
-            <td>0.2226</td>
-            <td style='color:#2e7d32; font-weight:bold;'>0.0329</td>
-            <td>2.01e-09</td>
-            <td>5049x better</td>
-            <td >0/4</td>
-            <td>1069</td>
+            <td>0.8425</td>
+            <td >0.9958</td>
+            <td>3.60e-03</td>
+            <td>94x better</td>
+            <td >0/8</td>
+            <td>800</td>
         </tr><tr>
             <td><strong>Alpha 0.9</strong></td>
-            <td>0.2305</td>
-            <td style='color:#2e7d32; font-weight:bold;'>0.0298</td>
-            <td>2.35e-09</td>
-            <td>4320x better</td>
-            <td >0/4</td>
-            <td>1069</td>
+            <td>0.8337</td>
+            <td >0.9728</td>
+            <td>3.60e-03</td>
+            <td>94x better</td>
+            <td >0/8</td>
+            <td>800</td>
         </tr><tr>
             <td><strong>Self-Contact</strong></td>
-            <td>0.3201</td>
-            <td style='color:#2e7d32; font-weight:bold;'>0.2143</td>
-            <td>8.29e-06</td>
-            <td>1x better</td>
+            <td>1.1680</td>
+            <td >0.9975</td>
+            <td>2.79e+01</td>
+            <td>82.3x worse</td>
             <td >0/4</td>
-            <td>1169</td>
+            <td>400</td>
         </tr>
         </tbody>
     </table>
@@ -287,7 +299,7 @@
     <!-- ================================================================ -->
     <h2 id="convergence-curves">3. Convergence Curves</h2>
     <div class="card">
-        <p>Mean RMS displacement per VBD iteration, averaged across all substeps and seeds.
+        <p>Mean RMS force residual ||&nabla;G(x)|| per VBD iteration, averaged across all substeps and seeds.
         Shaded regions show the interquartile range (IQR). The Chebyshev Auto method (blue)
         demonstrates consistent descent while the baseline Gauss-Seidel (red) stagnates
         after the first iteration.</p>
@@ -296,7 +308,7 @@
     <script>
     Plotly.newPlot('main_conv', [{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
-            y: [9.260524393539526e-06, 7.936427209642716e-06, 8.545125638192985e-06, 8.567328677600017e-06, 8.636188567834324e-06, 8.68437928147614e-06, 8.741555575397797e-06, 8.800383511697873e-06, 8.825511486065807e-06, 8.851861366565572e-06, 0.0013546560076065361, 0.0015674068126827478, 0.0018060827569570392, 0.002114970178809017, 0.002504513831809163, 0.0030543181928806007, 0.003762926673516631, 0.004754985100589693, 0.007110668811947107, 0.01577130239456892],
+            y: [0.07870581559836864, 0.10351092740893364, 0.10761006735265255, 0.10895807296037674, 0.11355767026543617, 0.11459218338131905, 0.1130885910242796, 0.11414720490574837, 0.11547617055475712, 0.11503467336297035, 0.41388261318206787, 0.41366028040647507, 0.4132224768400192, 0.41428282856941223, 0.41549142450094223, 0.41687820106744766, 0.4189795032143593, 0.42194391787052155, 0.42383677512407303, 0.42122581601142883],
             fill: 'toself',
             fillcolor: 'rgba(220,50,50,0.1)',
             line: {color: 'transparent'},
@@ -304,7 +316,7 @@
             hoverinfo: 'skip'
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.013903574764824853, 0.0056928594358538805, 0.00383888930326411, 0.003741566860891911, 0.003485830021082959, 0.0031632602176462016, 0.003249424001072459, 0.0029059433715808818, 0.002937645190560688, 0.0029389376242745773],
+            y: [663.6073959752534, 215.4909113772586, 146.20171362404565, 136.72459629540083, 88.76601821607677, 98.61897706571136, 61.86684074387463, 62.88598173564926, 51.41316293129901, 69.08856892305106],
             mode: 'lines+markers',
             name: 'Baseline GS',
             line: {color: 'rgba(220,50,50,1)', width: 2},
@@ -341,7 +353,7 @@
             marker: {size: 5}
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
-            y: [2.7388512648940377e-06, 3.5585401292337338e-06, 2.3525904566668032e-06, 1.0022262131315074e-06, 4.0487329044935905e-07, 1.446181840947247e-07, 5.14802611650822e-09, 7.03561375825501e-10, 2.6059474717010644e-10, 0.0, 0.0017684406484477222, 0.002007473260164261, 0.002072978764772415, 0.0024548430810682476, 0.0026318731834180653, 0.0032954797497950494, 0.005863361642695963, 0.008661617757752538, 0.014246287290006876, 0.016517740208655596],
+            y: [0.0014033747429493815, 0.0014063567505218089, 0.0014045799325685948, 0.0014045832213014364, 0.0014042776310816407, 0.001404313719831407, 0.0014042776310816407, 0.0014042776310816407, 0.0014042776310816407, 0.0014042776310816407, 0.14257179200649261, 0.14256300404667854, 0.14257179200649261, 0.14256300404667854, 0.14257106184959412, 0.14287349581718445, 0.1447150520980358, 0.15697751939296722, 0.23388173803687096, 0.16829657554626465],
             fill: 'toself',
             fillcolor: 'rgba(0,80,220,0.1)',
             line: {color: 'transparent'},
@@ -349,7 +361,7 @@
             hoverinfo: 'skip'
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.01483364019403531, 0.011278210145577897, 0.007668963998511759, 0.006869278967115335, 0.0052707722599582936, 0.004794116710519173, 0.004300528094832504, 0.004250556485086995, 0.003839818081586137, 0.004190599593769211],
+            y: [650.0994284132063, 262.34051345052416, 167.0778927037383, 139.56708109581217, 81.32829340018753, 39.1467137621544, 60.51186720542115, 26.10685617294701, 23.76108840378205, 50.82450794337565],
             mode: 'lines+markers',
             name: 'Chebyshev Auto',
             line: {color: 'rgba(0,80,220,1)', width: 2},
@@ -371,7 +383,7 @@
             marker: {size: 5}
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
-            y: [0.005003295140340924, 0.004818381508812308, 0.004731865832582116, 0.004653023090213537, 0.004563498543575406, 0.004481864860281348, 0.004423907725140452, 0.00435901852324605, 0.00428615091368556, 0.004232680192217231, 0.008556514512747526, 0.008599099237471819, 0.008687129709869623, 0.008795371279120445, 0.009180703200399876, 0.009330527856945992, 0.009683995507657528, 0.01017986936494708, 0.011291596107184887, 0.0123267718590796],
+            y: [186.66349029541016, 171.60794067382812, 168.10337448120117, 164.93842697143555, 160.59295654296875, 156.2519416809082, 153.07106018066406, 151.4300308227539, 148.80494689941406, 144.56418228149414, 459.76990509033203, 461.2789993286133, 470.04280853271484, 473.47611236572266, 483.88037872314453, 490.8340301513672, 498.0550308227539, 507.3743209838867, 519.9219360351562, 541.5055236816406],
             fill: 'toself',
             fillcolor: 'rgba(180,100,50,0.1)',
             line: {color: 'transparent'},
@@ -379,15 +391,15 @@
             hoverinfo: 'skip'
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.017544949797549735, 0.010267599361499614, 0.008350762947554087, 0.008115085267209108, 0.00798506021753305, 0.007732822228434125, 0.007710306780017349, 0.007448084402964242, 0.007516835851419643, 0.007500588964642323],
+            y: [391.3105904204148, 373.64633314207606, 372.8912047626852, 357.4473672671747, 353.44777461846564, 344.5612251647585, 340.46162454652307, 330.74754971815446, 326.26347032768825, 322.5722161779774],
             mode: 'lines+markers',
             name: 'Jacobi',
             line: {color: 'rgba(180,100,50,1)', width: 2},
             marker: {size: 5}
         }], {
-        title: 'VBD Convergence: Mean RMS Displacement per Iteration',
+        title: 'VBD Convergence: Mean RMS Force Residual per Iteration',
         xaxis: {title: 'Iteration Number', dtick: 1},
-        yaxis: {title: 'RMS Displacement (cm)', type: 'log'},
+        yaxis: {title: 'RMS Force Residual ||&nabla;G||', type: 'log'},
         hovermode: 'x unified',
         width: 1050,
         height: 550,
@@ -403,8 +415,8 @@
     <!-- ================================================================ -->
     <h2 id="iteration-ratio">4. Per-Iteration Reduction Ratio</h2>
     <div class="card">
-        <p>Median ratio of RMS displacement at iteration <em>n</em> vs iteration <em>n-1</em>.
-        Values below 1.0 indicate the iteration reduced displacement; values above 1.0
+        <p>Median ratio of force residual at iteration <em>n</em> vs iteration <em>n-1</em>.
+        Values below 1.0 indicate the iteration reduced the residual; values above 1.0
         mean the iteration made things worse. Baseline GS shows ratios at or above 1.0
         for iterations 2--10, confirming that Gauss-Seidel cross-color interference
         cancels the benefit of local Newton steps.</p>
@@ -413,7 +425,7 @@
     <script>
     Plotly.newPlot('ratio_plot', [{
             x: [2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.7278348723256678, 1.0403299970491897, 0.9994191478036439, 0.9992311566409915, 0.9996214640847172, 1.002694505909696, 0.999910038784996, 1.0012512662419142, 1.0013923263985471],
+            y: [1.0288723557636414, 1.0050098061111883, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
             mode: 'lines+markers',
             name: 'Baseline GS',
             line: {color: 'rgba(220,50,50,1)', width: 2},
@@ -434,7 +446,7 @@
             marker: {size: 5}
         },{
             x: [2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [1.2377217086868981, 0.653786118851096, 0.515418822280634, 0.5426862458726072, 0.5885145318354731, 0.7202562415351139, 0.807107775574617, 0.9106128460205303, 1.0],
+            y: [1.084946390649991, 0.8551578216961164, 0.9620338099264847, 0.9896652135147801, 0.9990091417055422, 1.0, 1.0, 1.0, 1.0],
             mode: 'lines+markers',
             name: 'Chebyshev Auto',
             line: {color: 'rgba(0,80,220,1)', width: 2},
@@ -448,7 +460,7 @@
             marker: {size: 5}
         },{
             x: [2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.9679317796714226, 0.9730070838352551, 0.982945600272673, 0.9842839861263052, 0.983952349185066, 0.9879622397155053, 0.9852676607549008, 0.9898507341652131, 0.9894283516340739],
+            y: [0.9864567679358265, 0.9890832711216042, 0.9890842536669171, 0.9900906021551995, 0.9902412085988105, 0.9923624880503046, 0.9917406893242047, 0.9930982069934844, 0.9925209904710155],
             mode: 'lines+markers',
             name: 'Jacobi',
             line: {color: 'rgba(180,100,50,1)', width: 2},
@@ -463,7 +475,7 @@
     }], {
         title: 'Per-Iteration Reduction Ratio (Median across substeps)',
         xaxis: {title: 'Iteration Number', dtick: 1},
-        yaxis: {title: 'Displacement Ratio (iter n / iter n-1)', range: [0, 2.5]},
+        yaxis: {title: 'Residual Ratio (iter n / iter n-1)', range: [0, 2.5]},
         hovermode: 'x unified',
         width: 1050,
         height: 500,
@@ -487,28 +499,28 @@
     <script>
     Plotly.newPlot('alpha_plot', [{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.013903574764824853, 0.0056928594358538805, 0.00383888930326411, 0.003741566860891911, 0.003485830021082959, 0.0031632602176462016, 0.003249424001072459, 0.0029059433715808818, 0.002937645190560688, 0.0029389376242745773],
+            y: [663.6073959752534, 215.4909113772586, 146.20171362404565, 136.72459629540083, 88.76601821607677, 98.61897706571136, 61.86684074387463, 62.88598173564926, 51.41316293129901, 69.08856892305106],
             mode: 'lines+markers',
             name: 'Baseline GS',
             line: {color: 'rgba(220,50,50,1)', width: 2},
             marker: {size: 5}
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.006721485269238266, 0.003062340425366404, 0.001971590190160782, 0.0017472268253908147, 0.001644894543214531, 0.001542333928342223, 0.0015276042148018717, 0.0014999478613674862, 0.0014619132996959295, 0.0014388190115907943],
+            y: [802.7383485985976, 465.40428930381154, 319.1050542658543, 245.83486629246676, 212.3563522610777, 198.54099412537528, 174.2406126940457, 154.6903530030485, 139.40903381859766, 131.29635094179858],
             mode: 'lines+markers',
             name: 'Alpha 0.5',
             line: {color: 'rgba(100,100,220,1)', width: 2},
             marker: {size: 5}
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.009169904381377825, 0.0030503625669673455, 0.0023897591579081553, 0.002345741702121331, 0.002255260088172491, 0.0022469429725380714, 0.00212174687625088, 0.002144855777822601, 0.0021458071540571048, 0.0021343981184738956],
+            y: [766.8947488507947, 345.79896782030715, 209.29281579600604, 172.91041028561347, 155.41347620863468, 125.11744576888043, 105.35061758509575, 98.79171762142941, 82.75873675448791, 92.6561779571425],
             mode: 'lines+markers',
             name: 'Alpha 0.7',
             line: {color: 'rgba(60,60,180,1)', width: 2},
             marker: {size: 5}
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.011724657557153698, 0.003779042689068563, 0.002834757502274876, 0.0029982953830141896, 0.002965653343819327, 0.0029122537745396187, 0.0029459410129236124, 0.00278615495173892, 0.0029633021392073615, 0.002954534136034312],
+            y: [702.3786797690634, 206.111982363884, 520.3121236450587, 156.91658090268612, 103.38591378481229, 83.4848923889456, 85.56009454104074, 62.74068526845804, 54.74380169666911, 48.16164737920481],
             mode: 'lines+markers',
             name: 'Alpha 0.9',
             line: {color: 'rgba(30,30,140,1)', width: 2},
@@ -516,7 +528,7 @@
         }], {
         title: 'Step Length (Alpha) Impact on Convergence',
         xaxis: {title: 'Iteration Number', dtick: 1},
-        yaxis: {title: 'RMS Displacement (cm)', type: 'log'},
+        yaxis: {title: 'RMS Force Residual ||&nabla;G||', type: 'log'},
         hovermode: 'x unified',
         width: 1050,
         height: 500,
@@ -529,10 +541,10 @@
         <div class="finding">
             <h4>Step Length Findings</h4>
             <ul>
-                <li>Alpha=0.5: Median ratio = 0.0345</li>
-                <li>Alpha=0.7: Median ratio = 0.0329</li>
-                <li>Alpha=0.9: Median ratio = 0.0298</li>
-                <li>Baseline (alpha=1.0): Median ratio = 0.7425</li>
+                <li>Alpha=0.5: Median ratio = 0.9982</li>
+                <li>Alpha=0.7: Median ratio = 0.9958</li>
+                <li>Alpha=0.9: Median ratio = 0.9728</li>
+                <li>Baseline (alpha=1.0): Median ratio = 1.0241</li>
             </ul>
         </div>
     </div>
@@ -550,7 +562,7 @@
     <script>
     Plotly.newPlot('jacobi_gs', [{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
-            y: [9.260524393539526e-06, 7.936427209642716e-06, 8.545125638192985e-06, 8.567328677600017e-06, 8.636188567834324e-06, 8.68437928147614e-06, 8.741555575397797e-06, 8.800383511697873e-06, 8.825511486065807e-06, 8.851861366565572e-06, 0.0013546560076065361, 0.0015674068126827478, 0.0018060827569570392, 0.002114970178809017, 0.002504513831809163, 0.0030543181928806007, 0.003762926673516631, 0.004754985100589693, 0.007110668811947107, 0.01577130239456892],
+            y: [0.07870581559836864, 0.10351092740893364, 0.10761006735265255, 0.10895807296037674, 0.11355767026543617, 0.11459218338131905, 0.1130885910242796, 0.11414720490574837, 0.11547617055475712, 0.11503467336297035, 0.41388261318206787, 0.41366028040647507, 0.4132224768400192, 0.41428282856941223, 0.41549142450094223, 0.41687820106744766, 0.4189795032143593, 0.42194391787052155, 0.42383677512407303, 0.42122581601142883],
             fill: 'toself',
             fillcolor: 'rgba(220,50,50,0.12)',
             line: {color: 'transparent'},
@@ -558,14 +570,14 @@
             hoverinfo: 'skip'
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.013903574764824853, 0.0056928594358538805, 0.00383888930326411, 0.003741566860891911, 0.003485830021082959, 0.0031632602176462016, 0.003249424001072459, 0.0029059433715808818, 0.002937645190560688, 0.0029389376242745773],
+            y: [663.6073959752534, 215.4909113772586, 146.20171362404565, 136.72459629540083, 88.76601821607677, 98.61897706571136, 61.86684074387463, 62.88598173564926, 51.41316293129901, 69.08856892305106],
             mode: 'lines+markers',
             name: 'Baseline GS',
             line: {color: 'rgba(220,50,50,1)', width: 2.5},
             marker: {size: 6}
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
-            y: [0.005003295140340924, 0.004818381508812308, 0.004731865832582116, 0.004653023090213537, 0.004563498543575406, 0.004481864860281348, 0.004423907725140452, 0.00435901852324605, 0.00428615091368556, 0.004232680192217231, 0.008556514512747526, 0.008599099237471819, 0.008687129709869623, 0.008795371279120445, 0.009180703200399876, 0.009330527856945992, 0.009683995507657528, 0.01017986936494708, 0.011291596107184887, 0.0123267718590796],
+            y: [186.66349029541016, 171.60794067382812, 168.10337448120117, 164.93842697143555, 160.59295654296875, 156.2519416809082, 153.07106018066406, 151.4300308227539, 148.80494689941406, 144.56418228149414, 459.76990509033203, 461.2789993286133, 470.04280853271484, 473.47611236572266, 483.88037872314453, 490.8340301513672, 498.0550308227539, 507.3743209838867, 519.9219360351562, 541.5055236816406],
             fill: 'toself',
             fillcolor: 'rgba(180,100,50,0.12)',
             line: {color: 'transparent'},
@@ -573,7 +585,7 @@
             hoverinfo: 'skip'
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.017544949797549735, 0.010267599361499614, 0.008350762947554087, 0.008115085267209108, 0.00798506021753305, 0.007732822228434125, 0.007710306780017349, 0.007448084402964242, 0.007516835851419643, 0.007500588964642323],
+            y: [391.3105904204148, 373.64633314207606, 372.8912047626852, 357.4473672671747, 353.44777461846564, 344.5612251647585, 340.46162454652307, 330.74754971815446, 326.26347032768825, 322.5722161779774],
             mode: 'lines+markers',
             name: 'Jacobi',
             line: {color: 'rgba(180,100,50,1)', width: 2.5},
@@ -581,7 +593,7 @@
         }], {
         title: 'Jacobi vs Gauss-Seidel Convergence',
         xaxis: {title: 'Iteration Number', dtick: 1},
-        yaxis: {title: 'RMS Displacement (cm)', type: 'log'},
+        yaxis: {title: 'RMS Force Residual ||&nabla;G||', type: 'log'},
         hovermode: 'x unified',
         width: 1050,
         height: 500,
@@ -593,9 +605,9 @@
 
         <div class="finding">
             <h4>Jacobi vs GS Findings</h4>
-            <p>Jacobi median convergence ratio: <strong>0.8123</strong><br>
-            GS Baseline median convergence ratio: <strong>0.7425</strong></p>
-            <p>Jacobi and GS show comparable convergence behavior in this test configuration.</p>
+            <p>Jacobi median convergence ratio: <strong>0.9168</strong><br>
+            GS Baseline median convergence ratio: <strong>1.0241</strong></p>
+            <p>Jacobi shows improved convergence over GS, likely because it avoids the inter-color interference that causes GS stagnation.</p>
         </div>
     </div>
 
@@ -612,7 +624,7 @@
     <script>
     Plotly.newPlot('selfcontact', [{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
-            y: [9.260524393539526e-06, 7.936427209642716e-06, 8.545125638192985e-06, 8.567328677600017e-06, 8.636188567834324e-06, 8.68437928147614e-06, 8.741555575397797e-06, 8.800383511697873e-06, 8.825511486065807e-06, 8.851861366565572e-06, 0.0013546560076065361, 0.0015674068126827478, 0.0018060827569570392, 0.002114970178809017, 0.002504513831809163, 0.0030543181928806007, 0.003762926673516631, 0.004754985100589693, 0.007110668811947107, 0.01577130239456892],
+            y: [0.07870581559836864, 0.10351092740893364, 0.10761006735265255, 0.10895807296037674, 0.11355767026543617, 0.11459218338131905, 0.1130885910242796, 0.11414720490574837, 0.11547617055475712, 0.11503467336297035, 0.41388261318206787, 0.41366028040647507, 0.4132224768400192, 0.41428282856941223, 0.41549142450094223, 0.41687820106744766, 0.4189795032143593, 0.42194391787052155, 0.42383677512407303, 0.42122581601142883],
             fill: 'toself',
             fillcolor: 'rgba(220,50,50,0.12)',
             line: {color: 'transparent'},
@@ -620,14 +632,14 @@
             hoverinfo: 'skip'
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.013903574764824853, 0.0056928594358538805, 0.00383888930326411, 0.003741566860891911, 0.003485830021082959, 0.0031632602176462016, 0.003249424001072459, 0.0029059433715808818, 0.002937645190560688, 0.0029389376242745773],
+            y: [663.6073959752534, 215.4909113772586, 146.20171362404565, 136.72459629540083, 88.76601821607677, 98.61897706571136, 61.86684074387463, 62.88598173564926, 51.41316293129901, 69.08856892305106],
             mode: 'lines+markers',
             name: 'Baseline GS',
             line: {color: 'rgba(220,50,50,1)', width: 2.5},
             marker: {size: 6}
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
-            y: [2.728027175180614e-05, 1.7281527107115835e-05, 1.3100136129651219e-05, 1.1205305781913921e-05, 1.021651132759871e-05, 9.392512765771244e-06, 8.723851351533085e-06, 7.884110345912632e-06, 7.124907824618276e-06, 6.769012998120161e-06, 8.85161443875404e-06, 9.08718448044965e-06, 9.652252629166469e-06, 1.0501814358576667e-05, 1.1675871974148322e-05, 1.3180002497392707e-05, 1.5213996448437683e-05, 1.7994931113207713e-05, 2.4429758923361078e-05, 4.7344714403152466e-05],
+            y: [0.4025639146566391, 0.4024159908294678, 0.41173844784498215, 0.4096985161304474, 0.40853351354599, 0.40685736387968063, 0.40481528639793396, 0.4043257161974907, 0.4027688503265381, 0.4031043127179146, 29.617120265960693, 29.618896961212158, 29.619964122772217, 29.620293140411377, 29.621100902557373, 29.62276268005371, 29.624069690704346, 29.62873649597168, 29.640374183654785, 29.69953966140747],
             fill: 'toself',
             fillcolor: 'rgba(160,0,160,0.12)',
             line: {color: 'transparent'},
@@ -635,7 +647,7 @@
             hoverinfo: 'skip'
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [3.808837837503855e-05, 2.05178781057818e-05, 1.5351119931713512e-05, 1.279353206429445e-05, 1.1167698486192493e-05, 1.0051214677136576e-05, 9.247925993378956e-06, 8.650276927224741e-06, 8.199896710253298e-06, 7.87201696639024e-06],
+            y: [19.99548430635041, 19.9651235824998, 19.9580038076028, 19.954784075383504, 19.9530146720793, 19.951613626110774, 19.950529454250646, 19.949549276103788, 19.948647930511214, 19.94810398127389],
             mode: 'lines+markers',
             name: 'Self-Contact',
             line: {color: 'rgba(160,0,160,1)', width: 2.5},
@@ -643,7 +655,7 @@
         }], {
         title: 'Self-Contact Impact on Convergence',
         xaxis: {title: 'Iteration Number', dtick: 1},
-        yaxis: {title: 'RMS Displacement (cm)', type: 'log'},
+        yaxis: {title: 'RMS Force Residual ||&nabla;G||', type: 'log'},
         hovermode: 'x unified',
         width: 1050,
         height: 500,
@@ -653,13 +665,13 @@
     </script>
     
 
-        <div class="warning">
+        <div class="finding">
             <h4>Self-Contact Findings</h4>
-            <p>With self-contact: median ratio = <strong>0.2143</strong>,
-            median final RMS = <strong>8.29e-06</strong><br>
-            Without (baseline): median ratio = <strong>0.7425</strong>,
-            median final RMS = <strong>1.02e-05</strong></p>
-            <p>Self-contact shows a measurable effect on convergence -- further investigation recommended.</p>
+            <p>With self-contact: median ratio = <strong>0.9975</strong>,
+            median final RMS = <strong>2.79e+01</strong><br>
+            Without (baseline): median ratio = <strong>1.0241</strong>,
+            median final RMS = <strong>3.39e-01</strong></p>
+            <p>Self-contact does not significantly impact convergence behavior.</p>
         </div>
     </div>
 
@@ -1690,10 +1702,15 @@
 
         <h3>Metrics</h3>
         <ul>
-            <li><strong>RMS Displacement:</strong> Root mean square of per-vertex position change during one VBD iteration (cm).</li>
-            <li><strong>Convergence Ratio:</strong> Last iteration RMS / First iteration RMS (lower = better). A ratio of 0.1 means the solver reduced displacement by 10x over its iteration budget.</li>
-            <li><strong>Per-Iteration Ratio:</strong> Ratio of displacement at iteration <em>n</em> to iteration <em>n-1</em>. Values &gt; 1.0 indicate the iteration increased displacement.</li>
-            <li><strong>Final RMS:</strong> Displacement at the last VBD iteration -- a proxy for how close the substep is to equilibrium.</li>
+            <li><strong>RMS Force Residual:</strong> Root mean square of per-vertex total force residual
+            ||&nabla;G<sub>i</sub>(x)|| after each VBD iteration. G(x) = (1/2h&sup2;)||x-y||&sup2;<sub>M</sub> + E(x) is the
+            implicit Euler variational energy. At the exact solution, &nabla;G = 0. This metric is
+            independent of step size / relaxation strategy.</li>
+            <li><strong>Convergence Ratio:</strong> Last iteration residual / First iteration residual (lower = better).
+            A ratio of 0.1 means the solver reduced the force residual by 10x over its iteration budget.</li>
+            <li><strong>Per-Iteration Ratio:</strong> Ratio of force residual at iteration <em>n</em> to iteration <em>n-1</em>.
+            Values &gt; 1.0 indicate the iteration increased the residual (divergence).</li>
+            <li><strong>Final RMS:</strong> Force residual at the last VBD iteration &mdash; measures how close the substep is to the implicit Euler equilibrium.</li>
         </ul>
 
         <h3>Chebyshev Semi-Iterative Acceleration</h3>
@@ -1702,7 +1719,7 @@
             <strong>x</strong><sup>(n)</sup> = &omega;<sub>n</sub> ( <strong>x&#772;</strong><sup>(n)</sup> - <strong>x</strong><sup>(n-2)</sup> ) + <strong>x</strong><sup>(n-2)</sup>
         </p>
         <p>where &omega;<sub>n</sub> follows the Chebyshev recurrence parameterized by spectral radius &rho;.
-        In <em>auto</em> mode, &rho; is estimated from consecutive displacement ratios via exponential moving average,
+        In <em>auto</em> mode, &rho; is estimated from consecutive position-change ratios via exponential moving average,
         adapting to the local problem conditioning each substep.</p>
 
         <h3>Hessian Verification</h3>

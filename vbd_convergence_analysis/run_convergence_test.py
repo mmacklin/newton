@@ -332,10 +332,10 @@ def main():
                             last_step = conv[-1]
                             iters = last_step["iteration_residuals"]
                             if len(iters) > 0:
-                                first_disp = iters[0]["rms_displacement"]
-                                last_disp = iters[-1]["rms_displacement"]
-                                ratio = last_disp / first_disp if first_disp > 0 else float("inf")
-                                print(f"  RMS displacement: {first_disp:.6e} -> {last_disp:.6e} "
+                                first_res = iters[0].get("rms_force_residual", iters[0].get("rms_displacement", 0))
+                                last_res = iters[-1].get("rms_force_residual", iters[-1].get("rms_displacement", 0))
+                                ratio = last_res / first_res if first_res > 0 else float("inf")
+                                print(f"  RMS force residual: {first_res:.6e} -> {last_res:.6e} "
                                       f"(ratio: {ratio:.4f})")
                                 print(f"  Has NaN: {result['has_nan']}")
                                 print(f"  Time: {result['elapsed_seconds']:.2f}s")

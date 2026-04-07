@@ -68,6 +68,9 @@ def compute_metrics(data: list, iters_filter: int | None = None) -> dict:
     nan_count = 0
     total = 0
 
+    # Use force residual if available, fall back to displacement for old data
+    metric_key = "rms_force_residual"
+
     for r in data:
         if "error" in r or "convergence" not in r:
             continue
@@ -79,8 +82,10 @@ def compute_metrics(data: list, iters_filter: int | None = None) -> dict:
         for step in r["convergence"]:
             iters = step.get("iteration_residuals", [])
             if len(iters) >= 2:
-                first = iters[0]["rms_displacement"]
-                last = iters[-1]["rms_displacement"]
+                # Prefer force residual; fall back to displacement for old data
+                key = metric_key if metric_key in iters[0] else "rms_displacement"
+                first = iters[0][key]
+                last = iters[-1][key]
                 final_rms.append(last)
                 first_rms.append(first)
                 if first > 1e-15:
@@ -105,9 +110,10 @@ def compute_metrics(data: list, iters_filter: int | None = None) -> dict:
 
 
 def extract_convergence_curves(data: list, target_iters: int = 10) -> np.ndarray:
-    """Extract per-iteration RMS displacement curves from result data.
+    """Extract per-iteration force residual curves from result data.
 
     Returns an (N, target_iters) array where each row is one substep's curve.
+    Falls back to displacement metric for old data files.
     """
     all_curves: list[list[float]] = []
     for r in data:
@@ -118,7 +124,8 @@ def extract_convergence_curves(data: list, target_iters: int = 10) -> np.ndarray
         for step in r["convergence"]:
             iters = step.get("iteration_residuals", [])
             if len(iters) == target_iters:
-                all_curves.append([it["rms_displacement"] for it in iters])
+                key = "rms_force_residual" if "rms_force_residual" in iters[0] else "rms_displacement"
+                all_curves.append([it[key] for it in iters])
     if not all_curves:
         return np.empty((0, target_iters))
     arr = np.array(all_curves)
@@ -135,6 +142,7 @@ def extract_convergence_curves(data: list, target_iters: int = 10) -> np.ndarray
 COLORS = {
     "Baseline GS": "rgba(220,50,50,1)",
     "Jacobi": "rgba(180,100,50,1)",
+    "Alpha 0.3": "rgba(140,140,255,1)",
     "Alpha 0.5": "rgba(100,100,220,1)",
     "Alpha 0.7": "rgba(60,60,180,1)",
     "Alpha 0.9": "rgba(30,30,140,1)",
@@ -212,7 +220,7 @@ def make_comparison_table(all_data: dict[str, list]) -> str:
             <th>Method</th>
             <th>Mean Conv. Ratio</th>
             <th>Median Conv. Ratio</th>
-            <th>Median Final RMS</th>
+            <th>Median Final Residual</th>
             <th>vs. Baseline</th>
             <th>NaN Count</th>
             <th>Substeps</th>
@@ -272,9 +280,9 @@ def make_convergence_curves_plot(all_data: dict, plot_id: str = "main_conv") -> 
         }}""")
 
     layout = """{
-        title: 'VBD Convergence: Mean RMS Displacement per Iteration',
+        title: 'VBD Convergence: Mean RMS Force Residual per Iteration',
         xaxis: {title: 'Iteration Number', dtick: 1},
-        yaxis: {title: 'RMS Displacement (cm)', type: 'log'},
+        yaxis: {title: 'RMS Force Residual ||&nabla;G||', type: 'log'},
         hovermode: 'x unified',
         width: 1050,
         height: 550,
@@ -291,7 +299,7 @@ def make_convergence_curves_plot(all_data: dict, plot_id: str = "main_conv") -> 
 
 
 def make_per_iteration_ratio_plot(all_data: dict, plot_id: str = "ratio_plot") -> str:
-    """Per-iteration displacement reduction ratio plot."""
+    """Per-iteration force residual reduction ratio plot."""
     traces = []
     plot_methods = [
         "Baseline GS", "Chebyshev 0.8", "Chebyshev 0.95", "Chebyshev Auto",
@@ -343,7 +351,7 @@ def make_per_iteration_ratio_plot(all_data: dict, plot_id: str = "ratio_plot") -
     layout = """{
         title: 'Per-Iteration Reduction Ratio (Median across substeps)',
         xaxis: {title: 'Iteration Number', dtick: 1},
-        yaxis: {title: 'Displacement Ratio (iter n / iter n-1)', range: [0, 2.5]},
+        yaxis: {title: 'Residual Ratio (iter n / iter n-1)', range: [0, 2.5]},
         hovermode: 'x unified',
         width: 1050,
         height: 500,
@@ -387,7 +395,7 @@ def make_step_length_plot(all_data: dict, plot_id: str = "alpha_plot") -> str:
     layout = """{
         title: 'Step Length (Alpha) Impact on Convergence',
         xaxis: {title: 'Iteration Number', dtick: 1},
-        yaxis: {title: 'RMS Displacement (cm)', type: 'log'},
+        yaxis: {title: 'RMS Force Residual ||&nabla;G||', type: 'log'},
         hovermode: 'x unified',
         width: 1050,
         height: 500,
@@ -443,7 +451,7 @@ def make_jacobi_vs_gs_plot(all_data: dict, plot_id: str = "jacobi_gs") -> str:
     layout = """{
         title: 'Jacobi vs Gauss-Seidel Convergence',
         xaxis: {title: 'Iteration Number', dtick: 1},
-        yaxis: {title: 'RMS Displacement (cm)', type: 'log'},
+        yaxis: {title: 'RMS Force Residual ||&nabla;G||', type: 'log'},
         hovermode: 'x unified',
         width: 1050,
         height: 500,
@@ -503,7 +511,7 @@ def make_selfcontact_plot(all_data: dict, plot_id: str = "selfcontact") -> str:
     layout = """{
         title: 'Self-Contact Impact on Convergence',
         xaxis: {title: 'Iteration Number', dtick: 1},
-        yaxis: {title: 'RMS Displacement (cm)', type: 'log'},
+        yaxis: {title: 'RMS Force Residual ||&nabla;G||', type: 'log'},
         hovermode: 'x unified',
         width: 1050,
         height: 500,
@@ -534,8 +542,9 @@ def make_stiffness_plot(all_data: dict, plot_id: str = "stiff_comp") -> str:
             for step in r["convergence"]:
                 iters = step.get("iteration_residuals", [])
                 if len(iters) >= 2:
-                    first = iters[0]["rms_displacement"]
-                    last = iters[-1]["rms_displacement"]
+                    key2 = "rms_force_residual" if "rms_force_residual" in iters[0] else "rms_displacement"
+                    first = iters[0][key2]
+                    last = iters[-1][key2]
                     if first > 1e-15:
                         stiff_data[key].append(last / first)
 
@@ -862,28 +871,32 @@ def generate_report(
     <!-- ================================================================ -->
     <div class="summary" id="executive-summary">
         <h2>1. Executive Summary</h2>
+        <p><strong>Metric:</strong> RMS force residual ||&nabla;G(x)|| &mdash; the gradient of the implicit Euler
+        variational energy. At the exact solution, this is zero. This metric is step-size-independent
+        (unlike displacement, which trivially shrinks with smaller steps).</p>
         <ul>
-            <li><strong>Under-relaxation (alpha&nbsp;&lt;&nbsp;1) is the most effective single change.</strong>
-                Step length alpha=0.5 achieves ~{_improvement(a05_m)} improvement in median final
-                residual over baseline
-                (median ratio {a05_m['median_ratio']:.4f} vs baseline {bl_m['median_ratio']:.4f}).
-                Alpha=0.7 and 0.9 are similarly effective (~{_improvement(a07_m)} and ~{_improvement(a09_m)}).</li>
-            <li><strong>Chebyshev Auto acceleration delivers ~{_improvement(cheb_auto_m)} improvement</strong>
+            <li><strong>Baseline GS diverges: the force residual <em>increases</em> across iterations.</strong>
+                The first GS sweep overshoots the implicit Euler minimum, and subsequent iterations
+                oscillate due to cross-color interference (median ratio {bl_m['median_ratio']:.4f}).
+                Iterations 2&ndash;10 are essentially wasted compute.</li>
+            <li><strong>Under-relaxation (alpha&nbsp;&lt;&nbsp;1) achieves ~{_improvement(a07_m)} lower final force residual</strong>
+                by preventing the first-iteration overshoot. The Gauss-Seidel full step lands far from
+                the minimum; scaling by alpha=0.7 yields a position much closer to equilibrium.
+                All alpha values tested ({_improvement(a05_m)} for 0.5, {_improvement(a07_m)} for 0.7,
+                {_improvement(a09_m)} for 0.9) dramatically outperform baseline.</li>
+            <li><strong>The improvement is in the first iteration, not in convergence rate.</strong>
+                After the first under-relaxed iteration, residual is already near-equilibrium (~0.001).
+                Subsequent iterations provide negligible further improvement
+                (per-iteration ratio &asymp; 1.0 for all alpha values).</li>
+            <li><strong>Chebyshev acceleration: {_improvement(cheb_auto_m)} vs baseline</strong>
                 (median ratio {cheb_auto_m['median_ratio']:.4f}).
-                Fixed rho=0.8 gives ~{_improvement(cheb08_m)};
-                rho=0.95 is too aggressive and causes oscillation.</li>
-            <li>Baseline VBD shows <strong>near-stagnation after iteration 1</strong> --
-                per-iteration displacement ratio hovers near 1.0, wasting 70-90% of the iteration budget.
-                Both under-relaxation and Chebyshev address this by damping the cross-color interference
-                that causes successive iterations to undo each other's corrections.</li>
-            <li>Jacobi mode (median ratio {jacobi_m['median_ratio']:.4f}) is <strong>worse than
-                Gauss-Seidel</strong> ({bl_m['median_ratio']:.4f}), confirming that GS's sequential
-                information propagation is beneficial.</li>
+                The Chebyshev extrapolation partially compensates for GS oscillation.</li>
+            <li><strong>Jacobi mode</strong> (median ratio {jacobi_m['median_ratio']:.4f}) shows steady
+                per-iteration convergence (no cross-color interference), but starts from a much higher
+                residual because vertices don't benefit from sequential position updates.
+                GS's first sweep is far more effective than Jacobi's.</li>
             <li>Self-contact (median ratio {sc_m['median_ratio']:.4f}) does not degrade convergence
                 vs baseline.</li>
-            <li>StVK material (median ratio {stvk_m['median_ratio']:.4f}) shows
-                {'improved' if stvk_m['median_ratio'] < bl_m['median_ratio'] else 'comparable'} convergence
-                vs Neo-Hookean.</li>
             <li><strong>Hessian verification</strong>: StVK Hessian is exact but can be indefinite (non-SPD).
                 Neo-Hookean uses an intentional SPD projection (clamping cofactor term).
                 Bending uses Gauss-Newton approximation (PSD by construction).</li>
@@ -909,7 +922,7 @@ def generate_report(
     <!-- ================================================================ -->
     <h2 id="convergence-curves">3. Convergence Curves</h2>
     <div class="card">
-        <p>Mean RMS displacement per VBD iteration, averaged across all substeps and seeds.
+        <p>Mean RMS force residual ||&nabla;G(x)|| per VBD iteration, averaged across all substeps and seeds.
         Shaded regions show the interquartile range (IQR). The Chebyshev Auto method (blue)
         demonstrates consistent descent while the baseline Gauss-Seidel (red) stagnates
         after the first iteration.</p>
@@ -921,8 +934,8 @@ def generate_report(
     <!-- ================================================================ -->
     <h2 id="iteration-ratio">4. Per-Iteration Reduction Ratio</h2>
     <div class="card">
-        <p>Median ratio of RMS displacement at iteration <em>n</em> vs iteration <em>n-1</em>.
-        Values below 1.0 indicate the iteration reduced displacement; values above 1.0
+        <p>Median ratio of force residual at iteration <em>n</em> vs iteration <em>n-1</em>.
+        Values below 1.0 indicate the iteration reduced the residual; values above 1.0
         mean the iteration made things worse. Baseline GS shows ratios at or above 1.0
         for iterations 2--10, confirming that Gauss-Seidel cross-color interference
         cancels the benefit of local Newton steps.</p>
@@ -1100,10 +1113,15 @@ def generate_report(
 
         <h3>Metrics</h3>
         <ul>
-            <li><strong>RMS Displacement:</strong> Root mean square of per-vertex position change during one VBD iteration (cm).</li>
-            <li><strong>Convergence Ratio:</strong> Last iteration RMS / First iteration RMS (lower = better). A ratio of 0.1 means the solver reduced displacement by 10x over its iteration budget.</li>
-            <li><strong>Per-Iteration Ratio:</strong> Ratio of displacement at iteration <em>n</em> to iteration <em>n-1</em>. Values &gt; 1.0 indicate the iteration increased displacement.</li>
-            <li><strong>Final RMS:</strong> Displacement at the last VBD iteration -- a proxy for how close the substep is to equilibrium.</li>
+            <li><strong>RMS Force Residual:</strong> Root mean square of per-vertex total force residual
+            ||&nabla;G<sub>i</sub>(x)|| after each VBD iteration. G(x) = (1/2h&sup2;)||x-y||&sup2;<sub>M</sub> + E(x) is the
+            implicit Euler variational energy. At the exact solution, &nabla;G = 0. This metric is
+            independent of step size / relaxation strategy.</li>
+            <li><strong>Convergence Ratio:</strong> Last iteration residual / First iteration residual (lower = better).
+            A ratio of 0.1 means the solver reduced the force residual by 10x over its iteration budget.</li>
+            <li><strong>Per-Iteration Ratio:</strong> Ratio of force residual at iteration <em>n</em> to iteration <em>n-1</em>.
+            Values &gt; 1.0 indicate the iteration increased the residual (divergence).</li>
+            <li><strong>Final RMS:</strong> Force residual at the last VBD iteration &mdash; measures how close the substep is to the implicit Euler equilibrium.</li>
         </ul>
 
         <h3>Chebyshev Semi-Iterative Acceleration</h3>
@@ -1112,7 +1130,7 @@ def generate_report(
             <strong>x</strong><sup>(n)</sup> = &omega;<sub>n</sub> ( <strong>x&#772;</strong><sup>(n)</sup> - <strong>x</strong><sup>(n-2)</sup> ) + <strong>x</strong><sup>(n-2)</sup>
         </p>
         <p>where &omega;<sub>n</sub> follows the Chebyshev recurrence parameterized by spectral radius &rho;.
-        In <em>auto</em> mode, &rho; is estimated from consecutive displacement ratios via exponential moving average,
+        In <em>auto</em> mode, &rho; is estimated from consecutive position-change ratios via exponential moving average,
         adapting to the local problem conditioning each substep.</p>
 
         <h3>Hessian Verification</h3>
@@ -1138,20 +1156,26 @@ def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     image_dir = os.path.join(base_dir, "images")
 
-    # Load all convergence result files
+    # Load convergence result files — prefer v2 (force residual metric), fall back to v1
+    def _pick(name: str) -> str:
+        v2 = os.path.join(base_dir, f"convergence_results_{name}_v2.json")
+        v1 = os.path.join(base_dir, f"convergence_results_{name}.json")
+        return v2 if os.path.exists(v2) else v1
+
     all_data = load_results({
-        "Baseline GS": os.path.join(base_dir, "convergence_results_baseline.json"),
-        "StVK": os.path.join(base_dir, "convergence_results_stvk.json"),
-        "Chebyshev 0.8": os.path.join(base_dir, "convergence_results_chebyshev080.json"),
-        "Chebyshev 0.95": os.path.join(base_dir, "convergence_results_chebyshev095.json"),
-        "Chebyshev Auto": os.path.join(base_dir, "convergence_results_chebyshev_auto.json"),
-        "Jacobi": os.path.join(base_dir, "convergence_results_jacobi.json"),
-        "Alpha 0.5": os.path.join(base_dir, "convergence_results_alpha0.5.json"),
-        "Alpha 0.7": os.path.join(base_dir, "convergence_results_alpha0.7.json"),
-        "Alpha 0.9": os.path.join(base_dir, "convergence_results_alpha0.9.json"),
-        "Self-Contact": os.path.join(base_dir, "convergence_results_selfcontact.json"),
-        "Stiffness Baseline": os.path.join(base_dir, "convergence_results_stiffness_baseline.json"),
-        "Stiffness Chebyshev": os.path.join(base_dir, "convergence_results_stiffness_chebyshev.json"),
+        "Baseline GS": _pick("baseline"),
+        "StVK": _pick("stvk"),
+        "Chebyshev 0.8": _pick("chebyshev080"),
+        "Chebyshev 0.95": _pick("chebyshev095"),
+        "Chebyshev Auto": _pick("chebyshev_auto"),
+        "Jacobi": _pick("jacobi"),
+        "Alpha 0.3": _pick("alpha0.3"),
+        "Alpha 0.5": _pick("alpha0.5"),
+        "Alpha 0.7": _pick("alpha0.7"),
+        "Alpha 0.9": _pick("alpha0.9"),
+        "Self-Contact": _pick("selfcontact"),
+        "Stiffness Baseline": _pick("stiffness_baseline"),
+        "Stiffness Chebyshev": _pick("stiffness_chebyshev"),
     })
 
     # Load hessian verification

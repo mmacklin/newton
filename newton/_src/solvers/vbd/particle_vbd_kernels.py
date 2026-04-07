@@ -3619,6 +3619,107 @@ def accumulate_contact_force_and_hessian(
 # ---------------------------------------------------------------------------
 
 @wp.kernel
+def compute_force_residual(
+    dt: float,
+    pos_prev: wp.array(dtype=wp.vec3),
+    pos: wp.array(dtype=wp.vec3),
+    mass: wp.array(dtype=float),
+    inertia: wp.array(dtype=wp.vec3),
+    particle_flags: wp.array(dtype=wp.int32),
+    tri_indices: wp.array(dtype=wp.int32, ndim=2),
+    tri_poses: wp.array(dtype=wp.mat22),
+    tri_materials: wp.array(dtype=float, ndim=2),
+    tri_areas: wp.array(dtype=float),
+    tri_material_model: int,
+    edge_indices: wp.array(dtype=wp.int32, ndim=2),
+    edge_rest_angles: wp.array(dtype=float),
+    edge_rest_length: wp.array(dtype=float),
+    edge_bending_properties: wp.array(dtype=float, ndim=2),
+    tet_indices: wp.array(dtype=wp.int32, ndim=2),
+    tet_poses: wp.array(dtype=wp.mat33),
+    tet_materials: wp.array(dtype=float, ndim=2),
+    particle_adjacency: ParticleForceElementAdjacencyInfo,
+    particle_contact_forces: wp.array(dtype=wp.vec3),
+    # output
+    force_residual_norms: wp.array(dtype=float),
+):
+    """Compute per-vertex total force residual ||nabla G(x)||.
+
+    Evaluates the gradient of the variational objective
+    G(x) = (1/2h^2)||x - y||^2_M + E(x) at the current positions.
+    At the exact implicit Euler solution, this is zero.
+    This metric is independent of step size / relaxation strategy.
+    """
+    particle_index = wp.tid()
+
+    if not particle_flags[particle_index] & ParticleFlags.ACTIVE or mass[particle_index] == 0.0:
+        force_residual_norms[particle_index] = 0.0
+        return
+
+    dt_sqr_reciprocal = 1.0 / (dt * dt)
+
+    # Inertial force: -nabla (1/2h^2) M ||x - y||^2 = M(y - x)/h^2
+    f = mass[particle_index] * (inertia[particle_index] - pos[particle_index]) * dt_sqr_reciprocal
+
+    # Elastic forces (triangles)
+    if tri_indices:
+        for i_adj_tri in range(get_vertex_num_adjacent_faces(particle_adjacency, particle_index)):
+            tri_index, vertex_order = get_vertex_adjacent_face_id_order(particle_adjacency, particle_index, i_adj_tri)
+            if tri_materials[tri_index, 0] > 0.0 or tri_materials[tri_index, 1] > 0.0:
+                if tri_material_model == 0:
+                    f_tri, h_tri = evaluate_stvk_force_hessian(
+                        tri_index, vertex_order, pos, pos_prev,
+                        tri_indices, tri_poses[tri_index], tri_areas[tri_index],
+                        tri_materials[tri_index, 0], tri_materials[tri_index, 1],
+                        tri_materials[tri_index, 2], dt,
+                    )
+                else:
+                    f_tri, h_tri = evaluate_neo_hookean_membrane_force_hessian(
+                        tri_index, vertex_order, pos, pos_prev,
+                        tri_indices, tri_poses[tri_index], tri_areas[tri_index],
+                        tri_materials[tri_index, 0], tri_materials[tri_index, 1],
+                        tri_materials[tri_index, 2], dt,
+                    )
+                f = f + f_tri
+
+    # Bending forces (edges)
+    if edge_indices:
+        for i_adj_edge in range(get_vertex_num_adjacent_edges(particle_adjacency, particle_index)):
+            nei_edge_index, vertex_order_on_edge = get_vertex_adjacent_edge_id_order(
+                particle_adjacency, particle_index, i_adj_edge
+            )
+            if edge_bending_properties[nei_edge_index, 0] > 0.0:
+                f_edge, h_edge = evaluate_dihedral_angle_based_bending_force_hessian(
+                    nei_edge_index, vertex_order_on_edge, pos, pos_prev,
+                    edge_indices, edge_rest_angles, edge_rest_length,
+                    edge_bending_properties[nei_edge_index, 0],
+                    edge_bending_properties[nei_edge_index, 1], dt,
+                )
+                f = f + f_edge
+
+    # Volumetric forces (tetrahedra)
+    if tet_indices:
+        num_adj_tets = get_vertex_num_adjacent_tets(particle_adjacency, particle_index)
+        for adj_tet_counter in range(num_adj_tets):
+            nei_tet_index, vertex_order_on_tet = get_vertex_adjacent_tet_id_order(
+                particle_adjacency, particle_index, adj_tet_counter
+            )
+            if tet_materials[nei_tet_index, 0] > 0.0 or tet_materials[nei_tet_index, 1] > 0.0:
+                f_tet, h_tet = evaluate_volumetric_neo_hookean_force_and_hessian(
+                    nei_tet_index, vertex_order_on_tet, pos_prev, pos,
+                    tet_indices, tet_poses[nei_tet_index],
+                    tet_materials[nei_tet_index, 0], tet_materials[nei_tet_index, 1],
+                    tet_materials[nei_tet_index, 2], dt,
+                )
+                f = f + f_tet
+
+    # Add contact forces (pre-accumulated)
+    f = f + particle_contact_forces[particle_index]
+
+    force_residual_norms[particle_index] = wp.length(f)
+
+
+@wp.kernel
 def chebyshev_accelerate_positions(
     omega: float,
     pos_current: wp.array(dtype=wp.vec3),

@@ -44,6 +44,7 @@ from .particle_vbd_kernels import (
     build_vertex_n_ring_tris_collision_filter,
     # Solver kernels (particle VBD)
     chebyshev_accelerate_positions,
+    compute_force_residual,
     forward_step,
     set_to_csr,
     solve_elasticity,
@@ -302,6 +303,7 @@ class SolverVBD(SolverBase):
             self._cheb_pos_prev = wp.zeros_like(model.particle_q, device=self.device)
             self._cheb_pos_prev2 = wp.zeros_like(model.particle_q, device=self.device)
             self._step_pos_before = wp.zeros_like(model.particle_q, device=self.device)
+            self._force_residual_norms = wp.zeros(model.particle_count, dtype=float, device=self.device)
 
         # Early stopping: stop iterating when max displacement falls below threshold.
         # Set to 0 to disable. Units match simulation scale (cm for cm-scale sims).
@@ -1534,53 +1536,88 @@ class SolverVBD(SolverBase):
                 wp.copy(state_out.particle_q, state_in.particle_q)
 
             if self.track_convergence and self.model.particle_count > 0:
-                pos_after = state_out.particle_q.numpy()
-                mass_np = self.model.particle_mass.numpy()
-                inertia_np = self.inertia.numpy()
-                flags_np = self.model.particle_flags.numpy()
-                dt_sqr_recip = 1.0 / (dt * dt)
+                # Launch GPU kernel to compute ||nabla G(x)|| per vertex
+                # This evaluates the full force residual (inertia + elastic + bending + contact)
+                # at the current positions — independent of step size / relaxation.
+                wp.launch(
+                    kernel=compute_force_residual,
+                    dim=self.model.particle_count,
+                    inputs=[
+                        dt,
+                        self.particle_q_prev,
+                        state_out.particle_q,
+                        self.model.particle_mass,
+                        self.inertia,
+                        self.model.particle_flags,
+                        self.model.tri_indices,
+                        self.model.tri_poses,
+                        self.model.tri_materials,
+                        self.model.tri_areas,
+                        self._tri_material_model,
+                        self.model.edge_indices,
+                        self.model.edge_rest_angle,
+                        self.model.edge_rest_length,
+                        self.model.edge_bending_properties,
+                        self.model.tet_indices,
+                        self.model.tet_poses,
+                        self.model.tet_materials,
+                        self.particle_adjacency,
+                        self.particle_forces,  # contact forces (last accumulated)
+                    ],
+                    outputs=[
+                        self._force_residual_norms,
+                    ],
+                    device=self.device,
+                )
 
-                # Compute displacement from this iteration
+                # Read back residual norms and displacement
+                residual_norms = self._force_residual_norms.numpy()
+                flags_np = self.model.particle_flags.numpy()
+                mass_np = self.model.particle_mass.numpy()
+                active_mask = (flags_np & 1).astype(bool) & (mass_np > 0)
+                active_residuals = residual_norms[active_mask]
+
+                # Also compute displacement (still useful for diagnostics, but not the primary metric)
+                pos_after = state_out.particle_q.numpy()
                 disp = pos_after - pos_before
                 disp_norms = np.linalg.norm(disp, axis=1)
-
-                # Compute the inertial force residual: f_inertia = m/dt^2 * (y - x)
-                # This is the gradient of the variational energy at current position
-                inertia_force = mass_np[:, None] * (inertia_np - pos_after) * dt_sqr_recip
-                inertia_force_norms = np.linalg.norm(inertia_force, axis=1)
-
-                # Mask inactive/zero-mass particles
-                active_mask = (flags_np & 1).astype(bool) & (mass_np > 0)
                 active_disp = disp_norms[active_mask]
-                active_inertia_force = inertia_force_norms[active_mask]
 
                 step_record["iteration_residuals"].append({
-                    "mean_displacement": float(np.mean(active_disp)) if len(active_disp) > 0 else 0.0,
-                    "max_displacement": float(np.max(active_disp)) if len(active_disp) > 0 else 0.0,
+                    # Primary metric: force residual ||nabla G(x)|| — independent of step size
+                    "rms_force_residual": float(np.sqrt(np.mean(active_residuals**2))) if len(active_residuals) > 0 else 0.0,
+                    "mean_force_residual": float(np.mean(active_residuals)) if len(active_residuals) > 0 else 0.0,
+                    "max_force_residual": float(np.max(active_residuals)) if len(active_residuals) > 0 else 0.0,
+                    "p50_force_residual": float(np.percentile(active_residuals, 50)) if len(active_residuals) > 0 else 0.0,
+                    "p95_force_residual": float(np.percentile(active_residuals, 95)) if len(active_residuals) > 0 else 0.0,
+                    "p99_force_residual": float(np.percentile(active_residuals, 99)) if len(active_residuals) > 0 else 0.0,
+                    # Secondary: displacement (diagnostic only — NOT step-size-independent)
                     "rms_displacement": float(np.sqrt(np.mean(active_disp**2))) if len(active_disp) > 0 else 0.0,
-                    "mean_inertia_residual": float(np.mean(active_inertia_force)) if len(active_inertia_force) > 0 else 0.0,
-                    "max_inertia_residual": float(np.max(active_inertia_force)) if len(active_inertia_force) > 0 else 0.0,
-                    "rms_inertia_residual": float(np.sqrt(np.mean(active_inertia_force**2))) if len(active_inertia_force) > 0 else 0.0,
-                    "p50_displacement": float(np.percentile(active_disp, 50)) if len(active_disp) > 0 else 0.0,
-                    "p95_displacement": float(np.percentile(active_disp, 95)) if len(active_disp) > 0 else 0.0,
-                    "p99_displacement": float(np.percentile(active_disp, 99)) if len(active_disp) > 0 else 0.0,
+                    "max_displacement": float(np.max(active_disp)) if len(active_disp) > 0 else 0.0,
                 })
 
             # Early stopping check (can use convergence tracking data)
             if self.early_stop_threshold > 0.0 and self.model.particle_count > 0:
                 if self.track_convergence:
-                    max_disp = step_record["iteration_residuals"][-1]["max_displacement"]
+                    max_residual = step_record["iteration_residuals"][-1]["max_force_residual"]
                 else:
-                    # Lightweight check without full tracking
+                    # Lightweight check without full tracking — use displacement as proxy
                     pos_after_es = state_out.particle_q.numpy()
                     pos_before_es = state_in.particle_q.numpy() if not hasattr(self, '_es_pos_before') else self._es_pos_before
-                    max_disp = float(np.max(np.linalg.norm(pos_after_es - pos_before_es, axis=1)))
-                if max_disp < self.early_stop_threshold:
+                    max_residual = float(np.max(np.linalg.norm(pos_after_es - pos_before_es, axis=1)))
+                if max_residual < self.early_stop_threshold:
                     self._early_stop_count += 1
                     break
 
         if self.track_convergence and self.model.particle_count > 0:
-            # Total displacement across all iterations
+            # Record final force residual (from last iteration)
+            step_record["final_rms_force_residual"] = step_record["iteration_residuals"][-1]["rms_force_residual"]
+            step_record["final_max_force_residual"] = step_record["iteration_residuals"][-1]["max_force_residual"]
+
+            # Total displacement across all iterations (diagnostic)
+            flags_np = self.model.particle_flags.numpy()
+            mass_np = self.model.particle_mass.numpy()
+            active_mask = (flags_np & 1).astype(bool) & (mass_np > 0)
             total_disp = state_out.particle_q.numpy() - pos_before_iterations
             total_disp_norms = np.linalg.norm(total_disp, axis=1)
             active_total = total_disp_norms[active_mask]

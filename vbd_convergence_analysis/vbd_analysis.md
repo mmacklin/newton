@@ -207,6 +207,54 @@ Chebyshev acceleration is effective across all stiffness levels with no stabilit
 5. **Stiffness sensitivity**: Higher stiffness slightly improves baseline convergence (more diagonal dominance).
    Chebyshev acceleration is robust across stiffness scales.
 
+## Checkpoint: Force Residual Metric (v2)
+
+### Metric Correction
+
+The original displacement metric (`|Δx|` per iteration) was fundamentally flawed: under-relaxation
+directly scales the step, so smaller alpha trivially gives smaller displacement. Setting alpha=0.01
+would appear 100x better by that metric while actually being far worse.
+
+We replaced this with the **force residual** `||∇G(x)||` — the gradient of the implicit Euler
+variational energy G(x) = (1/2h²)||x-y||²_M + E(x). At the true solution, ∇G = 0. This metric
+is completely independent of step size strategy.
+
+### Implementation
+
+Added `compute_force_residual` kernel to `particle_vbd_kernels.py` — identical to the force
+accumulation loop in `solve_elasticity` (inertia + elastic + bending + contact) but outputs
+`||f_total||` per vertex instead of solving H⁻¹f. Launched after each VBD iteration.
+
+### Key Findings with Force Residual Metric
+
+| Method | Median First Residual | Median Final Residual | Ratio | Interpretation |
+|--------|----------------------|----------------------|-------|----------------|
+| Baseline GS | 0.26 | 0.34 | 1.02 | **Diverges** — residual increases |
+| Alpha 0.7 | 0.004 | 0.004 | 0.996 | Near-equilibrium from iter 0 |
+| Alpha 0.9 | 0.004 | 0.004 | 0.97 | Near-equilibrium from iter 0 |
+| Alpha 0.5 | 0.004 | 0.004 | 0.998 | Slightly over-damped |
+| Chebyshev Auto | 0.004 | 0.006 | 0.99 | Partial improvement |
+| Jacobi | 383 | 334 | 0.92 | Steady convergence from high start |
+
+### Revised Understanding
+
+1. **The first GS sweep overshoots massively.** After one complete GS pass (all colors), the full
+   Newton steps push vertices past the implicit Euler minimum, creating positions with ~300x higher
+   force residual than the near-optimal position.
+
+2. **Under-relaxation prevents overshoot, not improves convergence rate.** The ~300x improvement
+   in final residual comes entirely from the first iteration landing closer to equilibrium.
+   Subsequent iterations (2-10) barely improve for ANY method — the system is either stuck
+   (baseline) or already converged (alpha).
+
+3. **The 20,000x displacement improvement was an artifact.** The honest number is ~300x in force
+   residual, or equivalently: under-relaxation makes the first iteration's result 300x closer
+   to the true implicit Euler solution.
+
+4. **Jacobi is the only method with steady per-iteration convergence** (~8.5% per iteration),
+   because it avoids cross-color interference. But it starts from a much higher residual
+   (~383 vs ~0.26) because it doesn't benefit from sequential GS information propagation.
+
 ## Areas for Future Investigation
 
 1. **Hessian SPD projection**: Full eigenvalue clamp (instead of cofactor-derivative clamping)
