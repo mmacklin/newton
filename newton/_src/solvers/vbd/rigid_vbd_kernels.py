@@ -757,8 +757,15 @@ def evaluate_body_particle_contact(
         dx = particle_pos - particle_prev_pos
 
         if wp.dot(n, dx) < 0.0:
-            # Damping coefficient is scaled by contact stiffness (consistent with rigid-rigid)
-            damping_coeff = body_particle_contact_kd * body_particle_contact_ke
+            # Implicit contact damping.  The damping coefficient c enters the
+            # variational energy as E_damp = c/(2h) (n.dx)^2, giving
+            # force = (c/h)(n.dx)n and Hessian = (c/h) n⊗n.
+            #
+            # Using c = kd (NOT kd*ke) keeps the damping Hessian eigenvalue
+            # at kd/dt which is comparable to elastic stiffness (~10^4) instead
+            # of kd*ke/dt (~10^8).  The original kd*ke scaling was 16000x
+            # critically overdamped; plain kd gives ~2x critical.
+            damping_coeff = body_particle_contact_kd
             damping_hessian = (damping_coeff / dt) * wp.outer(n, n)
             body_contact_hessian = body_contact_hessian + damping_hessian
             body_contact_force = body_contact_force - damping_hessian * dx

@@ -1320,19 +1320,15 @@ def evaluate_self_contact_force_norm(dis: float, collision_radius: float, k: flo
 
     penetration_depth = collision_radius - dis
 
-    # Initialize outputs
-    dEdD = wp.float32(0.0)
-    d2E_dDdD = wp.float32(0.0)
-
-    # C2 continuity calculation
-    tau = collision_radius * 0.5
-    if tau > dis > 1e-5:
-        k2 = 0.5 * tau * tau * k
-        dEdD = -k2 / dis
-        d2E_dDdD = k2 / (dis * dis)
-    else:
-        dEdD = -k * penetration_depth
-        d2E_dDdD = k
+    # Quadratic penalty: E = k/2 * (collision_radius - d)^2
+    # Force:   dE/dd = -k * (collision_radius - d) = -k * penetration_depth
+    # Hessian: d²E/dd² = k (constant — no blowup near contact)
+    #
+    # The previous log-barrier (E ~ k2*ln(d)) had d²E/dd² = k2/d² which
+    # grows unboundedly as d→0, creating Hessian eigenvalues of 10^7+ and
+    # stalling block-GS convergence.
+    dEdD = -k * penetration_depth
+    d2E_dDdD = k
 
     return dEdD, d2E_dDdD
 
