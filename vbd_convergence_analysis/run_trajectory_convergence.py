@@ -60,6 +60,7 @@ def record_reference_trajectory(seed: int, num_frames: int = NUM_FRAMES) -> list
         drop_height_range=DROP_HEIGHT_RANGE,
     )
     solver = scenario["solver"]
+    solver.avbd_beta = 0.0  # constant contact penalty (no ramp during iterations)
     state0 = scenario["state_0"]
     state1 = scenario["state_1"]
     control = scenario["control"]
@@ -168,6 +169,7 @@ def evaluate_method_on_snapshots(
             **method_config,
         )
         solver = scenario["solver"]
+        solver.avbd_beta = 0.0  # constant contact penalty
         state0 = scenario["state_0"]
         state1 = scenario["state_1"]
         control = scenario["control"]

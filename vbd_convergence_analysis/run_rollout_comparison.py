@@ -61,6 +61,7 @@ def run_rollout(seed: int, method_config: dict, num_frames: int = NUM_FRAMES) ->
         **method_config,
     )
     solver = scenario["solver"]
+    solver.avbd_beta = 0.0  # constant contact penalty
     state0 = scenario["state_0"]
     state1 = scenario["state_1"]
     control = scenario["control"]
@@ -77,6 +78,7 @@ def run_rollout(seed: int, method_config: dict, num_frames: int = NUM_FRAMES) ->
         drop_height_range=DROP_HEIGHT_RANGE,
     )
     probe_solver = probe_scenario["solver"]
+    probe_solver.avbd_beta = 0.0
     probe_state0 = probe_scenario["state_0"]
     probe_state1 = probe_scenario["state_1"]
     probe_control = probe_scenario["control"]
