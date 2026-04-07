@@ -284,3 +284,43 @@ from a reference simulation), we get an honest apples-to-apples comparison:
 
 6. **Warm-starting**: Use previous timestep's solution as initial guess instead of forward Euler
    prediction. Could reduce the number of iterations needed.
+
+## Checkpoint: Stiffness Ratio Root Cause Analysis
+
+### Force Decomposition at Frame 15 (free-fall, pre-contact)
+
+| Component | RMS Residual | Stiffness |
+|-----------|-------------|-----------|
+| Inertia M(y-x)/h^2 | 25.65 (78%) | m/h^2 ~ 5,241 |
+| Elastic membrane | ~18.01 (55%) | mu = 10,000 |
+| Bending | ~0.48 (1.5%) | k = 5 |
+| **Full** | **32.70** | |
+
+### Root Cause: 2000:1 Stiffness Ratio
+
+The elastic membrane stiffness (mu=10,000) vs bending stiffness (k=5) creates a
+condition number κ ≈ 2,000. For block Gauss-Seidel, the convergence rate is bounded
+by (κ-1)/(κ+1) = 0.999, meaning:
+
+- **10 iterations reduce residual by only 1%**
+- **2,302 iterations needed for 10x reduction**
+- Bending is NOT the bottleneck (disabling it has no effect)
+- Contact is NOT the bottleneck (forces are zero in free-fall)
+
+This is the classical stiffness ratio problem described in Macklin's primal/dual paper.
+The elastic membrane energy couples vertices strongly across elements, but VBD's
+block-diagonal 3×3 solve ignores this coupling. Each vertex's Newton step is optimal
+for its local system but perturbs all neighbors' equilibria.
+
+### Potential Fixes (to investigate)
+
+1. **Primal/dual splitting**: Separate stiff elastic constraints into a dual (ADMM)
+   formulation while keeping soft bending in the primal.
+2. **Augmented VBD (AVBD)**: The SIGGRAPH 2025 paper proposes augmenting VBD with
+   global linear system solve for the stiff elastic terms.
+3. **Better preconditioning**: Scale the per-vertex Newton step by incorporating
+   neighbor coupling information (e.g., Jacobi-preconditioned block solve).
+4. **Reduced stiffness**: If mu=10,000 is unnecessarily high for the visual result,
+   reducing it would directly improve the condition number.
+5. **Substepping**: More substeps with fewer iterations each (smaller dt → larger
+   m/h^2, improving the inertia-to-elastic ratio).
