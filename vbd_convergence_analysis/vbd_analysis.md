@@ -395,3 +395,48 @@ and GS convergence rate 0.999997 — essentially no convergence.
 
 6. **Substepping**: More substeps → smaller dt → larger m/h^2 but also
    smaller eps_u → WORSE friction conditioning. Substepping hurts here.
+
+## Checkpoint: Ground Plane Damping as Root Cause
+
+### Correction: It's Contact DAMPING, Not Friction
+
+The earlier attribution to friction was wrong. The 187M Hessian eigenvalue comes from
+the **ground plane's shape_material_kd = 100**:
+
+```
+avg_kd = 0.5 * (soft_contact_kd + shape_material_kd) = 0.5 * (0.01 + 100) = 50
+damping_hessian = avg_kd * penalty_k / dt = 50 * 6250 * 600 = 187,500,000
+```
+
+### Fix Ablation Results
+
+| Fix | Iter 0 | Iter 9 | Ratio | H_max |
+|-----|--------|--------|-------|-------|
+| Baseline (shape_kd=100) | 93,141 | 178 | 0.002 | 188M |
+| shape_kd=10 | 9,305 | 44 | 0.005 | 19M |
+| shape_kd=1 | 924 | 175 | 0.189 | 1.9M |
+| shape_kd=0.1 | 106 | 39 | 0.373 | 440K |
+| shape_kd=0 | 50 | 38 | 0.76 | 1.7M |
+| shape_kd=0 + ke=1000 | 49 | 38 | 0.78 | 54K |
+
+### Impact
+
+- Reducing shape_kd from 100 to 0 drops the starting residual **1,860x** (93K → 50)
+- The condition number drops from 37.5M to ~11K
+- The convergence ratio improves from wild oscillation to 0.76
+
+### Root Cause Mechanism
+
+The body-particle contact damping Hessian is `(avg_kd * penalty_k / dt) * outer(n, n)`.
+The `1/dt` scaling makes this stiffness grow quadratically with substep count
+(more substeps → smaller dt → larger damping Hessian). This is the opposite of what
+you want: more substeps should improve conditioning via larger inertia, but the
+contact damping undoes this benefit.
+
+### Recommended Fix
+
+The contact damping Hessian should either:
+1. Be capped at a maximum eigenvalue relative to elastic stiffness
+2. Use a dt-independent formulation
+3. Have shape_material_kd defaulted to a much smaller value (0.01, not 100)
+4. Be excluded from the per-vertex Hessian (use as force only)
