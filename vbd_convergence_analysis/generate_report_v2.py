@@ -67,8 +67,16 @@ def load_rollout_data(path: str) -> dict | None:
 # Metrics computation
 # ---------------------------------------------------------------------------
 
-def compute_trajectory_metrics(traj_data: dict) -> list[dict]:
-    """Compute per-method summary metrics from trajectory data."""
+def compute_trajectory_metrics(
+    traj_data: dict, mask: np.ndarray | None = None,
+) -> list[dict]:
+    """Compute per-method summary metrics from trajectory data.
+
+    Args:
+        traj_data: Loaded trajectory JSON.
+        mask: Boolean array (length = number of curves) to select a subset.
+              If None, use all curves.
+    """
     rows = []
     for method_name in METHOD_ORDER:
         mdata = traj_data["methods"].get(method_name)
@@ -78,7 +86,11 @@ def compute_trajectory_metrics(traj_data: dict) -> list[dict]:
         if curves.size == 0:
             continue
 
-        n_iters = curves.shape[1]
+        if mask is not None and len(mask) == len(curves):
+            curves = curves[mask]
+        if len(curves) == 0:
+            continue
+
         med = np.median(curves, axis=0)
 
         # Per-iteration ratios
@@ -104,12 +116,40 @@ def compute_trajectory_metrics(traj_data: dict) -> list[dict]:
     return rows
 
 
+def _regime_masks(traj_data: dict) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute boolean masks for easy / hard / all regimes.
+
+    Uses baseline iter-0 residual to classify snapshots.
+    Returns (easy_mask, hard_mask, all_mask).
+    """
+    bl = traj_data["methods"].get("Baseline GS")
+    if not bl:
+        n = 0
+        for m in traj_data["methods"].values():
+            n = len(m.get("curves", []))
+            break
+        return np.ones(n, dtype=bool), np.ones(n, dtype=bool), np.ones(n, dtype=bool)
+
+    curves = np.array(bl["curves"])
+    iter0 = curves[:, 0]
+    easy = iter0 < 5.0
+    hard = iter0 >= 5.0
+    return easy, hard, np.ones(len(curves), dtype=bool)
+
+
 # ---------------------------------------------------------------------------
 # Plotly chart generators (return JS snippet strings)
 # ---------------------------------------------------------------------------
 
-def make_convergence_plot(metrics: list[dict], plot_id: str = "conv_plot") -> str:
+def make_convergence_plot(
+    metrics: list[dict],
+    plot_id: str = "conv_plot",
+    title: str = "Per-Iteration Convergence (from consistent starting states)",
+) -> str:
     """Convergence curves: median force residual per iteration with IQR."""
+    if not metrics:
+        return f'<p id="{plot_id}"><em>No data for this regime.</em></p>'
+
     traces = []
 
     for m in metrics:
@@ -139,7 +179,7 @@ def make_convergence_plot(metrics: list[dict], plot_id: str = "conv_plot") -> st
         )
 
     layout = f"""{{
-        title: 'Per-Iteration Convergence (from consistent starting states)',
+        title: '{title}',
         xaxis: {{title: 'VBD Iteration', dtick: 1}},
         yaxis: {{title: 'RMS Force Residual ||\\u2207G||', type: 'log'}},
         hovermode: 'x unified', width: 1050, height: 520,
@@ -305,7 +345,20 @@ def generate_report(
     rollout_data: dict | None,
     output_path: str,
 ) -> None:
-    metrics = compute_trajectory_metrics(traj_data) if traj_data else []
+    # Compute metrics for all / easy / hard regimes
+    if traj_data:
+        easy_mask, hard_mask, all_mask = _regime_masks(traj_data)
+        metrics_all = compute_trajectory_metrics(traj_data, all_mask)
+        metrics_easy = compute_trajectory_metrics(traj_data, easy_mask)
+        metrics_hard = compute_trajectory_metrics(traj_data, hard_mask)
+        n_easy = int(easy_mask.sum())
+        n_hard = int(hard_mask.sum())
+    else:
+        metrics_all = metrics_easy = metrics_hard = []
+        n_easy = n_hard = 0
+
+    # Use easy-regime metrics for executive summary (where methods actually differ)
+    metrics = metrics_easy if metrics_easy else metrics_all
 
     # Executive summary bullets
     baseline_m = next((m for m in metrics if m["method"] == "Baseline GS"), None)
@@ -401,18 +454,55 @@ self-contact {'enabled' if meta.get('self_contact') else 'disabled'}</p>
 
 <!-- ============================================================ -->
 <h2>2. Per-Iteration Convergence</h2>
-<div class="card">
-    <p>Each method evaluated from the same saved (positions, velocities) snapshots.
-    Median across all snapshots and seeds, with 25th&ndash;75th percentile bands.</p>
+
 """
-    html += make_convergence_plot(metrics)
+    html += f"""
+<div class="warning">
+    <strong>Regime matters.</strong> Snapshots are split by baseline iter-0 residual:
+    <strong>{n_easy} &ldquo;easy&rdquo;</strong> (free-fall, residual &lt; 5) and
+    <strong>{n_hard} &ldquo;hard&rdquo;</strong> (contact, residual &ge; 5).
+    Method differences are only visible in the easy regime; in hard/contact frames
+    the unresolved residual (~32) dominates and all methods look identical.
+</div>
+
+<h3>Easy Regime (free-fall, {n_easy} snapshots)</h3>
+<div class="card">
+    <p>Low-residual substeps where the cloth is in free fall or lightly deformed.
+    This is where per-iteration convergence strategy matters.</p>
+    {make_summary_table(metrics_easy)}
+"""
+    html += make_convergence_plot(
+        metrics_easy, "conv_easy",
+        f"Easy Regime: Per-Iteration Convergence ({n_easy} snapshots)",
+    )
     html += """
 </div>
 <div class="card">
-    <p>Ratio of residual at iteration <em>n</em> to iteration <em>n&minus;1</em>.
-    Below 1.0 = converging; above 1.0 = diverging.</p>
 """
-    html += make_ratio_plot(metrics)
+    html += make_ratio_plot(metrics_easy, "ratio_easy")
+    html += f"""
+</div>
+
+<h3>Hard Regime (contact, {n_hard} snapshots)</h3>
+<div class="card">
+    <p>High-residual substeps where the cloth is in contact.
+    The residual (~32) is too large for 10 iterations to resolve,
+    so all methods perform identically.</p>
+    {make_summary_table(metrics_hard)}
+"""
+    html += make_convergence_plot(
+        metrics_hard, "conv_hard",
+        f"Hard Regime: Per-Iteration Convergence ({n_hard} snapshots)",
+    )
+    html += """
+</div>
+
+<h3>All Snapshots Combined</h3>
+<div class="card">
+"""
+    html += make_convergence_plot(
+        metrics_all, "conv_all", "All Snapshots Combined",
+    )
     html += """
 </div>
 """
@@ -443,16 +533,17 @@ self-contact {'enabled' if meta.get('self_contact') else 'disabled'}</p>
     Full GS step (&alpha;=1.0) overshoots; smaller values prevent overshoot but may
     converge too slowly.</p>
 """
-    html += make_alpha_sweep_plot(metrics)
+    html += make_alpha_sweep_plot(metrics_easy)
     html += """
 </div>
 
 <h3>Jacobi vs Gauss-Seidel</h3>
 <div class="card">
     <p>Jacobi updates all vertices simultaneously (no sequential color-group updates).
-    This eliminates cross-color interference but loses GS information propagation.</p>
+    This eliminates cross-color interference but loses GS information propagation.
+    (Easy regime only.)</p>
 """
-    html += make_jacobi_plot(metrics)
+    html += make_jacobi_plot(metrics_easy)
     html += """
 </div>
 """
