@@ -72,10 +72,14 @@ def run_rollout(seed: int, substeps: int, iterations: int) -> dict:
     pipeline = scenario["collision_pipeline"]
     dt = scenario["dt"]
 
-    # Probe solver for residual evaluation (1 iter, same substeps for matching dt)
+    # Probe solver for residual evaluation.  Use a FIXED reference dt
+    # (sim_substeps=1 -> dt=1/60) so that the inertia term m/dt^2 is
+    # consistent across configs.  Otherwise more substeps = larger m/dt^2
+    # = higher residual for the same positional accuracy.
+    PROBE_SUBSTEPS = 1
     probe_sc = create_scenario(
         seed=seed, iterations=1, enable_self_contact=True,
-        drop_height_range=DROP_HEIGHT_RANGE, sim_substeps=substeps,
+        drop_height_range=DROP_HEIGHT_RANGE, sim_substeps=PROBE_SUBSTEPS,
     )
     probe_solver = probe_sc["solver"]
     probe_solver.avbd_beta = 0.0
@@ -84,6 +88,7 @@ def run_rollout(seed: int, substeps: int, iterations: int) -> dict:
     probe_control = probe_sc["control"]
     probe_contacts = probe_sc["contacts"]
     probe_pipeline = probe_sc["collision_pipeline"]
+    probe_dt = probe_sc["dt"]
 
     per_frame_residuals = []
     per_frame_times = []
@@ -111,7 +116,7 @@ def run_rollout(seed: int, substeps: int, iterations: int) -> dict:
         probe_s0.clear_forces()
         probe_s1.clear_forces()
         probe_pipeline.collide(probe_s0, probe_contacts)
-        probe_solver.step(probe_s0, probe_s1, probe_control, probe_contacts, dt)
+        probe_solver.step(probe_s0, probe_s1, probe_control, probe_contacts, probe_dt)
 
         conv = probe_solver.get_convergence_data()
         if conv:
