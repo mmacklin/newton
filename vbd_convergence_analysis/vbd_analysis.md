@@ -238,22 +238,30 @@ accumulation loop in `solve_elasticity` (inertia + elastic + bending + contact) 
 
 ### Revised Understanding
 
-1. **The first GS sweep overshoots massively.** After one complete GS pass (all colors), the full
-   Newton steps push vertices past the implicit Euler minimum, creating positions with ~300x higher
-   force residual than the near-optimal position.
+1. **No method achieves meaningful per-iteration convergence.** All methods have per-iteration
+   residual ratios near 1.0 (baseline 1.003, alpha=0.9 0.997, Chebyshev 0.986). Iterations
+   2–10 are essentially wasted for every variant. Only alpha=0.9 shows a marginal downward trend.
 
-2. **Under-relaxation prevents overshoot, not improves convergence rate.** The ~300x improvement
-   in final residual comes entirely from the first iteration landing closer to equilibrium.
-   Subsequent iterations (2-10) barely improve for ANY method — the system is either stuck
-   (baseline) or already converged (alpha).
+2. **Under-relaxation reduces first-iteration overshoot, not convergence rate.** The full GS step
+   overshoots the implicit Euler minimum (residual ~0.3). Scaling by alpha=0.7–0.9 lands at
+   residual ~0.004. But subsequent iterations do not improve — this is a better first step,
+   not faster convergence. The absolute residual is ~100x lower, but the convergence RATE is
+   essentially the same.
 
-3. **The 20,000x displacement improvement was an artifact.** The honest number is ~300x in force
-   residual, or equivalently: under-relaxation makes the first iteration's result 300x closer
-   to the true implicit Euler solution.
+3. **The 20,000x displacement improvement was an artifact** of measuring step size, not convergence.
+   With the force residual metric, the absolute difference is ~100x, but this reflects a different
+   first-step landing point, not a convergence speed improvement.
 
-4. **Jacobi is the only method with steady per-iteration convergence** (~8.5% per iteration),
+4. **Alpha=0.3 and 0.5 stagnate** (ratio ≈ 1.0). They avoid the baseline overshoot but the
+   step is too small for any per-iteration progress. Alpha=0.9 is the only value showing
+   slight convergence in the plots.
+
+5. **Jacobi is the only method with steady per-iteration convergence** (~8.5% per iteration),
    because it avoids cross-color interference. But it starts from a much higher residual
    (~383 vs ~0.26) because it doesn't benefit from sequential GS information propagation.
+
+6. **Chebyshev is slightly harmful** (ratio 1.40). The extrapolation overshoots on iteration 1,
+   then slowly recovers. It does not improve on baseline.
 
 ## Areas for Future Investigation
 

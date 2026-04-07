@@ -171,9 +171,17 @@ def make_comparison_table(all_data: dict[str, list]) -> str:
 
     rows = []
     for label, data in all_data.items():
-        # Skip stiffness sweep entries from the main table
-        if "Stiffness" in label:
+        # Skip stiffness sweep entries and StVK (different energy, incomparable residual)
+        if "Stiffness" in label or label == "StVK":
             continue
+        # Check if this data has force residual metric (v2) — flag if using old displacement data
+        has_force_residual = False
+        for r in data:
+            if "convergence" in r and r["convergence"]:
+                iters = r["convergence"][0].get("iteration_residuals", [])
+                if iters and "rms_force_residual" in iters[0]:
+                    has_force_residual = True
+                break
         m = compute_metrics(data, iters_filter=10)
 
         improvement = "-"
@@ -203,8 +211,9 @@ def make_comparison_table(all_data: dict[str, list]) -> str:
 
         nan_style = "style='color:#c62828; font-weight:bold;'" if m["nan_count"] > 0 else ""
 
+        metric_note = "" if has_force_residual else " <em style='color:#999;font-size:0.8em;'>(displacement)</em>"
         rows.append(f"""<tr>
-            <td><strong>{label}</strong></td>
+            <td><strong>{label}</strong>{metric_note}</td>
             <td>{m["mean_ratio"]:.4f}</td>
             <td {ratio_class}>{m["median_ratio"]:.4f}</td>
             <td>{m["median_final_rms"]:.2e}</td>
@@ -236,10 +245,10 @@ def make_comparison_table(all_data: dict[str, list]) -> str:
 def make_convergence_curves_plot(all_data: dict, plot_id: str = "main_conv") -> str:
     """Convergence curve comparison (mean + IQR) for top methods."""
     traces = []
-    # Select the most interesting methods for the main plot
+    # Select methods with v2 (force residual) data for the main plot
     plot_methods = [
-        "Baseline GS", "Chebyshev 0.8", "Chebyshev 0.95", "Chebyshev Auto",
-        "StVK", "Jacobi",
+        "Baseline GS", "Alpha 0.3", "Alpha 0.5", "Alpha 0.7", "Alpha 0.9",
+        "Chebyshev Auto", "Jacobi",
     ]
 
     for label in plot_methods:
@@ -302,8 +311,8 @@ def make_per_iteration_ratio_plot(all_data: dict, plot_id: str = "ratio_plot") -
     """Per-iteration force residual reduction ratio plot."""
     traces = []
     plot_methods = [
-        "Baseline GS", "Chebyshev 0.8", "Chebyshev 0.95", "Chebyshev Auto",
-        "StVK", "Jacobi",
+        "Baseline GS", "Alpha 0.3", "Alpha 0.5", "Alpha 0.7", "Alpha 0.9",
+        "Chebyshev Auto", "Jacobi",
     ]
 
     for label in plot_methods:
@@ -370,7 +379,7 @@ def make_per_iteration_ratio_plot(all_data: dict, plot_id: str = "ratio_plot") -
 def make_step_length_plot(all_data: dict, plot_id: str = "alpha_plot") -> str:
     """Convergence curves for different step length (alpha) values."""
     traces = []
-    alpha_methods = ["Baseline GS", "Alpha 0.5", "Alpha 0.7", "Alpha 0.9"]
+    alpha_methods = ["Baseline GS", "Alpha 0.3", "Alpha 0.5", "Alpha 0.7", "Alpha 0.9"]
 
     for label in alpha_methods:
         data = all_data.get(label)
@@ -875,32 +884,34 @@ def generate_report(
         variational energy. At the exact solution, this is zero. This metric is step-size-independent
         (unlike displacement, which trivially shrinks with smaller steps).</p>
         <ul>
-            <li><strong>Baseline GS diverges: the force residual <em>increases</em> across iterations.</strong>
-                The first GS sweep overshoots the implicit Euler minimum, and subsequent iterations
-                oscillate due to cross-color interference (median ratio {bl_m['median_ratio']:.4f}).
-                Iterations 2&ndash;10 are essentially wasted compute.</li>
-            <li><strong>Under-relaxation (alpha&nbsp;&lt;&nbsp;1) achieves ~{_improvement(a07_m)} lower final force residual</strong>
-                by preventing the first-iteration overshoot. The Gauss-Seidel full step lands far from
-                the minimum; scaling by alpha=0.7 yields a position much closer to equilibrium.
-                All alpha values tested ({_improvement(a05_m)} for 0.5, {_improvement(a07_m)} for 0.7,
-                {_improvement(a09_m)} for 0.9) dramatically outperform baseline.</li>
-            <li><strong>The improvement is in the first iteration, not in convergence rate.</strong>
-                After the first under-relaxed iteration, residual is already near-equilibrium (~0.001).
-                Subsequent iterations provide negligible further improvement
-                (per-iteration ratio &asymp; 1.0 for all alpha values).</li>
-            <li><strong>Chebyshev acceleration: {_improvement(cheb_auto_m)} vs baseline</strong>
-                (median ratio {cheb_auto_m['median_ratio']:.4f}).
-                The Chebyshev extrapolation partially compensates for GS oscillation.</li>
-            <li><strong>Jacobi mode</strong> (median ratio {jacobi_m['median_ratio']:.4f}) shows steady
-                per-iteration convergence (no cross-color interference), but starts from a much higher
-                residual because vertices don't benefit from sequential position updates.
-                GS's first sweep is far more effective than Jacobi's.</li>
-            <li>Self-contact (median ratio {sc_m['median_ratio']:.4f}) does not degrade convergence
+            <li><strong>No method achieves meaningful per-iteration convergence.</strong>
+                All tested methods have per-iteration residual ratios near 1.0
+                (baseline {bl_m['median_ratio']:.4f}, alpha=0.9 {a09_m['median_ratio']:.4f},
+                Chebyshev {cheb_auto_m['median_ratio']:.4f}).
+                Iterations 2&ndash;10 provide negligible improvement for every variant.
+                Only alpha=0.9 shows a slightly downward trend.</li>
+            <li><strong>Under-relaxation reduces the first-iteration overshoot.</strong>
+                The full GS Newton step overshoots the implicit Euler minimum, leaving
+                the system at residual &asymp;0.3. Under-relaxation (alpha=0.7&ndash;0.9) scales this step back,
+                landing at residual &asymp;0.004 after iteration 0 &mdash; but subsequent iterations
+                do not further improve. This is a <em>better first step</em>, not faster convergence.</li>
+            <li><strong>Baseline GS slightly diverges</strong> (median ratio {bl_m['median_ratio']:.4f} &gt; 1.0).
+                The force residual increases from iter 0 to iter 9, confirming that cross-color
+                GS interference pushes vertices away from equilibrium with each pass.</li>
+            <li><strong>Alpha=0.3 and 0.5 stagnate</strong> (ratio &asymp;1.0).
+                They avoid the baseline overshoot but don't converge either. The step is too
+                small for any per-iteration progress.</li>
+            <li><strong>Chebyshev Auto is slightly harmful</strong> (ratio {cheb_auto_m['median_ratio']:.4f}).
+                The extrapolation overshoots on iteration 1, then slowly recovers. It does not
+                improve on the un-accelerated under-relaxed result.</li>
+            <li><strong>Jacobi mode</strong> (ratio {jacobi_m['median_ratio']:.4f}) is the only method
+                with consistent per-iteration convergence, but starts from residual &asymp;383
+                (vs baseline &asymp;0.3) because it lacks GS's sequential information propagation.</li>
+            <li>Self-contact (ratio {sc_m['median_ratio']:.4f}) does not degrade convergence
                 vs baseline.</li>
-            <li><strong>Hessian verification</strong>: StVK Hessian is exact but can be indefinite (non-SPD).
-                Neo-Hookean uses an intentional SPD projection (clamping cofactor term).
-                Bending uses Gauss-Newton approximation (PSD by construction).</li>
-            <li>All variants maintain <strong>zero NaN occurrences</strong> across all test scenarios.</li>
+            <li><strong>Hessian verification</strong>: Neo-Hookean uses an intentional SPD projection
+                (clamping cofactor term). Bending uses Gauss-Newton approximation (PSD by construction).
+                Both are correct by design, not bugs.</li>
         </ul>
     </div>
 
@@ -911,9 +922,10 @@ def generate_report(
     <div class="card">
         {make_comparison_table(all_data)}
         <p style="font-size:0.9em; color:#666; margin-top:12px;">
-            <em>Convergence Ratio = last iteration RMS / first iteration RMS (lower = better).
-            Only substeps with iterations=10 are included. "vs. Baseline" shows median final RMS improvement factor.
-            Substeps column counts the number of substep measurements used.</em>
+            <em>Convergence Ratio = last iteration residual / first iteration residual (lower = better; &gt;1 means diverging).
+            "vs. Baseline" compares absolute final residual &mdash; <strong>note:</strong> this reflects a different
+            first-step landing point, not faster convergence. Methods marked (displacement) use the old metric
+            and are not directly comparable.</em>
         </p>
     </div>
 

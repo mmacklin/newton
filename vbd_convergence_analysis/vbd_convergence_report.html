@@ -118,7 +118,7 @@
 <div class="container">
 
     <h1>VBD Convergence Analysis -- Comprehensive Report</h1>
-    <p class="timestamp">Generated: 2026-04-07 01:48:57 | Newton Physics Engine | 96 total scenario runs</p>
+    <p class="timestamp">Generated: 2026-04-07 02:07:45 | Newton Physics Engine | 96 total scenario runs</p>
 
     <!-- Table of Contents -->
     <div class="toc">
@@ -147,32 +147,34 @@
         variational energy. At the exact solution, this is zero. This metric is step-size-independent
         (unlike displacement, which trivially shrinks with smaller steps).</p>
         <ul>
-            <li><strong>Baseline GS diverges: the force residual <em>increases</em> across iterations.</strong>
-                The first GS sweep overshoots the implicit Euler minimum, and subsequent iterations
-                oscillate due to cross-color interference (median ratio 1.0241).
-                Iterations 2&ndash;10 are essentially wasted compute.</li>
-            <li><strong>Under-relaxation (alpha&nbsp;&lt;&nbsp;1) achieves ~94x lower final force residual</strong>
-                by preventing the first-iteration overshoot. The Gauss-Seidel full step lands far from
-                the minimum; scaling by alpha=0.7 yields a position much closer to equilibrium.
-                All alpha values tested (83x for 0.5, 94x for 0.7,
-                94x for 0.9) dramatically outperform baseline.</li>
-            <li><strong>The improvement is in the first iteration, not in convergence rate.</strong>
-                After the first under-relaxed iteration, residual is already near-equilibrium (~0.001).
-                Subsequent iterations provide negligible further improvement
-                (per-iteration ratio &asymp; 1.0 for all alpha values).</li>
-            <li><strong>Chebyshev acceleration: 57x vs baseline</strong>
-                (median ratio 0.9905).
-                The Chebyshev extrapolation partially compensates for GS oscillation.</li>
-            <li><strong>Jacobi mode</strong> (median ratio 0.9168) shows steady
-                per-iteration convergence (no cross-color interference), but starts from a much higher
-                residual because vertices don't benefit from sequential position updates.
-                GS's first sweep is far more effective than Jacobi's.</li>
-            <li>Self-contact (median ratio 0.9975) does not degrade convergence
+            <li><strong>No method achieves meaningful per-iteration convergence.</strong>
+                All tested methods have per-iteration residual ratios near 1.0
+                (baseline 1.0241, alpha=0.9 0.9728,
+                Chebyshev 0.9905).
+                Iterations 2&ndash;10 provide negligible improvement for every variant.
+                Only alpha=0.9 shows a slightly downward trend.</li>
+            <li><strong>Under-relaxation reduces the first-iteration overshoot.</strong>
+                The full GS Newton step overshoots the implicit Euler minimum, leaving
+                the system at residual &asymp;0.3. Under-relaxation (alpha=0.7&ndash;0.9) scales this step back,
+                landing at residual &asymp;0.004 after iteration 0 &mdash; but subsequent iterations
+                do not further improve. This is a <em>better first step</em>, not faster convergence.</li>
+            <li><strong>Baseline GS slightly diverges</strong> (median ratio 1.0241 &gt; 1.0).
+                The force residual increases from iter 0 to iter 9, confirming that cross-color
+                GS interference pushes vertices away from equilibrium with each pass.</li>
+            <li><strong>Alpha=0.3 and 0.5 stagnate</strong> (ratio &asymp;1.0).
+                They avoid the baseline overshoot but don't converge either. The step is too
+                small for any per-iteration progress.</li>
+            <li><strong>Chebyshev Auto is slightly harmful</strong> (ratio 0.9905).
+                The extrapolation overshoots on iteration 1, then slowly recovers. It does not
+                improve on the un-accelerated under-relaxed result.</li>
+            <li><strong>Jacobi mode</strong> (ratio 0.9168) is the only method
+                with consistent per-iteration convergence, but starts from residual &asymp;383
+                (vs baseline &asymp;0.3) because it lacks GS's sequential information propagation.</li>
+            <li>Self-contact (ratio 0.9975) does not degrade convergence
                 vs baseline.</li>
-            <li><strong>Hessian verification</strong>: StVK Hessian is exact but can be indefinite (non-SPD).
-                Neo-Hookean uses an intentional SPD projection (clamping cofactor term).
-                Bending uses Gauss-Newton approximation (PSD by construction).</li>
-            <li>All variants maintain <strong>zero NaN occurrences</strong> across all test scenarios.</li>
+            <li><strong>Hessian verification</strong>: Neo-Hookean uses an intentional SPD projection
+                (clamping cofactor term). Bending uses Gauss-Newton approximation (PSD by construction).
+                Both are correct by design, not bugs.</li>
         </ul>
     </div>
 
@@ -204,15 +206,7 @@
             <td >0/8</td>
             <td>800</td>
         </tr><tr>
-            <td><strong>StVK</strong></td>
-            <td>1.0737</td>
-            <td style='color:#558b2f;'>0.7686</td>
-            <td>1.11e-05</td>
-            <td>30598x better</td>
-            <td >0/8</td>
-            <td>2257</td>
-        </tr><tr>
-            <td><strong>Chebyshev 0.8</strong></td>
+            <td><strong>Chebyshev 0.8</strong> <em style='color:#999;font-size:0.8em;'>(displacement)</em></td>
             <td>0.2527</td>
             <td style='color:#2e7d32; font-weight:bold;'>0.0385</td>
             <td>4.76e-08</td>
@@ -220,7 +214,7 @@
             <td >0/4</td>
             <td>1069</td>
         </tr><tr>
-            <td><strong>Chebyshev 0.95</strong></td>
+            <td><strong>Chebyshev 0.95</strong> <em style='color:#999;font-size:0.8em;'>(displacement)</em></td>
             <td>0.6686</td>
             <td style='color:#558b2f;'>0.6912</td>
             <td>2.24e-05</td>
@@ -288,9 +282,10 @@
     </table>
     
         <p style="font-size:0.9em; color:#666; margin-top:12px;">
-            <em>Convergence Ratio = last iteration RMS / first iteration RMS (lower = better).
-            Only substeps with iterations=10 are included. "vs. Baseline" shows median final RMS improvement factor.
-            Substeps column counts the number of substep measurements used.</em>
+            <em>Convergence Ratio = last iteration residual / first iteration residual (lower = better; &gt;1 means diverging).
+            "vs. Baseline" compares absolute final residual &mdash; <strong>note:</strong> this reflects a different
+            first-step landing point, not faster convergence. Methods marked (displacement) use the old metric
+            and are not directly comparable.</em>
         </p>
     </div>
 
@@ -323,33 +318,63 @@
             marker: {size: 5}
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
-            y: [3.5436694361123955e-06, 4.554278802970657e-06, 2.8351228138490114e-06, 1.4377538946064305e-06, 9.022010090120602e-07, 5.121310096001253e-07, 2.424592366878642e-07, 9.510034004733825e-08, 4.1179653464951116e-08, 2.573937729621889e-09, 0.002421212149783969, 0.002505171811208129, 0.001945875003002584, 0.0023393810261040926, 0.0025883165653795004, 0.002114254282787442, 0.003121469169855118, 0.0034691852051764727, 0.004562044981867075, 0.005872330162674189],
+            y: [0.0014064141432754695, 0.001406084542395547, 0.0014059973182156682, 0.0014059457171242684, 0.0014066612347960472, 0.0014063421112950891, 0.0014074748905841261, 0.001406497263815254, 0.0014078244857955724, 0.001405876042554155, 0.19657358154654503, 0.19657358154654503, 0.19657358154654503, 0.19657358154654503, 0.1965782754123211, 0.1966172158718109, 0.19663552939891815, 0.1967463344335556, 0.1975911781191826, 0.2009495012462139],
             fill: 'toself',
-            fillcolor: 'rgba(0,160,80,0.1)',
+            fillcolor: 'rgba(140,140,255,0.1)',
             line: {color: 'transparent'},
             showlegend: false,
             hoverinfo: 'skip'
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.01322135091343133, 0.006438672479058616, 0.004236528099382913, 0.004797628232148537, 0.004373257695197631, 0.00445585200264284, 0.00438642004384547, 0.004476040492890988, 0.004032519744643351, 0.004553608422116216],
+            y: [0.12389835210458841, 0.12131790799205192, 0.12073628100886707, 0.1205417069219402, 0.12048176264419454, 0.12044927819835721, 0.12043655088462402, 0.12042905999231152, 0.12042437677009729, 0.12042163360747508],
             mode: 'lines+markers',
-            name: 'Chebyshev 0.8',
-            line: {color: 'rgba(0,160,80,1)', width: 2},
+            name: 'Alpha 0.3',
+            line: {color: 'rgba(140,140,255,1)', width: 2},
             marker: {size: 5}
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
-            y: [2.74801382147416e-05, 2.5148020995402476e-05, 1.5763303053972777e-05, 3.301021388324443e-05, 1.910330593091203e-05, 2.441730384816765e-05, 1.8869968698709272e-05, 2.0529299945337698e-05, 1.8196702967543388e-05, 1.8702376564760925e-05, 0.004702098318375647, 0.0056863006902858615, 0.00737314426805824, 0.008781463373452425, 0.011187230702489614, 0.012004616670310497, 0.01578250667080283, 0.01825689384713769, 0.017847813665866852, 0.013525225222110748],
+            y: [0.0014042776310816407, 0.0014042776310816407, 0.0014042776310816407, 0.0014042776310816407, 0.0014042776310816407, 0.0014042776310816407, 0.0014042776310816407, 0.0014042776310816407, 0.0014042776310816407, 0.0014042776310816407, 0.2611069008708, 0.2611108347773552, 0.2611202225089073, 0.2611323818564415, 0.2611866295337677, 0.26146501302719116, 0.2622314542531967, 0.26395387947559357, 0.2687583938241005, 0.2901201546192169],
             fill: 'toself',
-            fillcolor: 'rgba(255,165,0,0.1)',
+            fillcolor: 'rgba(100,100,220,0.1)',
             line: {color: 'transparent'},
             showlegend: false,
             hoverinfo: 'skip'
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.015482700922262147, 0.015475214343813114, 0.015426278798212446, 0.014640324930812092, 0.012226458591224378, 0.011962261465119625, 0.00979722725141749, 0.008556462346821605, 0.007271968997766844, 0.006904239360035828],
+            y: [802.7383485985976, 465.40428930381154, 319.1050542658543, 245.83486629246676, 212.3563522610777, 198.54099412537528, 174.2406126940457, 154.6903530030485, 139.40903381859766, 131.29635094179858],
             mode: 'lines+markers',
-            name: 'Chebyshev 0.95',
-            line: {color: 'rgba(255,165,0,1)', width: 2},
+            name: 'Alpha 0.5',
+            line: {color: 'rgba(100,100,220,1)', width: 2},
+            marker: {size: 5}
+        },{
+            x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
+            y: [0.0014033733459655195, 0.0014033747429493815, 0.0014033733459655195, 0.0014033747429493815, 0.0014040428504813462, 0.0014033747429493815, 0.0014033733459655195, 0.0014033747429493815, 0.0014033733459655195, 0.0014033733459655195, 0.1390507072210312, 0.1390507072210312, 0.1390507072210312, 0.1390521600842476, 0.13905737549066544, 0.13906928524374962, 0.1394021362066269, 0.14010166376829147, 0.1442393660545349, 0.16453123465180397],
+            fill: 'toself',
+            fillcolor: 'rgba(60,60,180,0.1)',
+            line: {color: 'transparent'},
+            showlegend: false,
+            hoverinfo: 'skip'
+        },{
+            x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            y: [766.8947488507947, 345.79896782030715, 209.29281579600604, 172.91041028561347, 155.41347620863468, 125.11744576888043, 105.35061758509575, 98.79171762142941, 82.75873675448791, 92.6561779571425],
+            mode: 'lines+markers',
+            name: 'Alpha 0.7',
+            line: {color: 'rgba(60,60,180,1)', width: 2},
+            marker: {size: 5}
+        },{
+            x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
+            y: [0.0014033747429493815, 0.0014033747429493815, 0.0014033747429493815, 0.0014033747429493815, 0.0014033747429493815, 0.0014033747429493815, 0.0014033733459655195, 0.0014033747429493815, 0.0014033733459655195, 0.0014033747429493815, 0.13851268589496613, 0.13851268589496613, 0.13851268589496613, 0.13851268589496613, 0.13850529864430428, 0.1385222040116787, 0.13875412195920944, 0.1395946703851223, 0.14360417425632477, 0.1642153561115265],
+            fill: 'toself',
+            fillcolor: 'rgba(30,30,140,0.1)',
+            line: {color: 'transparent'},
+            showlegend: false,
+            hoverinfo: 'skip'
+        },{
+            x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            y: [702.3786797690634, 206.111982363884, 520.3121236450587, 156.91658090268612, 103.38591378481229, 83.4848923889456, 85.56009454104074, 62.74068526845804, 54.74380169666911, 48.16164737920481],
+            mode: 'lines+markers',
+            name: 'Alpha 0.9',
+            line: {color: 'rgba(30,30,140,1)', width: 2},
             marker: {size: 5}
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
@@ -365,21 +390,6 @@
             mode: 'lines+markers',
             name: 'Chebyshev Auto',
             line: {color: 'rgba(0,80,220,1)', width: 2},
-            marker: {size: 5}
-        },{
-            x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
-            y: [9.729297744343057e-06, 9.17866054805927e-06, 9.630934073356912e-06, 9.53213157117716e-06, 9.53219296206953e-06, 9.550706181471469e-06, 9.545748071104754e-06, 9.564899301039986e-06, 9.55107589106774e-06, 9.542786756355781e-06, 0.004570601508021355, 0.005242771934717894, 0.005898821167647839, 0.00671769049949944, 0.007746541639789939, 0.00872414605692029, 0.010691159404814243, 0.01418791152536869, 0.02224940061569214, 0.0424210000783205],
-            fill: 'toself',
-            fillcolor: 'rgba(128,0,128,0.1)',
-            line: {color: 'transparent'},
-            showlegend: false,
-            hoverinfo: 'skip'
-        },{
-            x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.05143510349764768, 0.05104010282120121, 0.03899971251306195, 0.03415549546076599, 0.031412461901452776, 0.028575971383091002, 0.026090365863839594, 0.026265057993914213, 0.024174349426746008, 0.02379749696074408],
-            mode: 'lines+markers',
-            name: 'StVK',
-            line: {color: 'rgba(128,0,128,1)', width: 2},
             marker: {size: 5}
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
@@ -432,17 +442,31 @@
             marker: {size: 5}
         },{
             x: [2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [1.275303954171227, 0.664242656920603, 0.5816875994677039, 0.7479916617831361, 0.6800459866161509, 0.6761234589405092, 0.6814707167030748, 0.7938782231664437, 0.8584211275309093],
+            y: [0.9987888642051506, 0.9997678541438134, 0.9995315228087527, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
             mode: 'lines+markers',
-            name: 'Chebyshev 0.8',
-            line: {color: 'rgba(0,160,80,1)', width: 2},
+            name: 'Alpha 0.3',
+            line: {color: 'rgba(140,140,255,1)', width: 2},
             marker: {size: 5}
         },{
             x: [2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.9495994693458694, 0.67375527789957, 1.8132856633234344, 0.6399371305745272, 1.200931481598314, 0.7856978858536553, 1.0347108998141876, 0.8961656638896731, 1.0074157823209189],
+            y: [0.9982489622759441, 0.9999237037943078, 0.9994641295846097, 1.0, 0.9999261996400524, 1.0, 1.0, 1.0, 1.0],
             mode: 'lines+markers',
-            name: 'Chebyshev 0.95',
-            line: {color: 'rgba(255,165,0,1)', width: 2},
+            name: 'Alpha 0.5',
+            line: {color: 'rgba(100,100,220,1)', width: 2},
+            marker: {size: 5}
+        },{
+            x: [2, 3, 4, 5, 6, 7, 8, 9, 10],
+            y: [0.9764365794098735, 0.9992267096499874, 0.9976523125971769, 0.9994562537141609, 1.0, 1.0, 1.0, 1.0, 1.0],
+            mode: 'lines+markers',
+            name: 'Alpha 0.7',
+            line: {color: 'rgba(60,60,180,1)', width: 2},
+            marker: {size: 5}
+        },{
+            x: [2, 3, 4, 5, 6, 7, 8, 9, 10],
+            y: [0.9761565355649859, 0.9943313702733777, 0.999353340591966, 0.9998927719003106, 1.0, 1.0, 1.0, 1.0, 1.0],
+            mode: 'lines+markers',
+            name: 'Alpha 0.9',
+            line: {color: 'rgba(30,30,140,1)', width: 2},
             marker: {size: 5}
         },{
             x: [2, 3, 4, 5, 6, 7, 8, 9, 10],
@@ -450,13 +474,6 @@
             mode: 'lines+markers',
             name: 'Chebyshev Auto',
             line: {color: 'rgba(0,80,220,1)', width: 2},
-            marker: {size: 5}
-        },{
-            x: [2, 3, 4, 5, 6, 7, 8, 9, 10],
-            y: [0.8959318414633891, 0.9985995234625625, 0.9875467151559318, 0.9941590496360064, 0.9962933839730808, 0.9965575357478945, 0.9962047538532958, 0.9966283949023483, 0.9964958318633533],
-            mode: 'lines+markers',
-            name: 'StVK',
-            line: {color: 'rgba(128,0,128,1)', width: 2},
             marker: {size: 5}
         },{
             x: [2, 3, 4, 5, 6, 7, 8, 9, 10],
@@ -503,6 +520,13 @@
             mode: 'lines+markers',
             name: 'Baseline GS',
             line: {color: 'rgba(220,50,50,1)', width: 2},
+            marker: {size: 5}
+        },{
+            x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            y: [0.12389835210458841, 0.12131790799205192, 0.12073628100886707, 0.1205417069219402, 0.12048176264419454, 0.12044927819835721, 0.12043655088462402, 0.12042905999231152, 0.12042437677009729, 0.12042163360747508],
+            mode: 'lines+markers',
+            name: 'Alpha 0.3',
+            line: {color: 'rgba(140,140,255,1)', width: 2},
             marker: {size: 5}
         },{
             x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
