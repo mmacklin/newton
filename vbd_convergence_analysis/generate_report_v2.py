@@ -132,8 +132,14 @@ def _regime_masks(traj_data: dict) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
     curves = np.array(bl["curves"])
     iter0 = curves[:, 0]
-    easy = iter0 < 5.0
-    hard = iter0 >= 5.0
+    # Use contact count to classify if available; fall back to residual threshold
+    contacts_arr = np.array(bl.get("contact_counts", [0] * len(curves)))
+    if len(contacts_arr) == len(curves) and contacts_arr.max() > 0:
+        easy = contacts_arr == 0
+        hard = contacts_arr > 0
+    else:
+        easy = iter0 < 5.0
+        hard = iter0 >= 5.0
     return easy, hard, np.ones(len(curves), dtype=bool)
 
 
@@ -577,21 +583,21 @@ self-contact {'enabled' if meta.get('self_contact') else 'disabled'}</p>
     html += f"""
 <div class="warning">
     <strong>Regime matters.</strong> Snapshots are split by baseline iter-0 residual:
-    <strong>{n_easy} &ldquo;easy&rdquo;</strong> (free-fall, residual &lt; 5) and
-    <strong>{n_hard} &ldquo;hard&rdquo;</strong> (contact, residual &ge; 5).
+    <strong>{n_easy} &ldquo;no contact&rdquo;</strong> (free-fall) and
+    <strong>{n_hard} &ldquo;contact&rdquo;</strong> (ground contact active).
     Method differences are only visible in the easy regime; in hard/contact frames
     the unresolved residual (~32) dominates and all methods look identical.
 </div>
 
-<h3>Easy Regime (free-fall, {n_easy} snapshots)</h3>
+<h3>No Contact ({n_easy} snapshots)</h3>
 <div class="card">
-    <p>Low-residual substeps where the cloth is in free fall or lightly deformed.
-    This is where per-iteration convergence strategy matters.</p>
+    <p>Substeps with zero ground contacts (free-fall or lightly deformed).
+    This is where per-iteration convergence strategy matters most.</p>
     {make_summary_table(metrics_easy)}
 """
     html += make_convergence_plot(
         metrics_easy, "conv_easy",
-        f"Easy Regime: Per-Iteration Convergence ({n_easy} snapshots)",
+        f"No Contact: Per-Iteration Convergence ({n_easy} snapshots)",
     )
     html += """
 </div>
@@ -601,16 +607,15 @@ self-contact {'enabled' if meta.get('self_contact') else 'disabled'}</p>
     html += f"""
 </div>
 
-<h3>Hard Regime (contact, {n_hard} snapshots)</h3>
+<h3>Contact ({n_hard} snapshots)</h3>
 <div class="card">
-    <p>High-residual substeps where the cloth is in contact.
-    The residual (~32) is too large for 10 iterations to resolve,
-    so all methods perform identically.</p>
+    <p>Substeps with active ground contacts. Contact penalty forces and elastic
+    deformation during impact create much higher residuals.</p>
     {make_summary_table(metrics_hard)}
 """
     html += make_convergence_plot(
         metrics_hard, "conv_hard",
-        f"Hard Regime: Per-Iteration Convergence ({n_hard} snapshots)",
+        f"Contact: Per-Iteration Convergence ({n_hard} snapshots)",
     )
     html += """
 </div>
