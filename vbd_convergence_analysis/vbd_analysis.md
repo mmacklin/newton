@@ -324,3 +324,74 @@ for its local system but perturbs all neighbors' equilibria.
    reducing it would directly improve the condition number.
 5. **Substepping**: More substeps with fewer iterations each (smaller dt → larger
    m/h^2, improving the inertia-to-elastic ratio).
+
+## Checkpoint: Friction Hessian Root Cause
+
+### The 3,000,000 Eigenvalue
+
+The contact Hessian is dominated by FRICTION, not normal penalty:
+
+```
+friction_eigenvalue = mu * F_normal * (2 / eps_u)
+                    = mu * (penetration * ke) * 2 / (friction_epsilon * dt)
+                    = 0.5 * (0.5 * 100) * 120,000
+                    = 3,000,000
+```
+
+The IPC regularization term `2/eps_u = 2/(0.01 * 1/600) = 120,000` creates a
+massive stiffness multiplier for vertices near static friction (small slip).
+
+### Full Stiffness Hierarchy
+
+| Component | Eigenvalue | Factor vs Bending |
+|-----------|-----------|-------------------|
+| Friction (ke=100, static) | 3,000,000 | 600,000x |
+| Friction (ke=6250, static) | 187,500,000 | 37,500,000x |
+| Damping (approaching) | 187,500,000 | 37,500,000x |
+| Normal penalty | 100–6,250 | 20–1,250x |
+| Elastic mu | 10,000 | 2,000x |
+| Inertia m/h^2 | 5,241 | 1,048x |
+| Bending | 5 | 1x |
+
+### Why VBD Stagnates
+
+The per-vertex 3x3 system H_i * dx_i = f_i includes contributions from:
+- Inertia: ~5,000 (isotropic)
+- Elastic: ~10,000 (anisotropic, depends on deformation)
+- Bending: ~5 (rank-1)
+- Contact friction: ~3,000,000 (rank-2, tangent plane)
+
+The friction term dominates H_i by 300x over elastic. The Newton step
+dx = H^{-1} f is almost entirely controlled by friction: the step direction
+is constrained to the friction-stiff tangent plane, with negligible
+displacement in the friction directions.
+
+But the GLOBAL system's convergence rate is bounded by the condition number
+κ = λ_max / λ_min across ALL vertices. A free vertex has λ_min ~ 5 (bending),
+while a contact vertex has λ_max ~ 3,000,000 (friction). This gives κ = 600,000
+and GS convergence rate 0.999997 — essentially no convergence.
+
+### Proposed Fixes
+
+1. **Increase friction_epsilon**: Increasing from 0.01 to 1.0 reduces
+   2/eps_u from 120,000 to 1,200. Friction eigenvalue drops to 30,000.
+   Condition number drops from 600,000 to 6,000. But may affect friction quality.
+
+2. **Cap friction Hessian eigenvalues**: Clamp the friction Hessian contribution
+   to a max eigenvalue (e.g., 10x elastic = 100,000). This limits conditioning
+   while maintaining friction force accuracy.
+
+3. **Scale friction by dt**: The 1/dt in eps_u creates timestep-dependent
+   conditioning. Using eps_u = friction_epsilon (position-based, not
+   velocity-based) would remove the dt dependence.
+
+4. **Separate friction solve**: Handle friction via a separate constraint
+   projection step (like PBD) instead of including it in the Newton system.
+   This is the primal/dual approach from Macklin's paper.
+
+5. **Bending stiffness scaling**: Increasing bending from 5 to 500 (100x)
+   would reduce κ from 600,000 to 6,000 without affecting friction.
+   But changes visual behavior.
+
+6. **Substepping**: More substeps → smaller dt → larger m/h^2 but also
+   smaller eps_u → WORSE friction conditioning. Substepping hurts here.
