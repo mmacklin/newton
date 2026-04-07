@@ -236,32 +236,34 @@ accumulation loop in `solve_elasticity` (inertia + elastic + bending + contact) 
 | Chebyshev Auto | 0.004 | 0.006 | 0.99 | Partial improvement |
 | Jacobi | 383 | 334 | 0.92 | Steady convergence from high start |
 
-### Revised Understanding
+### Revised Understanding (Trajectory-Based)
 
-1. **No method achieves meaningful per-iteration convergence.** All methods have per-iteration
-   residual ratios near 1.0 (baseline 1.003, alpha=0.9 0.997, Chebyshev 0.986). Iterations
-   2–10 are essentially wasted for every variant. Only alpha=0.9 shows a marginal downward trend.
+Using a trajectory-based test (all methods evaluated from the SAME starting states recorded
+from a reference simulation), we get an honest apples-to-apples comparison:
 
-2. **Under-relaxation reduces first-iteration overshoot, not convergence rate.** The full GS step
-   overshoots the implicit Euler minimum (residual ~0.3). Scaling by alpha=0.7–0.9 lands at
-   residual ~0.004. But subsequent iterations do not improve — this is a better first step,
-   not faster convergence. The absolute residual is ~100x lower, but the convergence RATE is
-   essentially the same.
+| Method | Iter 0 | Iter 9 | Ratio | Per-iter Geo Mean |
+|--------|--------|--------|-------|-------------------|
+| Baseline (alpha=1.0) | 0.41 | 0.48 | **1.16 (diverges)** | 1.020 |
+| Alpha=0.9 | 0.41 | 0.27 | **0.66 (converges)** | 0.954 |
+| Alpha=0.7 | 0.43 | 0.27 | **0.63 (converges)** | 0.950 |
+| Alpha=0.5 | 0.64 | 0.55 | **0.87 (slow)** | 0.985 |
 
-3. **The 20,000x displacement improvement was an artifact** of measuring step size, not convergence.
-   With the force residual metric, the absolute difference is ~100x, but this reflects a different
-   first-step landing point, not a convergence speed improvement.
+1. **Baseline GS genuinely diverges** within each substep. Cross-color GS interference causes
+   the force residual to increase ~16% over 10 iterations. Iterations 2-10 make it worse.
 
-4. **Alpha=0.3 and 0.5 stagnate** (ratio ≈ 1.0). They avoid the baseline overshoot but the
-   step is too small for any per-iteration progress. Alpha=0.9 is the only value showing
-   slight convergence in the plots.
+2. **Alpha=0.7-0.9 genuinely converge** ~35% over 10 iterations. Most improvement is in
+   iterations 0-2, then it stalls (per-iter ratio → 1.0 by iter 5).
 
-5. **Jacobi is the only method with steady per-iteration convergence** (~8.5% per iteration),
-   because it avoids cross-color interference. But it starts from a much higher residual
-   (~383 vs ~0.26) because it doesn't benefit from sequential GS information propagation.
+3. **Alpha=0.5 is over-damped.** Its first iteration lands FURTHER from the minimum than
+   baseline (0.64 vs 0.41) because the step is too conservative. It slowly recovers.
 
-6. **Chebyshev is slightly harmful** (ratio 1.40). The extrapolation overshoots on iteration 1,
-   then slowly recovers. It does not improve on baseline.
+4. **The 100x gap in non-trajectory experiments** was a compounding effect: baseline diverges
+   ~16% per substep, compounding over 100 substeps to a much higher residual. Alpha methods
+   converge each substep, keeping residual stable. This is a real simulation quality effect,
+   but it's not the per-iteration convergence rate.
+
+5. **Jacobi shows steady per-iteration convergence** (~8.5% per iteration) because it avoids
+   cross-color interference, but starts from much higher residual.
 
 ## Areas for Future Investigation
 

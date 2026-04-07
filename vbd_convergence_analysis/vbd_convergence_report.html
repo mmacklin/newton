@@ -118,7 +118,7 @@
 <div class="container">
 
     <h1>VBD Convergence Analysis -- Comprehensive Report</h1>
-    <p class="timestamp">Generated: 2026-04-07 02:07:45 | Newton Physics Engine | 96 total scenario runs</p>
+    <p class="timestamp">Generated: 2026-04-07 02:27:51 | Newton Physics Engine | 96 total scenario runs</p>
 
     <!-- Table of Contents -->
     <div class="toc">
@@ -146,35 +146,41 @@
         <p><strong>Metric:</strong> RMS force residual ||&nabla;G(x)|| &mdash; the gradient of the implicit Euler
         variational energy. At the exact solution, this is zero. This metric is step-size-independent
         (unlike displacement, which trivially shrinks with smaller steps).</p>
+
+        <h3>Trajectory-Based Comparison (same starting states)</h3>
+        <p>All methods evaluated from the <em>same</em> reference trajectory snapshots, eliminating
+        the confound of compounded inter-substep drift.</p>
+        <table class="comparison-table" style="width:auto;">
+        <tr><th>Method</th><th>Iter 0</th><th>Iter 9</th><th>Overall Ratio</th><th>Per-iter Geo Mean</th></tr>
+        <tr><td>Baseline (alpha=1.0)</td><td>0.41</td><td>0.48</td>
+            <td style="color:#c62828;font-weight:bold;">1.16 (diverges)</td><td>1.020</td></tr>
+        <tr><td>Alpha=0.9</td><td>0.41</td><td>0.27</td>
+            <td style="color:#2e7d32;font-weight:bold;">0.66 (converges)</td><td>0.954</td></tr>
+        <tr><td>Alpha=0.7</td><td>0.43</td><td>0.27</td>
+            <td style="color:#2e7d32;font-weight:bold;">0.63 (converges)</td><td>0.950</td></tr>
+        <tr><td>Alpha=0.5</td><td>0.64</td><td>0.55</td>
+            <td style="color:#558b2f;">0.87 (slow)</td><td>0.985</td></tr>
+        </table>
+
         <ul>
-            <li><strong>No method achieves meaningful per-iteration convergence.</strong>
-                All tested methods have per-iteration residual ratios near 1.0
-                (baseline 1.0241, alpha=0.9 0.9728,
-                Chebyshev 0.9905).
-                Iterations 2&ndash;10 provide negligible improvement for every variant.
-                Only alpha=0.9 shows a slightly downward trend.</li>
-            <li><strong>Under-relaxation reduces the first-iteration overshoot.</strong>
-                The full GS Newton step overshoots the implicit Euler minimum, leaving
-                the system at residual &asymp;0.3. Under-relaxation (alpha=0.7&ndash;0.9) scales this step back,
-                landing at residual &asymp;0.004 after iteration 0 &mdash; but subsequent iterations
-                do not further improve. This is a <em>better first step</em>, not faster convergence.</li>
-            <li><strong>Baseline GS slightly diverges</strong> (median ratio 1.0241 &gt; 1.0).
-                The force residual increases from iter 0 to iter 9, confirming that cross-color
-                GS interference pushes vertices away from equilibrium with each pass.</li>
-            <li><strong>Alpha=0.3 and 0.5 stagnate</strong> (ratio &asymp;1.0).
-                They avoid the baseline overshoot but don't converge either. The step is too
-                small for any per-iteration progress.</li>
-            <li><strong>Chebyshev Auto is slightly harmful</strong> (ratio 0.9905).
-                The extrapolation overshoots on iteration 1, then slowly recovers. It does not
-                improve on the un-accelerated under-relaxed result.</li>
-            <li><strong>Jacobi mode</strong> (ratio 0.9168) is the only method
-                with consistent per-iteration convergence, but starts from residual &asymp;383
-                (vs baseline &asymp;0.3) because it lacks GS's sequential information propagation.</li>
-            <li>Self-contact (ratio 0.9975) does not degrade convergence
-                vs baseline.</li>
-            <li><strong>Hessian verification</strong>: Neo-Hookean uses an intentional SPD projection
-                (clamping cofactor term). Bending uses Gauss-Newton approximation (PSD by construction).
-                Both are correct by design, not bugs.</li>
+            <li><strong>Baseline GS diverges</strong> (ratio 1.0241).
+                Cross-color interference causes the force residual to <em>increase</em> with each iteration.
+                Iterations 2&ndash;10 make the solution worse, not better.</li>
+            <li><strong>Alpha=0.7&ndash;0.9 genuinely converge</strong> with ~35% residual reduction over 10 iterations
+                (ratio 0.63&ndash;0.66). Most improvement comes in iterations 0&ndash;2, then convergence stalls
+                (per-iteration ratio &rarr; 1.0 by iteration 5).</li>
+            <li><strong>Alpha=0.5 is over-damped</strong> &mdash; takes too small a step. The first iteration actually
+                lands further from the minimum than baseline (starting residual 0.64 vs 0.41).
+                It slowly recovers (ratio 0.87) but is less effective than alpha=0.7&ndash;0.9.</li>
+            <li><strong>This compounds across timesteps</strong>: baseline's per-substep divergence accumulates over
+                a simulation, while alpha=0.7 converges each substep. After 100 substeps, baseline's
+                accumulated residual is ~100x higher. This explains the large absolute gaps in the
+                convergence data tables below (which do <em>not</em> use controlled starting states).</li>
+            <li><strong>Jacobi mode</strong> (ratio 0.9168) shows steady per-iteration convergence
+                (no cross-color interference), but starts from much higher residual.</li>
+            <li>Self-contact (ratio 0.9975) does not degrade convergence vs baseline.</li>
+            <li><strong>Hessian verification</strong>: Neo-Hookean uses an intentional SPD projection.
+                Bending uses Gauss-Newton approximation (PSD by construction). Both are correct by design.</li>
         </ul>
     </div>
 
