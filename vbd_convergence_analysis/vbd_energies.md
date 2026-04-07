@@ -150,7 +150,7 @@ Wild oscillation between 100s and 90,000s. H_max = 188,000,000.
 358 -> 46 -> 212 -> 41 -> 317 -> 38 -> 323 -> 39 -> 328 -> 41
 ```
 
-H_max = 500,000. Residual low points ~40 (2,300x lower than baseline peaks). Still has odd/even GS color oscillation.
+H_max = 500,000. Residual low points ~40 (2,300x lower than baseline peaks). Still has GS cross-color oscillation (5 color groups from mesh graph coloring; contacts reuse the same coloring).
 
 ### Condition Number Improvement
 
@@ -162,7 +162,7 @@ H_max = 500,000. Residual low points ~40 (2,300x lower than baseline peaks). Sti
 | GS convergence rate | 0.9999999 | 0.99998 |
 | Iters for 10x reduction | 86,000,000 | 115,000 |
 
-Still limited by the elastic/bending ratio (10,000/5 = 2,000:1) and remaining friction stiffness. The odd/even oscillation is from GS cross-color interference, which under-relaxation (alpha=0.7-0.9) can address.
+Still limited by the elastic/bending ratio (10,000/5 = 2,000:1) and remaining friction stiffness. The per-iteration oscillation is from GS cross-color interference (5 color groups from mesh graph coloring), which under-relaxation (alpha=0.7-0.9) can address.
 
 ## Remaining Stiffness Hierarchy (After Fixes)
 
