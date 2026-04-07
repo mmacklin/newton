@@ -45,6 +45,7 @@ def create_scenario(
     jacobi_mode: bool = False,
     step_length: float = 1.0,
     enable_self_contact: bool = False,
+    sim_substeps: int = 10,
 ):
     """Build one randomized t-shirt drop scenario.
 
@@ -163,7 +164,6 @@ def create_scenario(
     collision_pipeline = newton.CollisionPipeline(model, soft_contact_margin=0.5)
     contacts = collision_pipeline.contacts()
 
-    sim_substeps = 10
     frame_dt = 1.0 / 60.0
     sim_dt = frame_dt / sim_substeps
 
