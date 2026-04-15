@@ -238,7 +238,7 @@ def _build_anymal_d():
     ab.default_shape_cfg.mu = 0.75
     ab.add_usd(
         str(asset_path / "usd" / "anymal_d.usda"),
-        xform=wp.transform(wp.vec3(0, 0, 0.62)),
+        xform=wp.transform(wp.vec3(0, 0, 0.65)),
         collapse_fixed_joints=True,
         enable_self_collisions=False,
         hide_collision_shapes=True,
@@ -265,7 +265,7 @@ def _build_go2():
     go2.default_shape_cfg.mu = 0.75
     go2.add_usd(
         str(asset_path / "usd" / "go2.usda"),
-        xform=wp.transform(wp.vec3(0, 0, 0.35)),
+        xform=wp.transform(wp.vec3(0, 0, 0.40)),
         collapse_fixed_joints=True,
         enable_self_collisions=False,
         hide_collision_shapes=True,
@@ -314,18 +314,23 @@ def _build_box_pyramid():
 # Configuration table
 # -----------------------------------------------------------------------
 
+# Default: 6 substeps per frame so 60fps video = real-time (dt=1/360).
+_SS = 6
+
 CONFIGS = {
     "sphere_rest": {
         "label": "A1: Sphere resting height",
         "build": _build_sphere_rest,
-        "frames": 360,
+        "frames": 300,
+        "substeps": _SS,
         "cam_pos": (1.5, -1.0, 0.8),
         "cam_target": (0.0, 0.0, 0.3),
     },
     "box_rest": {
         "label": "A2: Box resting orientation",
         "build": _build_box_rest,
-        "frames": 360,
+        "frames": 300,
+        "substeps": _SS,
         "cam_pos": (1.5, -1.0, 0.8),
         "cam_target": (0.0, 0.0, 0.3),
     },
@@ -333,62 +338,71 @@ CONFIGS = {
         "label": "A3: Free-fall",
         "build": _build_free_fall,
         "frames": 180,
+        "substeps": _SS,
         "cam_pos": (3.0, -2.0, 4.0),
         "cam_target": (0.0, 0.0, 3.0),
     },
     "sphere_stack": {
         "label": "C3: Sphere stack",
         "build": _build_sphere_stack,
-        "frames": 360,
+        "frames": 300,
+        "substeps": _SS,
         "cam_pos": (1.5, -1.0, 0.5),
         "cam_target": (0.0, 0.0, 0.3),
     },
     "g1_height": {
         "label": "A5: G1 maintains height",
         "build": _build_g1,
-        "frames": 360,
+        "frames": 300,
+        "substeps": _SS,
         "cam_pos": (2.0, -1.5, 1.2),
         "cam_target": (0.0, 0.0, 0.8),
     },
     "h1_height": {
         "label": "A6: H1 maintains height",
         "build": _build_h1,
-        "frames": 360,
+        "frames": 300,
+        "substeps": _SS,
         "cam_pos": (2.0, -1.5, 1.2),
         "cam_target": (0.0, 0.0, 0.8),
     },
     "energy_drop": {
         "label": "C1: Free body energy",
         "build": _build_energy_drop,
-        "frames": 360,
+        "frames": 300,
+        "substeps": _SS,
         "cam_pos": (2.0, -1.5, 1.5),
         "cam_target": (0.0, 0.0, 0.5),
     },
     "anymal_d": {
         "label": "D1: Anymal D quadruped",
         "build": _build_anymal_d,
-        "frames": 360,
+        "frames": 300,
+        "substeps": _SS,
         "cam_pos": (1.5, -1.0, 0.8),
         "cam_target": (0.0, 0.0, 0.4),
     },
     "go2": {
         "label": "D2: Unitree Go2 quadruped",
         "build": _build_go2,
-        "frames": 360,
+        "frames": 300,
+        "substeps": _SS,
         "cam_pos": (1.2, -0.8, 0.5),
         "cam_target": (0.0, 0.0, 0.25),
     },
     "box_tower": {
         "label": "D3: Box tower (20 boxes)",
         "build": _build_box_tower,
-        "frames": 360,
+        "frames": 300,
+        "substeps": _SS,
         "cam_pos": (2.0, -1.5, 2.0),
         "cam_target": (0.0, 0.0, 1.5),
     },
     "box_pyramid": {
         "label": "D4: Box pyramid (15 boxes)",
         "build": _build_box_pyramid,
-        "frames": 360,
+        "frames": 300,
+        "substeps": _SS,
         "cam_pos": (1.5, -1.0, 0.5),
         "cam_target": (0.0, 0.0, 0.3),
     },
@@ -442,6 +456,7 @@ def main():
             fps=args.fps,
             cam_pos=cfg["cam_pos"],
             cam_target=cfg["cam_target"],
+            substeps=cfg.get("substeps", 1),
         )
 
     viewer.close()
