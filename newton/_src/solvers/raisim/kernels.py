@@ -116,6 +116,7 @@ def build_contact_cache(
     # --- solver config ---
     erp: float,
     erp_velocity_clamp: float,
+    cfm: float,
     dt: float,
     # --- per-contact outputs ---
     c_gap: wp.array(dtype=wp.float32),
@@ -507,6 +508,13 @@ def build_contact_cache(
                         * c_Wi[Wi_offset_b + j2 * wp.static(MAX_ART_DOFS) + k]
                     )
                 G[i, j2] = G[i, j2] + val
+
+    # Add CFM regularization to Delassus diagonal (contact compliance).
+    # This softens contacts slightly and prevents high-frequency jitter
+    # in stacking scenarios with many coupled contacts.
+    G[0, 0] = G[0, 0] + cfm
+    G[1, 1] = G[1, 1] + cfm
+    G[2, 2] = G[2, 2] + cfm
 
     c_Gii[tid] = G
 

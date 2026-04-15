@@ -84,6 +84,10 @@ class RaisimConfig:
         armature_min: Minimum diagonal regularization added to the mass matrix
             before Cholesky factorization [kg m^2]. Prevents numerical
             instability for articulations with near-zero effective inertia.
+        cfm: Constraint-force mixing regularization added to the Delassus
+            diagonal [s/kg]. Softens contacts slightly to prevent high-
+            frequency jitter in stacking scenarios. Equivalent to MuJoCo's
+            ``solimp`` compliance parameter.
     """
 
     max_gs_iterations: int = 50
@@ -94,6 +98,7 @@ class RaisimConfig:
     warmstart: bool = True
     update_mass_matrix_interval: int = 1
     armature_min: float = 1e-1
+    cfm: float = 1e-4
 
 
 class SolverRaisim(SolverBase):
@@ -754,6 +759,7 @@ class SolverRaisim(SolverBase):
                         self.L,
                         cfg.erp,
                         cfg.erp_velocity_clamp,
+                        cfg.cfm,
                         dt,
                     ],
                     outputs=[
