@@ -707,7 +707,10 @@ def _build_go2():
     go2.default_shape_cfg.mu = 0.75
     go2.add_usd(
         str(asset_path / "usd" / "go2.usda"),
-        xform=wp.transform(wp.vec3(0, 0, 0.35)),
+        # Go2 is compact; with bounding-box collision shapes and moderate PD
+        # gains it settles around z ≈ 0.22, so we start close to equilibrium
+        # to avoid a large free-fall transient.
+        xform=wp.transform(wp.vec3(0, 0, 0.25)),
         collapse_fixed_joints=True,
         enable_self_collisions=False,
         hide_collision_shapes=True,

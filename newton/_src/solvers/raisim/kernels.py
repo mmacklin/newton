@@ -352,12 +352,15 @@ def build_contact_cache(
                 S_ang = wp.spatial_bottom(S)
 
                 # Contact Jacobian for direction d_i at contact point:
-                # J_d = [d_i, cross(r, d_i)] dot [S_lin, S_ang]
-                # = dot(d_i, S_lin) + dot(cross(r_a, d_i), S_ang)
+                # v(cp) = S_lin + cross(S_ang, cp), so
+                # Jr[i,dof] = dot(d_i, S_lin) + dot(cross(cp, d_i), S_ang)
+                # NB: S_s is expressed at the spatial (world) origin, so the
+                # lever arm must be the world-frame contact point, NOT the
+                # offset from body COM.
                 col = (jdof_start + dof) - art_dof_start
-                rxn_a = wp.cross(r_a, dirs_0)
-                rxt1_a = wp.cross(r_a, dirs_1)
-                rxt2_a = wp.cross(r_a, dirs_2)
+                rxn_a = wp.cross(cp, dirs_0)
+                rxt1_a = wp.cross(cp, dirs_1)
+                rxt2_a = wp.cross(cp, dirs_2)
 
                 jr_n = wp.dot(dirs_0, S_lin) + wp.dot(rxn_a, S_ang)
                 jr_t1 = wp.dot(dirs_1, S_lin) + wp.dot(rxt1_a, S_ang)
@@ -453,10 +456,12 @@ def build_contact_cache(
                 S_lin = wp.spatial_top(S)
                 S_ang = wp.spatial_bottom(S)
 
+                # S_s is expressed at the spatial (world) origin — use
+                # world-frame contact point as lever arm, not body-COM offset.
                 col = (jdof_start + dof) - art_dof_start
-                rxn_b2 = wp.cross(r_b, dirs_0)
-                rxt1_b2 = wp.cross(r_b, dirs_1)
-                rxt2_b2 = wp.cross(r_b, dirs_2)
+                rxn_b2 = wp.cross(cp, dirs_0)
+                rxt1_b2 = wp.cross(cp, dirs_1)
+                rxt2_b2 = wp.cross(cp, dirs_2)
 
                 jr_n = wp.dot(dirs_0, S_lin) + wp.dot(rxn_b2, S_ang)
                 jr_t1 = wp.dot(dirs_1, S_lin) + wp.dot(rxt1_b2, S_ang)
