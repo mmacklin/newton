@@ -27,7 +27,7 @@ import numpy as np
 import warp as wp
 
 from ...core.types import override
-from ...sim import BodyFlags, Contacts, Control, Model, State
+from ...sim import BodyFlags, Contacts, Control, JointType, Model, State
 from ..featherstone.kernels import (
     compute_com_transforms,
     compute_spatial_inertia,
@@ -81,6 +81,9 @@ class RaisimConfig:
         warmstart: Whether to warmstart contact impulses from previous step.
         update_mass_matrix_interval: How often to recompute the mass matrix
             (every n-th call to :meth:`SolverRaisim.step`).
+        armature_min: Minimum diagonal regularization added to the mass matrix
+            before Cholesky factorization [kg m^2]. Prevents numerical
+            instability for articulations with near-zero effective inertia.
     """
 
     max_gs_iterations: int = 50
@@ -90,6 +93,7 @@ class RaisimConfig:
     angular_damping: float = 0.05
     warmstart: bool = True
     update_mass_matrix_interval: int = 1
+    armature_min: float = 1e-1
 
 
 class SolverRaisim(SolverBase):
@@ -156,7 +160,31 @@ class SolverRaisim(SolverBase):
         model = self.model
         self.has_kinematic_bodies = False
         self.has_kinematic_joints = False
-        self.joint_armature_effective = model.joint_armature
+
+        # Start from model armature, enforce minimum regularization for
+        # multi-joint articulations (single-joint free bodies are already
+        # well-conditioned and should not be regularized).
+        joint_armature = model.joint_armature.numpy().copy()
+        armature_min = self.config.armature_min
+        needs_copy = False
+        if armature_min > 0.0 and model.joint_count:
+            articulation_start = model.articulation_start.numpy()
+            joint_type = model.joint_type.numpy()
+            joint_qd_start = model.joint_qd_start.numpy()
+            for art_idx in range(model.articulation_count):
+                art_first = articulation_start[art_idx]
+                art_last = articulation_start[art_idx + 1]
+                joint_count_art = art_last - art_first
+                # Skip single-joint free/distance articulations
+                if joint_count_art == 1:
+                    jtype = joint_type[art_first]
+                    if jtype == int(JointType.FREE) or jtype == int(JointType.DISTANCE):
+                        continue
+                dof_start = int(joint_qd_start[art_first])
+                dof_end = int(joint_qd_start[art_last])
+                np.maximum(joint_armature[dof_start:dof_end], armature_min, out=joint_armature[dof_start:dof_end])
+                needs_copy = True
+
         if model.body_count:
             body_flags = model.body_flags.numpy()
             kinematic_mask = (body_flags & int(BodyFlags.KINEMATIC)) != 0
@@ -164,7 +192,6 @@ class SolverRaisim(SolverBase):
             if model.joint_count and self.has_kinematic_bodies:
                 joint_child = model.joint_child.numpy()
                 joint_qd_start = model.joint_qd_start.numpy()
-                joint_armature = model.joint_armature.numpy().copy()
                 for joint_idx in range(model.joint_count):
                     if not kinematic_mask[joint_child[joint_idx]]:
                         continue
@@ -172,8 +199,12 @@ class SolverRaisim(SolverBase):
                     dof_start = int(joint_qd_start[joint_idx])
                     dof_end = int(joint_qd_start[joint_idx + 1])
                     joint_armature[dof_start:dof_end] = 1.0e10
-                if self.has_kinematic_joints:
-                    self.joint_armature_effective = wp.array(joint_armature, dtype=float, device=model.device)
+                needs_copy = True
+
+        if needs_copy:
+            self.joint_armature_effective = wp.array(joint_armature, dtype=float, device=model.device)
+        else:
+            self.joint_armature_effective = model.joint_armature
 
     @override
     def notify_model_changed(self, flags: int) -> None:

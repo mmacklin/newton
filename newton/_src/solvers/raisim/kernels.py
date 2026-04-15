@@ -151,8 +151,8 @@ def build_contact_cache(
         return
 
     # --- unpack contact ---
-    p0 = contact_point0[tid]
-    p1 = contact_point1[tid]
+    p0_raw = contact_point0[tid]
+    p1_raw = contact_point1[tid]
     n = contact_normal[tid]
 
     s0 = contact_shape0[tid]
@@ -161,17 +161,43 @@ def build_contact_cache(
     m0 = contact_margin0[tid]
     m1 = contact_margin1[tid]
 
-    # gap = distance between contact surfaces (negative = penetration)
-    gap = wp.dot(p1 - p0, n) - m0 - m1
-
-    c_gap[tid] = gap
-
     # Normalize normal (should already be unit, but be safe)
     n_len = wp.length(n)
     if n_len > 1.0e-10:
         n = n / n_len
 
     c_normal[tid] = n
+
+    # Body indices (-1 for ground)
+    body_a = -1
+    body_b = -1
+    if s0 >= 0:
+        body_a = shape_body[s0]
+    if s1 >= 0:
+        body_b = shape_body[s1]
+
+    c_body_a[tid] = body_a
+    c_body_b[tid] = body_b
+
+    # Contact points in world frame.
+    # p0_raw: for ground (body=-1) already world-frame; for dynamic bodies body-local.
+    # p1_raw: same convention.
+    bx_a = p0_raw
+    if body_a >= 0:
+        bx_a = wp.transform_point(body_q[body_a], p0_raw)
+    bx_b = p1_raw
+    if body_b >= 0:
+        bx_b = wp.transform_point(body_q[body_b], p1_raw)
+
+    # Actual surface points along the contact normal (n points A→B).
+    # Surface of A toward B:  bx_a + m0 * n
+    # Surface of B toward A:  bx_b - m1 * n
+    surface_a = bx_a + m0 * n
+    surface_b = bx_b - m1 * n
+
+    # Signed gap: positive = separated, negative = penetrating.
+    gap = wp.dot(n, surface_b - surface_a)
+    c_gap[tid] = gap
 
     # Build tangent frame
     t1 = _build_tangent_frame(n)
@@ -189,21 +215,10 @@ def build_contact_cache(
         mu = shape_material_mu[s1]
     c_mu[tid] = mu
 
-    # Body indices (-1 for ground)
-    body_a = -1
-    body_b = -1
-    if s0 >= 0:
-        body_a = shape_body[s0]
-    if s1 >= 0:
-        body_b = shape_body[s1]
+    # Contact point = midpoint between surface points
+    cp = 0.5 * (surface_a + surface_b)
 
-    c_body_a[tid] = body_a
-    c_body_b[tid] = body_b
-
-    # Contact point (midpoint between surfaces)
-    cp = 0.5 * (p0 + p1)
-
-    # Lever arms from body COM to contact point
+    # Lever arms from body COM (world) to contact point
     r_a = wp.vec3(0.0)
     r_b = wp.vec3(0.0)
     if body_a >= 0:
