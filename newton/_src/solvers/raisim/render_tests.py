@@ -228,6 +228,88 @@ def _build_energy_drop():
     return builder.finalize()
 
 
+def _build_anymal_d():
+    asset_path = newton.utils.download_asset("anybotics_anymal_d")
+    ab = newton.ModelBuilder()
+    ab.default_joint_cfg = newton.ModelBuilder.JointDofConfig(limit_ke=1.0e3, limit_kd=1.0e1, friction=1e-5)
+    ab.default_shape_cfg.ke = 2.0e3
+    ab.default_shape_cfg.kd = 1.0e2
+    ab.default_shape_cfg.kf = 1.0e3
+    ab.default_shape_cfg.mu = 0.75
+    ab.add_usd(
+        str(asset_path / "usd" / "anymal_d.usda"),
+        xform=wp.transform(wp.vec3(0, 0, 0.62)),
+        collapse_fixed_joints=True,
+        enable_self_collisions=False,
+        hide_collision_shapes=True,
+    )
+    for i in range(ab.joint_dof_count):
+        ab.joint_target_ke[i] = 2000.0
+        ab.joint_target_kd[i] = 40.0
+    ab.approximate_meshes("bounding_box")
+    builder = newton.ModelBuilder()
+    builder.replicate(ab, 1)
+    builder.default_shape_cfg.ke = 1.0e3
+    builder.default_shape_cfg.kd = 1.0e2
+    builder.add_ground_plane()
+    return builder.finalize()
+
+
+def _build_go2():
+    asset_path = newton.utils.download_asset("unitree_go2")
+    go2 = newton.ModelBuilder()
+    go2.default_joint_cfg = newton.ModelBuilder.JointDofConfig(limit_ke=1.0e3, limit_kd=1.0e1, friction=1e-5)
+    go2.default_shape_cfg.ke = 2.0e3
+    go2.default_shape_cfg.kd = 1.0e2
+    go2.default_shape_cfg.kf = 1.0e3
+    go2.default_shape_cfg.mu = 0.75
+    go2.add_usd(
+        str(asset_path / "usd" / "go2.usda"),
+        xform=wp.transform(wp.vec3(0, 0, 0.35)),
+        collapse_fixed_joints=True,
+        enable_self_collisions=False,
+        hide_collision_shapes=True,
+    )
+    for i in range(go2.joint_dof_count):
+        go2.joint_target_ke[i] = 500.0
+        go2.joint_target_kd[i] = 10.0
+    go2.approximate_meshes("bounding_box")
+    builder = newton.ModelBuilder()
+    builder.replicate(go2, 1)
+    builder.default_shape_cfg.ke = 1.0e3
+    builder.default_shape_cfg.kd = 1.0e2
+    builder.add_ground_plane()
+    return builder.finalize()
+
+
+def _build_box_tower():
+    half = 0.1
+    builder = newton.ModelBuilder()
+    builder.default_shape_cfg.mu = 0.5
+    builder.add_ground_plane()
+    for i in range(20):
+        z = half + 0.001 + i * (2.0 * half + 0.002)
+        b = builder.add_body(xform=wp.transform(p=wp.vec3(0, 0, z), q=wp.quat_identity()), mass=1.0)
+        builder.add_shape_box(body=b, hx=half, hy=half, hz=half)
+    return builder.finalize()
+
+
+def _build_box_pyramid():
+    half = 0.1
+    builder = newton.ModelBuilder()
+    builder.default_shape_cfg.mu = 0.6
+    builder.add_ground_plane()
+    rows = 5
+    for row in range(rows):
+        n = rows - row
+        for col in range(n):
+            x = (col - (n - 1) / 2.0) * (2.0 * half + 0.005)
+            z = half + 0.001 + row * (2.0 * half + 0.002)
+            b = builder.add_body(xform=wp.transform(p=wp.vec3(x, 0, z), q=wp.quat_identity()), mass=1.0)
+            builder.add_shape_box(body=b, hx=half, hy=half, hz=half)
+    return builder.finalize()
+
+
 # -----------------------------------------------------------------------
 # Configuration table
 # -----------------------------------------------------------------------
@@ -281,6 +363,34 @@ CONFIGS = {
         "frames": 360,
         "cam_pos": (2.0, -1.5, 1.5),
         "cam_target": (0.0, 0.0, 0.5),
+    },
+    "anymal_d": {
+        "label": "D1: Anymal D quadruped",
+        "build": _build_anymal_d,
+        "frames": 360,
+        "cam_pos": (1.5, -1.0, 0.8),
+        "cam_target": (0.0, 0.0, 0.4),
+    },
+    "go2": {
+        "label": "D2: Unitree Go2 quadruped",
+        "build": _build_go2,
+        "frames": 360,
+        "cam_pos": (1.2, -0.8, 0.5),
+        "cam_target": (0.0, 0.0, 0.25),
+    },
+    "box_tower": {
+        "label": "D3: Box tower (20 boxes)",
+        "build": _build_box_tower,
+        "frames": 360,
+        "cam_pos": (2.0, -1.5, 2.0),
+        "cam_target": (0.0, 0.0, 1.5),
+    },
+    "box_pyramid": {
+        "label": "D4: Box pyramid (15 boxes)",
+        "build": _build_box_pyramid,
+        "frames": 360,
+        "cam_pos": (1.5, -1.0, 0.5),
+        "cam_target": (0.0, 0.0, 0.3),
     },
 }
 

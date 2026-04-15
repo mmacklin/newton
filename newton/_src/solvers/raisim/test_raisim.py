@@ -667,6 +667,252 @@ def test_penetration_bounded():
 
 
 # =====================================================================
+# Section D: Quadrupeds and stacking stress tests
+# =====================================================================
+
+
+def _build_anymal_d():
+    """Return ModelBuilder with Anymal D loaded."""
+    asset_path = newton.utils.download_asset("anybotics_anymal_d")
+    ab = newton.ModelBuilder()
+    ab.default_joint_cfg = newton.ModelBuilder.JointDofConfig(limit_ke=1.0e3, limit_kd=1.0e1, friction=1e-5)
+    ab.default_shape_cfg.ke = 2.0e3
+    ab.default_shape_cfg.kd = 1.0e2
+    ab.default_shape_cfg.kf = 1.0e3
+    ab.default_shape_cfg.mu = 0.75
+    ab.add_usd(
+        str(asset_path / "usd" / "anymal_d.usda"),
+        xform=wp.transform(wp.vec3(0, 0, 0.62)),
+        collapse_fixed_joints=True,
+        enable_self_collisions=False,
+        hide_collision_shapes=True,
+    )
+    # Anymal D requires high PD gains under explicit integration because
+    # the legs are heavy and far from the body COM.
+    for i in range(ab.joint_dof_count):
+        ab.joint_target_ke[i] = 2000.0
+        ab.joint_target_kd[i] = 40.0
+    ab.approximate_meshes("bounding_box")
+    return ab
+
+
+def _build_go2():
+    """Return ModelBuilder with Unitree Go2 loaded."""
+    asset_path = newton.utils.download_asset("unitree_go2")
+    go2 = newton.ModelBuilder()
+    go2.default_joint_cfg = newton.ModelBuilder.JointDofConfig(limit_ke=1.0e3, limit_kd=1.0e1, friction=1e-5)
+    go2.default_shape_cfg.ke = 2.0e3
+    go2.default_shape_cfg.kd = 1.0e2
+    go2.default_shape_cfg.kf = 1.0e3
+    go2.default_shape_cfg.mu = 0.75
+    go2.add_usd(
+        str(asset_path / "usd" / "go2.usda"),
+        xform=wp.transform(wp.vec3(0, 0, 0.35)),
+        collapse_fixed_joints=True,
+        enable_self_collisions=False,
+        hide_collision_shapes=True,
+    )
+    for i in range(go2.joint_dof_count):
+        go2.joint_target_ke[i] = 500.0
+        go2.joint_target_kd[i] = 10.0
+    go2.approximate_meshes("bounding_box")
+    return go2
+
+
+def test_anymal_d_stands():
+    """D1: Anymal D quadruped maintains height for 1 s.
+
+    Anymal D has heavy legs far from the body COM, requiring very high
+    PD gains under explicit integration.  We test a 1-second window.
+    """
+    print("=== D1: Anymal D quadruped ===")
+    try:
+        ab = _build_anymal_d()
+    except Exception as e:
+        print(f"  SKIPPED ({e})")
+        return True
+
+    builder = newton.ModelBuilder()
+    builder.replicate(ab, 1)
+    builder.default_shape_cfg.ke = 1.0e3
+    builder.default_shape_cfg.kd = 1.0e2
+    builder.add_ground_plane()
+    model = builder.finalize()
+
+    init_s = model.state()
+    newton.eval_fk(model, model.joint_q, model.joint_qd, init_s)
+    initial_z = float(init_s.body_q.numpy()[0, 2])
+
+    bq, bqd, _, _ = _run_and_fk(model, num_steps=360)  # 1s
+
+    root_z = float(bq[0, 2])
+    root_qw = float(bq[0, 6])
+    min_z = float(bq[:, 2].min())
+    max_v = float(np.abs(bqd).max())
+    drift = abs(root_z - initial_z)
+
+    print(
+        f"  initial_z={initial_z:.4f}  root_z={root_z:.4f}  drift={drift:.4f}"
+        f"  |qw|={abs(root_qw):.4f}  min_z={min_z:.4f}  max_v={max_v:.3f}"
+    )
+
+    errors: list[str] = []
+    _check(errors, not np.any(np.isnan(bq)), "NaN in body positions")
+    _check(errors, drift < 0.15, f"Height drift: z={root_z:.4f}, drift={drift:.4f}")
+    _check(errors, min_z > -0.05, f"Penetration: min_z={min_z:.4f}")
+    _check(errors, abs(root_qw) > 0.85, f"Fell over: |qw|={abs(root_qw):.4f}")
+    return _report("Anymal D quadruped", errors)
+
+
+def test_go2_stands():
+    """D2: Unitree Go2 quadruped maintains height for 1 s."""
+    print("=== D2: Unitree Go2 quadruped ===")
+    try:
+        go2 = _build_go2()
+    except Exception as e:
+        print(f"  SKIPPED ({e})")
+        return True
+
+    builder = newton.ModelBuilder()
+    builder.replicate(go2, 1)
+    builder.default_shape_cfg.ke = 1.0e3
+    builder.default_shape_cfg.kd = 1.0e2
+    builder.add_ground_plane()
+    model = builder.finalize()
+
+    init_s = model.state()
+    newton.eval_fk(model, model.joint_q, model.joint_qd, init_s)
+    initial_z = float(init_s.body_q.numpy()[0, 2])
+
+    bq, _bqd, _, _ = _run_and_fk(model, num_steps=360)  # 1s
+
+    root_z = float(bq[0, 2])
+    root_qw = float(bq[0, 6])
+    min_z = float(bq[:, 2].min())
+    drift = abs(root_z - initial_z)
+
+    print(
+        f"  initial_z={initial_z:.4f}  root_z={root_z:.4f}  drift={drift:.4f}"
+        f"  |qw|={abs(root_qw):.4f}  min_z={min_z:.4f}"
+    )
+
+    errors: list[str] = []
+    _check(errors, not np.any(np.isnan(bq)), "NaN in body positions")
+    _check(errors, drift < 0.1, f"Height drift: z={root_z:.4f}, drift={drift:.4f}")
+    _check(errors, min_z > -0.02, f"Penetration: min_z={min_z:.4f}")
+    _check(errors, abs(root_qw) > 0.85, f"Fell over: |qw|={abs(root_qw):.4f}")
+    return _report("Go2 quadruped", errors)
+
+
+def test_box_tower():
+    """D3: Tower of 20 boxes — all settle without deep penetration."""
+    print("=== D3: Box tower (20 boxes) ===")
+    half = 0.1
+    builder = newton.ModelBuilder()
+    builder.default_shape_cfg.mu = 0.5
+    builder.add_ground_plane()
+
+    for i in range(20):
+        z = half + 0.001 + i * (2.0 * half + 0.002)
+        b = builder.add_body(
+            xform=wp.transform(p=wp.vec3(0, 0, z), q=wp.quat_identity()),
+            mass=1.0,
+        )
+        builder.add_shape_box(body=b, hx=half, hy=half, hz=half)
+    model = builder.finalize()
+
+    config = newton.solvers.RaisimConfig(max_gs_iterations=100)
+    bq, bqd, _, _ = _run_and_fk(model, num_steps=1800, config=config)  # 5s
+
+    min_z = float(bq[:, 2].min())
+    max_z = float(bq[:, 2].max())
+    max_v = float(np.abs(bqd).max())
+    has_nan = bool(np.any(np.isnan(bq)))
+
+    print(f"  boxes=20  min_z={min_z:.4f}  max_z={max_z:.4f}  max_v={max_v:.3f}")
+
+    errors: list[str] = []
+    _check(errors, not has_nan, "NaN in body positions")
+    _check(errors, min_z > -0.02, f"Penetration: min_z={min_z:.4f}")
+    _check(errors, max_v < 5.0, f"Not settled: max_v={max_v:.3f}")
+    # Bottom box should be near z=half, top near z=20*2*half
+    _check(errors, min_z < half + 0.1, f"Bottom box too high: min_z={min_z:.4f}")
+    return _report("Box tower (20 boxes)", errors)
+
+
+def test_box_pyramid():
+    """D4: Pyramid of 15 boxes (5-row triangle) — stable for 3 s."""
+    print("=== D4: Box pyramid (15 boxes) ===")
+    half = 0.1
+    builder = newton.ModelBuilder()
+    builder.default_shape_cfg.mu = 0.6
+    builder.add_ground_plane()
+
+    rows = 5
+    box_count = 0
+    for row in range(rows):
+        n = rows - row
+        for col in range(n):
+            x = (col - (n - 1) / 2.0) * (2.0 * half + 0.005)
+            z = half + 0.001 + row * (2.0 * half + 0.002)
+            b = builder.add_body(
+                xform=wp.transform(p=wp.vec3(x, 0, z), q=wp.quat_identity()),
+                mass=1.0,
+            )
+            builder.add_shape_box(body=b, hx=half, hy=half, hz=half)
+            box_count += 1
+    model = builder.finalize()
+
+    config = newton.solvers.RaisimConfig(max_gs_iterations=100)
+    bq, bqd, _, _ = _run_and_fk(model, num_steps=1080, config=config)  # 3s
+
+    min_z = float(bq[:, 2].min())
+    max_v = float(np.abs(bqd).max())
+    has_nan = bool(np.any(np.isnan(bq)))
+
+    print(f"  boxes={box_count}  min_z={min_z:.4f}  max_v={max_v:.3f}")
+
+    errors: list[str] = []
+    _check(errors, not has_nan, "NaN in body positions")
+    _check(errors, min_z > -0.02, f"Penetration: min_z={min_z:.4f}")
+    _check(errors, max_v < 5.0, f"Not settled: max_v={max_v:.3f}")
+    return _report("Box pyramid (15 boxes)", errors)
+
+
+def test_long_stability():
+    """D5: G1 robot stable for 10 s (3600 steps) — no drift or NaN."""
+    print("=== D5: G1 long stability (10 s) ===")
+    try:
+        g1 = _build_g1()
+    except Exception as e:
+        print(f"  SKIPPED ({e})")
+        return True
+
+    builder = newton.ModelBuilder()
+    builder.replicate(g1, 1)
+    builder.default_shape_cfg.ke = 1.0e3
+    builder.default_shape_cfg.kd = 2.0e2
+    builder.add_ground_plane()
+    model = builder.finalize()
+
+    bq, _bqd, _, _ = _run_and_fk(model, num_steps=3600)  # 10s
+
+    root_z = float(bq[0, 2])
+    root_qw = float(bq[0, 6])
+    min_z = float(bq[:, 2].min())
+    drift = abs(root_z - 0.8)
+
+    print(f"  root_z={root_z:.4f}  drift={drift:.4f}  |qw|={abs(root_qw):.4f}  min_z={min_z:.4f}")
+
+    errors: list[str] = []
+    _check(errors, not np.any(np.isnan(bq)), "NaN in body positions")
+    _check(errors, drift < 0.1, f"Height drift after 10s: {drift:.4f}")
+    _check(errors, abs(root_qw) > 0.85, f"Fell over: |qw|={abs(root_qw):.4f}")
+    _check(errors, min_z > -0.05, f"Penetration: min_z={min_z:.4f}")
+    return _report("G1 long stability (10 s)", errors)
+
+
+# =====================================================================
 # Main
 # =====================================================================
 
@@ -691,6 +937,13 @@ def main():
     results.append(("C1 Free body energy", test_free_body_energy()))
     results.append(("C2 G1 no NaN", test_g1_no_nan()))
     results.append(("C3 Penetration bounded", test_penetration_bounded()))
+
+    # Section D: Quadrupeds and stacking
+    results.append(("D1 Anymal D quadruped", test_anymal_d_stands()))
+    results.append(("D2 Go2 quadruped", test_go2_stands()))
+    results.append(("D3 Box tower (20)", test_box_tower()))
+    results.append(("D4 Box pyramid (15)", test_box_pyramid()))
+    results.append(("D5 G1 long stability", test_long_stability()))
 
     print()
     n_pass = sum(1 for _, p in results if p)
