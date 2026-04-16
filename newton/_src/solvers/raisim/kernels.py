@@ -27,6 +27,11 @@ MAX_ART_DOFS = wp.constant(64)
 # Compile-time switch: 0 = standard PGS, 1 = RAISim bisection local solve.
 USE_BISECTION = wp.constant(1)
 
+# De Saxcé correction (Le Lidec & Carpentier 2024): adds μ‖c_T‖ to the
+# normal velocity to enforce the maximum dissipation principle.
+# 0 = disabled, 1 = enabled.
+USE_DE_SAXCE = wp.constant(1)
+
 # Number of bisection iterations for the local contact solve.
 BISECTION_ITERS = wp.constant(20)
 
@@ -679,6 +684,19 @@ def gs_contact_sweep(
             if G_nn < 1.0e-20:
                 continue
 
+            # De Saxcé correction (Le Lidec & Carpentier 2024):
+            # Add μ‖c_T‖ to the normal bias to enforce the maximum
+            # dissipation principle.  This accounts for the coupling
+            # between normal and tangential impulses through the
+            # friction cone geometry: when sliding, the normal force
+            # must be larger to keep the friction impulse on the cone
+            # boundary.  Uses the current (pre-solve) tangential
+            # velocity as the estimate of c_T.
+            bias_n = bias[0]
+            if wp.static(USE_DE_SAXCE):
+                c_T_mag = wp.sqrt(u_t1 * u_t1 + u_t2 * u_t2)
+                bias_n = bias_n + mu * c_T_mag
+
             old_lambda_n = c_lambda_n[ci]
             old_lambda_t1 = c_lambda_t1[ci]
             old_lambda_t2 = c_lambda_t2[ci]
@@ -704,13 +722,13 @@ def gs_contact_sweep(
                 # Upper bound: the lambda_n that would zero out u_n
                 # ignoring friction coupling (safe overestimate).
                 lo = float(0.0)
-                hi = wp.max(old_lambda_n * 2.0, (bias[0] - u_n) / G_nn + old_lambda_n)
+                hi = wp.max(old_lambda_n * 2.0, (bias_n - u_n) / G_nn + old_lambda_n)
                 hi = wp.max(hi, 1.0)  # ensure nonzero bracket
 
                 # Check if zero normal force satisfies complementarity.
-                # Target: u_n >= bias[0] (Baumgarte correction velocity).
+                # Target: u_n >= bias_n (Baumgarte + de Saxcé correction).
                 u_n_at_zero = u_n + G_nn * (0.0 - old_lambda_n)
-                if u_n_at_zero >= bias[0]:
+                if u_n_at_zero >= bias_n:
                     # No normal force needed — separating contact
                     new_lambda_n = 0.0
                     new_lambda_t1 = 0.0
@@ -754,7 +772,7 @@ def gs_contact_sweep(
                         u_n_trial = u_n + G_nn * d_n + G[0, 1] * d_t1_actual + G[0, 2] * d_t2_actual
 
                         # Bisect: if still penetrating, need more force
-                        if u_n_trial < bias[0]:
+                        if u_n_trial < bias_n:
                             lo = mid
                         else:
                             hi = mid
@@ -787,7 +805,7 @@ def gs_contact_sweep(
                 # -----------------------------------------------------------
                 # Standard PGS: solve normal then tangential sequentially.
                 # -----------------------------------------------------------
-                delta_lambda_n_pgs = (bias[0] - u_n) / G_nn
+                delta_lambda_n_pgs = (bias_n - u_n) / G_nn
                 new_lambda_n = wp.max(old_lambda_n + delta_lambda_n_pgs, 0.0)
                 d_n_pgs = new_lambda_n - old_lambda_n
 
