@@ -395,6 +395,7 @@ CONFIGS = {
         "build": _build_box_tower,
         "frames": 300,
         "substeps": _SS,
+        "solver_config": newton.solvers.RaisimConfig(max_gs_iterations=200),
         "cam_pos": (2.0, -1.5, 2.0),
         "cam_target": (0.0, 0.0, 1.5),
     },
@@ -403,6 +404,7 @@ CONFIGS = {
         "build": _build_box_pyramid,
         "frames": 300,
         "substeps": _SS,
+        "solver_config": newton.solvers.RaisimConfig(max_gs_iterations=200),
         "cam_pos": (1.5, -1.0, 0.5),
         "cam_target": (0.0, 0.0, 0.3),
     },
@@ -445,7 +447,8 @@ def main():
         model = cfg["build"]()
         print(f"  bodies={model.body_count}  joints={model.joint_count}")
 
-        solver = newton.solvers.SolverRaisim(model)
+        solver_cfg = cfg.get("solver_config", None)
+        solver = newton.solvers.SolverRaisim(model, config=solver_cfg)
         mp4_path = os.path.join(args.output_dir, f"{name}.mp4")
         render_scenario(
             viewer,
