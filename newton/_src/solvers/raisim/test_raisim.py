@@ -824,20 +824,23 @@ def test_box_tower():
         builder.add_shape_box(body=b, hx=half, hy=half, hz=half)
     model = builder.finalize()
 
-    config = newton.solvers.RaisimConfig(max_gs_iterations=100)
-    bq, bqd, _, _ = _run_and_fk(model, num_steps=1800, config=config)  # 5s
+    config = newton.solvers.RaisimConfig(max_gs_iterations=200)
+    bq, bqd, _, _ = _run_and_fk(model, num_steps=1080, config=config)  # 3s
 
     min_z = float(bq[:, 2].min())
     max_z = float(bq[:, 2].max())
     max_v = float(np.abs(bqd).max())
     has_nan = bool(np.any(np.isnan(bq)))
 
-    print(f"  boxes=20  min_z={min_z:.4f}  max_z={max_z:.4f}  max_v={max_v:.3f}")
+    max_lat = float(np.max(np.sqrt(bq[:, 0] ** 2 + bq[:, 1] ** 2)))
+
+    print(f"  boxes=20  min_z={min_z:.4f}  max_z={max_z:.4f}  max_v={max_v:.3f}  max_lat={max_lat:.4f}")
 
     errors: list[str] = []
     _check(errors, not has_nan, "NaN in body positions")
     _check(errors, min_z > -0.02, f"Penetration: min_z={min_z:.4f}")
-    _check(errors, max_v < 5.0, f"Not settled: max_v={max_v:.3f}")
+    _check(errors, max_v < 2.0, f"Not settled: max_v={max_v:.3f}")
+    _check(errors, max_lat < 0.05, f"Lateral drift: max_lat={max_lat:.4f}")
     # Bottom box should be near z=half, top near z=20*2*half
     _check(errors, min_z < half + 0.1, f"Bottom box too high: min_z={min_z:.4f}")
     return _report("Box tower (20 boxes)", errors)

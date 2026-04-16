@@ -92,13 +92,13 @@ class RaisimConfig:
 
     max_gs_iterations: int = 50
     tolerance: float = 1e-6
-    erp: float = 0.2
+    erp: float = 0.1
     erp_velocity_clamp: float = 2.0
     angular_damping: float = 0.05
     warmstart: bool = True
     update_mass_matrix_interval: int = 1
     armature_min: float = 1e-1
-    cfm: float = 1e-4
+    cfm: float = 1e-3
 
 
 class SolverRaisim(SolverBase):
