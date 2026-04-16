@@ -24,6 +24,12 @@ from ...sim import JointType
 # Maximum articulation DOFs (supports G1 with 49 DOFs).
 MAX_ART_DOFS = wp.constant(64)
 
+# Compile-time switch: 0 = standard PGS, 1 = RAISim bisection local solve.
+USE_BISECTION = wp.constant(1)
+
+# Number of bisection iterations for the local contact solve.
+BISECTION_ITERS = wp.constant(20)
+
 
 # ---------------------------------------------------------------------------
 # Helper functions
@@ -86,64 +92,64 @@ def _inv_inertia_world(body_q: wp.transform, inv_I_body: wp.mat33) -> wp.mat33:
 @wp.kernel
 def build_contact_cache(
     # --- contact data ---
-    contact_count: wp.array(dtype=wp.int32),
-    contact_point0: wp.array(dtype=wp.vec3),
-    contact_point1: wp.array(dtype=wp.vec3),
-    contact_normal: wp.array(dtype=wp.vec3),
-    contact_shape0: wp.array(dtype=wp.int32),
-    contact_shape1: wp.array(dtype=wp.int32),
-    contact_margin0: wp.array(dtype=wp.float32),
-    contact_margin1: wp.array(dtype=wp.float32),
+    contact_count: wp.array[wp.int32],
+    contact_point0: wp.array[wp.vec3],
+    contact_point1: wp.array[wp.vec3],
+    contact_normal: wp.array[wp.vec3],
+    contact_shape0: wp.array[wp.int32],
+    contact_shape1: wp.array[wp.int32],
+    contact_margin0: wp.array[wp.float32],
+    contact_margin1: wp.array[wp.float32],
     # --- model data ---
-    shape_body: wp.array(dtype=wp.int32),
-    shape_material_mu: wp.array(dtype=wp.float32),
-    body_q: wp.array(dtype=wp.transform),
-    body_com: wp.array(dtype=wp.vec3),
-    body_inv_mass: wp.array(dtype=wp.float32),
-    body_inv_inertia: wp.array(dtype=wp.mat33),
-    joint_type: wp.array(dtype=wp.int32),
-    joint_qd_start: wp.array(dtype=wp.int32),
-    joint_child: wp.array(dtype=wp.int32),
-    joint_ancestor: wp.array(dtype=wp.int32),
-    joint_S_s: wp.array(dtype=wp.spatial_vector),
-    joint_articulation: wp.array(dtype=wp.int32),
-    articulation_start: wp.array(dtype=wp.int32),
+    shape_body: wp.array[wp.int32],
+    shape_material_mu: wp.array[wp.float32],
+    body_q: wp.array[wp.transform],
+    body_com: wp.array[wp.vec3],
+    body_inv_mass: wp.array[wp.float32],
+    body_inv_inertia: wp.array[wp.mat33],
+    joint_type: wp.array[wp.int32],
+    joint_qd_start: wp.array[wp.int32],
+    joint_child: wp.array[wp.int32],
+    joint_ancestor: wp.array[wp.int32],
+    joint_S_s: wp.array[wp.spatial_vector],
+    joint_articulation: wp.array[wp.int32],
+    articulation_start: wp.array[wp.int32],
     # --- Featherstone dense data ---
-    H_start: wp.array(dtype=wp.int32),
-    H_rows: wp.array(dtype=wp.int32),
-    dof_start_arr: wp.array(dtype=wp.int32),
-    L: wp.array(dtype=wp.float32),
+    H_start: wp.array[wp.int32],
+    H_rows: wp.array[wp.int32],
+    dof_start_arr: wp.array[wp.int32],
+    L: wp.array[wp.float32],
     # --- solver config ---
     erp: float,
     erp_velocity_clamp: float,
     cfm: float,
     dt: float,
     # --- per-contact outputs ---
-    c_gap: wp.array(dtype=wp.float32),
-    c_normal: wp.array(dtype=wp.vec3),
-    c_t1: wp.array(dtype=wp.vec3),
-    c_t2: wp.array(dtype=wp.vec3),
-    c_body_a: wp.array(dtype=wp.int32),
-    c_body_b: wp.array(dtype=wp.int32),
-    c_is_free_a: wp.array(dtype=wp.int32),
-    c_is_free_b: wp.array(dtype=wp.int32),
-    c_art_a: wp.array(dtype=wp.int32),
-    c_art_b: wp.array(dtype=wp.int32),
-    c_Gii: wp.array(dtype=wp.mat33),
-    c_bias: wp.array(dtype=wp.vec3),
-    c_lambda_n: wp.array(dtype=wp.float32),
-    c_lambda_t1: wp.array(dtype=wp.float32),
-    c_lambda_t2: wp.array(dtype=wp.float32),
-    c_mu: wp.array(dtype=wp.float32),
-    c_r_a: wp.array(dtype=wp.vec3),
-    c_r_b: wp.array(dtype=wp.vec3),
+    c_gap: wp.array[wp.float32],
+    c_normal: wp.array[wp.vec3],
+    c_t1: wp.array[wp.vec3],
+    c_t2: wp.array[wp.vec3],
+    c_body_a: wp.array[wp.int32],
+    c_body_b: wp.array[wp.int32],
+    c_is_free_a: wp.array[wp.int32],
+    c_is_free_b: wp.array[wp.int32],
+    c_art_a: wp.array[wp.int32],
+    c_art_b: wp.array[wp.int32],
+    c_Gii: wp.array[wp.mat33],
+    c_bias: wp.array[wp.vec3],
+    c_lambda_n: wp.array[wp.float32],
+    c_lambda_t1: wp.array[wp.float32],
+    c_lambda_t2: wp.array[wp.float32],
+    c_mu: wp.array[wp.float32],
+    c_r_a: wp.array[wp.vec3],
+    c_r_b: wp.array[wp.vec3],
     # --- articulated-body dense buffers (flat) ---
-    c_Jr: wp.array(dtype=wp.float32),
-    c_Wi: wp.array(dtype=wp.float32),
-    c_nv_a: wp.array(dtype=wp.int32),
-    c_nv_b: wp.array(dtype=wp.int32),
-    c_dof_start_a: wp.array(dtype=wp.int32),
-    c_dof_start_b: wp.array(dtype=wp.int32),
+    c_Jr: wp.array[wp.float32],
+    c_Wi: wp.array[wp.float32],
+    c_nv_a: wp.array[wp.int32],
+    c_nv_b: wp.array[wp.int32],
+    c_dof_start_a: wp.array[wp.int32],
+    c_dof_start_b: wp.array[wp.int32],
     max_contacts: int,
 ):
     tid = wp.tid()
@@ -540,43 +546,43 @@ def build_contact_cache(
 @wp.kernel
 def gs_contact_sweep(
     # --- config ---
-    contact_count: wp.array(dtype=wp.int32),
+    contact_count: wp.array[wp.int32],
     max_gs_iterations: int,
     tolerance: float,
     # --- per-contact cache ---
-    c_gap: wp.array(dtype=wp.float32),
-    c_normal: wp.array(dtype=wp.vec3),
-    c_t1: wp.array(dtype=wp.vec3),
-    c_t2: wp.array(dtype=wp.vec3),
-    c_body_a: wp.array(dtype=wp.int32),
-    c_body_b: wp.array(dtype=wp.int32),
-    c_is_free_a: wp.array(dtype=wp.int32),
-    c_is_free_b: wp.array(dtype=wp.int32),
-    c_art_a: wp.array(dtype=wp.int32),
-    c_art_b: wp.array(dtype=wp.int32),
-    c_Gii: wp.array(dtype=wp.mat33),
-    c_bias: wp.array(dtype=wp.vec3),
-    c_mu: wp.array(dtype=wp.float32),
-    c_r_a: wp.array(dtype=wp.vec3),
-    c_r_b: wp.array(dtype=wp.vec3),
+    c_gap: wp.array[wp.float32],
+    c_normal: wp.array[wp.vec3],
+    c_t1: wp.array[wp.vec3],
+    c_t2: wp.array[wp.vec3],
+    c_body_a: wp.array[wp.int32],
+    c_body_b: wp.array[wp.int32],
+    c_is_free_a: wp.array[wp.int32],
+    c_is_free_b: wp.array[wp.int32],
+    c_art_a: wp.array[wp.int32],
+    c_art_b: wp.array[wp.int32],
+    c_Gii: wp.array[wp.mat33],
+    c_bias: wp.array[wp.vec3],
+    c_mu: wp.array[wp.float32],
+    c_r_a: wp.array[wp.vec3],
+    c_r_b: wp.array[wp.vec3],
     # --- articulated-body buffers ---
-    c_Jr: wp.array(dtype=wp.float32),
-    c_Wi: wp.array(dtype=wp.float32),
-    c_nv_a: wp.array(dtype=wp.int32),
-    c_nv_b: wp.array(dtype=wp.int32),
-    c_dof_start_a: wp.array(dtype=wp.int32),
-    c_dof_start_b: wp.array(dtype=wp.int32),
+    c_Jr: wp.array[wp.float32],
+    c_Wi: wp.array[wp.float32],
+    c_nv_a: wp.array[wp.int32],
+    c_nv_b: wp.array[wp.int32],
+    c_dof_start_a: wp.array[wp.int32],
+    c_dof_start_b: wp.array[wp.int32],
     # --- model data ---
-    body_q: wp.array(dtype=wp.transform),
-    body_inv_mass: wp.array(dtype=wp.float32),
-    body_inv_inertia: wp.array(dtype=wp.mat33),
-    articulation_start: wp.array(dtype=wp.int32),
+    body_q: wp.array[wp.transform],
+    body_inv_mass: wp.array[wp.float32],
+    body_inv_inertia: wp.array[wp.mat33],
+    articulation_start: wp.array[wp.int32],
     # --- mutable state ---
-    joint_qd: wp.array(dtype=wp.float32),
+    joint_qd: wp.array[wp.float32],
     # --- accumulators (in/out) ---
-    c_lambda_n: wp.array(dtype=wp.float32),
-    c_lambda_t1: wp.array(dtype=wp.float32),
-    c_lambda_t2: wp.array(dtype=wp.float32),
+    c_lambda_n: wp.array[wp.float32],
+    c_lambda_t1: wp.array[wp.float32],
+    c_lambda_t2: wp.array[wp.float32],
     max_contacts: int,
 ):
     """Serial GS sweep over all active contacts. Launched with dim=1."""
@@ -668,51 +674,151 @@ def gs_contact_sweep(
                 u_t1 += jr_t1_val2
                 u_t2 += jr_t2_val2
 
-            # --- Normal impulse ---
+            # --- Local 3-DOF contact solve ---
             G_nn = G[0, 0]
             if G_nn < 1.0e-20:
                 continue
 
             old_lambda_n = c_lambda_n[ci]
-            delta_lambda_n = (bias[0] - u_n) / G_nn
-            new_lambda_n = wp.max(old_lambda_n + delta_lambda_n, 0.0)
-            delta_lambda_n = new_lambda_n - old_lambda_n
-            c_lambda_n[ci] = new_lambda_n
-
-            # --- Tangential impulse (friction) ---
             old_lambda_t1 = c_lambda_t1[ci]
             old_lambda_t2 = c_lambda_t2[ci]
 
-            # 2x2 tangential solve
-            G_t1t1 = G[1, 1]
-            G_t2t2 = G[2, 2]
-            G_t1t2 = G[1, 2]
+            new_lambda_n = old_lambda_n
+            new_lambda_t1 = old_lambda_t1
+            new_lambda_t2 = old_lambda_t2
 
-            # Account for normal impulse coupling into tangential directions
-            u_t1_eff = u_t1 + G[1, 0] * delta_lambda_n
-            u_t2_eff = u_t2 + G[2, 0] * delta_lambda_n
+            if wp.static(USE_BISECTION):
+                # -----------------------------------------------------------
+                # RAISim bisection: find lambda_n via bisection on the normal
+                # impulse, solving for friction at each step.
+                #
+                # For a given trial lambda_n, the friction impulses are fully
+                # determined (solve 2x2 system + cone project).  The
+                # resulting normal velocity u_n(lambda_n) is monotonically
+                # decreasing in lambda_n (more normal force → faster
+                # separation).  We bisect to find lambda_n such that the
+                # complementarity condition is satisfied:
+                #   lambda_n >= 0,  u_n >= -b_n,  lambda_n * (u_n + b_n) = 0
+                # -----------------------------------------------------------
 
-            # Solve 2x2 system [G_t1t1 G_t1t2; G_t1t2 G_t2t2] [dl_t1; dl_t2] = [-u_t1_eff; -u_t2_eff]
-            det = G_t1t1 * G_t2t2 - G_t1t2 * G_t1t2
-            delta_lambda_t1 = float(0.0)
-            delta_lambda_t2 = float(0.0)
-            if wp.abs(det) > 1.0e-20:
-                delta_lambda_t1 = (-u_t1_eff * G_t2t2 + u_t2_eff * G_t1t2) / det
-                delta_lambda_t2 = (u_t1_eff * G_t1t2 - u_t2_eff * G_t1t1) / det
+                # Upper bound: the lambda_n that would zero out u_n
+                # ignoring friction coupling (safe overestimate).
+                lo = float(0.0)
+                hi = wp.max(old_lambda_n * 2.0, (bias[0] - u_n) / G_nn + old_lambda_n)
+                hi = wp.max(hi, 1.0)  # ensure nonzero bracket
 
-            new_lambda_t1 = old_lambda_t1 + delta_lambda_t1
-            new_lambda_t2 = old_lambda_t2 + delta_lambda_t2
+                # Check if zero normal force satisfies complementarity.
+                # Target: u_n >= bias[0] (Baumgarte correction velocity).
+                u_n_at_zero = u_n + G_nn * (0.0 - old_lambda_n)
+                if u_n_at_zero >= bias[0]:
+                    # No normal force needed — separating contact
+                    new_lambda_n = 0.0
+                    new_lambda_t1 = 0.0
+                    new_lambda_t2 = 0.0
+                else:
+                    for _bisect in range(wp.static(BISECTION_ITERS)):
+                        mid = 0.5 * (lo + hi)
 
-            # Project onto Coulomb friction cone
-            friction_limit = mu * new_lambda_n
-            tang_mag = wp.sqrt(new_lambda_t1 * new_lambda_t1 + new_lambda_t2 * new_lambda_t2)
-            if tang_mag > friction_limit and tang_mag > 1.0e-20:
-                scale = friction_limit / tang_mag
-                new_lambda_t1 = new_lambda_t1 * scale
-                new_lambda_t2 = new_lambda_t2 * scale
+                        # Delta from old accumulated impulse
+                        d_n = mid - old_lambda_n
 
+                        # Effective tangential velocities including normal coupling
+                        ut1_eff = u_t1 + G[1, 0] * d_n
+                        ut2_eff = u_t2 + G[2, 0] * d_n
+
+                        # Solve 2x2 friction sub-problem
+                        G_t1t1 = G[1, 1]
+                        G_t2t2 = G[2, 2]
+                        G_t1t2 = G[1, 2]
+                        det = G_t1t1 * G_t2t2 - G_t1t2 * G_t1t2
+                        d_t1 = float(0.0)
+                        d_t2 = float(0.0)
+                        if wp.abs(det) > 1.0e-20:
+                            d_t1 = (-ut1_eff * G_t2t2 + ut2_eff * G_t1t2) / det
+                            d_t2 = (ut1_eff * G_t1t2 - ut2_eff * G_t1t1) / det
+
+                        trial_t1 = old_lambda_t1 + d_t1
+                        trial_t2 = old_lambda_t2 + d_t2
+
+                        # Project onto Coulomb cone
+                        flimit = mu * mid
+                        tmag = wp.sqrt(trial_t1 * trial_t1 + trial_t2 * trial_t2)
+                        if tmag > flimit and tmag > 1.0e-20:
+                            sc = flimit / tmag
+                            trial_t1 = trial_t1 * sc
+                            trial_t2 = trial_t2 * sc
+
+                        # Compute resulting normal velocity
+                        d_t1_actual = trial_t1 - old_lambda_t1
+                        d_t2_actual = trial_t2 - old_lambda_t2
+                        u_n_trial = u_n + G_nn * d_n + G[0, 1] * d_t1_actual + G[0, 2] * d_t2_actual
+
+                        # Bisect: if still penetrating, need more force
+                        if u_n_trial < bias[0]:
+                            lo = mid
+                        else:
+                            hi = mid
+
+                    new_lambda_n = 0.5 * (lo + hi)
+
+                    # Final friction solve at converged lambda_n
+                    d_n_final = new_lambda_n - old_lambda_n
+                    ut1_f = u_t1 + G[1, 0] * d_n_final
+                    ut2_f = u_t2 + G[2, 0] * d_n_final
+                    G_t1t1 = G[1, 1]
+                    G_t2t2 = G[2, 2]
+                    G_t1t2 = G[1, 2]
+                    det = G_t1t1 * G_t2t2 - G_t1t2 * G_t1t2
+                    d_t1_f = float(0.0)
+                    d_t2_f = float(0.0)
+                    if wp.abs(det) > 1.0e-20:
+                        d_t1_f = (-ut1_f * G_t2t2 + ut2_f * G_t1t2) / det
+                        d_t2_f = (ut1_f * G_t1t2 - ut2_f * G_t1t1) / det
+                    new_lambda_t1 = old_lambda_t1 + d_t1_f
+                    new_lambda_t2 = old_lambda_t2 + d_t2_f
+                    flimit = mu * new_lambda_n
+                    tmag = wp.sqrt(new_lambda_t1 * new_lambda_t1 + new_lambda_t2 * new_lambda_t2)
+                    if tmag > flimit and tmag > 1.0e-20:
+                        sc = flimit / tmag
+                        new_lambda_t1 = new_lambda_t1 * sc
+                        new_lambda_t2 = new_lambda_t2 * sc
+
+            else:
+                # -----------------------------------------------------------
+                # Standard PGS: solve normal then tangential sequentially.
+                # -----------------------------------------------------------
+                delta_lambda_n_pgs = (bias[0] - u_n) / G_nn
+                new_lambda_n = wp.max(old_lambda_n + delta_lambda_n_pgs, 0.0)
+                d_n_pgs = new_lambda_n - old_lambda_n
+
+                # 2x2 tangential solve
+                G_t1t1 = G[1, 1]
+                G_t2t2 = G[2, 2]
+                G_t1t2 = G[1, 2]
+                u_t1_eff = u_t1 + G[1, 0] * d_n_pgs
+                u_t2_eff = u_t2 + G[2, 0] * d_n_pgs
+                det = G_t1t1 * G_t2t2 - G_t1t2 * G_t1t2
+                d_t1_pgs = float(0.0)
+                d_t2_pgs = float(0.0)
+                if wp.abs(det) > 1.0e-20:
+                    d_t1_pgs = (-u_t1_eff * G_t2t2 + u_t2_eff * G_t1t2) / det
+                    d_t2_pgs = (u_t1_eff * G_t1t2 - u_t2_eff * G_t1t1) / det
+                new_lambda_t1 = old_lambda_t1 + d_t1_pgs
+                new_lambda_t2 = old_lambda_t2 + d_t2_pgs
+
+                # Project onto Coulomb friction cone
+                friction_limit = mu * new_lambda_n
+                tang_mag = wp.sqrt(new_lambda_t1 * new_lambda_t1 + new_lambda_t2 * new_lambda_t2)
+                if tang_mag > friction_limit and tang_mag > 1.0e-20:
+                    scale = friction_limit / tang_mag
+                    new_lambda_t1 = new_lambda_t1 * scale
+                    new_lambda_t2 = new_lambda_t2 * scale
+
+            # Compute deltas from old values
+            delta_lambda_n = new_lambda_n - old_lambda_n
             delta_lambda_t1 = new_lambda_t1 - old_lambda_t1
             delta_lambda_t2 = new_lambda_t2 - old_lambda_t2
+            c_lambda_n[ci] = new_lambda_n
             c_lambda_t1[ci] = new_lambda_t1
             c_lambda_t2[ci] = new_lambda_t2
 
@@ -790,12 +896,12 @@ def gs_contact_sweep(
 
 @wp.kernel
 def update_joint_velocity(
-    joint_qd_in: wp.array(dtype=wp.float32),
-    joint_qdd: wp.array(dtype=wp.float32),
+    joint_qd_in: wp.array[wp.float32],
+    joint_qdd: wp.array[wp.float32],
     angular_damping: float,
     dt: float,
     # outputs
-    joint_qd_out: wp.array(dtype=wp.float32),
+    joint_qd_out: wp.array[wp.float32],
 ):
     """Compute predicted velocity: qd_out = qd_in + qdd * dt, with angular damping."""
     tid = wp.tid()
@@ -804,13 +910,13 @@ def update_joint_velocity(
 
 @wp.kernel
 def apply_angular_damping(
-    joint_type: wp.array(dtype=wp.int32),
-    joint_qd_start: wp.array(dtype=wp.int32),
-    joint_dof_dim: wp.array(dtype=wp.int32, ndim=2),
+    joint_type: wp.array[wp.int32],
+    joint_qd_start: wp.array[wp.int32],
+    joint_dof_dim: wp.array2d[wp.int32],
     angular_damping: float,
     dt: float,
     # in/out
-    joint_qd: wp.array(dtype=wp.float32),
+    joint_qd: wp.array[wp.float32],
 ):
     """Apply angular damping to angular DOFs of each joint."""
     j = wp.tid()
@@ -835,15 +941,15 @@ def apply_angular_damping(
 
 @wp.kernel
 def integrate_joint_positions(
-    joint_type: wp.array(dtype=wp.int32),
-    joint_q_start: wp.array(dtype=wp.int32),
-    joint_qd_start: wp.array(dtype=wp.int32),
-    joint_dof_dim: wp.array(dtype=wp.int32, ndim=2),
-    joint_q: wp.array(dtype=wp.float32),
-    joint_qd: wp.array(dtype=wp.float32),
+    joint_type: wp.array[wp.int32],
+    joint_q_start: wp.array[wp.int32],
+    joint_qd_start: wp.array[wp.int32],
+    joint_dof_dim: wp.array2d[wp.int32],
+    joint_q: wp.array[wp.float32],
+    joint_qd: wp.array[wp.float32],
     dt: float,
     # outputs
-    joint_q_new: wp.array(dtype=wp.float32),
+    joint_q_new: wp.array[wp.float32],
 ):
     """Semi-implicit Euler integration: q_new = q + qd * dt, with proper quaternion handling."""
     j = wp.tid()
@@ -915,16 +1021,16 @@ def integrate_joint_positions(
 
 @wp.kernel
 def project_joint_limits(
-    joint_type: wp.array(dtype=wp.int32),
-    joint_q_start: wp.array(dtype=wp.int32),
-    joint_qd_start: wp.array(dtype=wp.int32),
-    joint_dof_dim: wp.array(dtype=wp.int32, ndim=2),
-    joint_limit_lower: wp.array(dtype=wp.float32),
-    joint_limit_upper: wp.array(dtype=wp.float32),
+    joint_type: wp.array[wp.int32],
+    joint_q_start: wp.array[wp.int32],
+    joint_qd_start: wp.array[wp.int32],
+    joint_dof_dim: wp.array2d[wp.int32],
+    joint_limit_lower: wp.array[wp.float32],
+    joint_limit_upper: wp.array[wp.float32],
     dt: float,
     # in/out
-    joint_q: wp.array(dtype=wp.float32),
-    joint_qd: wp.array(dtype=wp.float32),
+    joint_q: wp.array[wp.float32],
+    joint_qd: wp.array[wp.float32],
 ):
     """Hard-clamp joint positions to [lower, upper] and zero violating velocities."""
     j = wp.tid()
