@@ -179,7 +179,6 @@ def _build_g1():
         xform=wp.transform(wp.vec3(0, 0, 0.8)),
         collapse_fixed_joints=True,
         enable_self_collisions=False,
-        hide_collision_shapes=True,
     )
     for i in range(6, g1.joint_dof_count):
         g1.joint_target_ke[i] = 500.0
@@ -205,7 +204,6 @@ def _build_h1():
         str(asset_path / "usd_structured" / "h1.usda"),
         ignore_paths=["/GroundPlane"],
         enable_self_collisions=False,
-        hide_collision_shapes=True,
     )
     for i in range(h1.joint_dof_count):
         h1.joint_target_ke[i] = 500.0
@@ -241,7 +239,6 @@ def _build_anymal_d():
         xform=wp.transform(wp.vec3(0, 0, 0.65)),
         collapse_fixed_joints=True,
         enable_self_collisions=False,
-        hide_collision_shapes=True,
     )
     for i in range(ab.joint_dof_count):
         ab.joint_target_ke[i] = 2000.0
@@ -265,10 +262,9 @@ def _build_go2():
     go2.default_shape_cfg.mu = 0.75
     go2.add_usd(
         str(asset_path / "usd" / "go2.usda"),
-        xform=wp.transform(wp.vec3(0, 0, 0.35)),
+        xform=wp.transform(wp.vec3(0, 0, 0.45)),
         collapse_fixed_joints=True,
         enable_self_collisions=False,
-        hide_collision_shapes=True,
     )
     for i in range(go2.joint_dof_count):
         go2.joint_target_ke[i] = 500.0
