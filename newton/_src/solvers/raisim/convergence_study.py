@@ -43,7 +43,10 @@ def measure(label, model, gs_list):
         s0, s1 = s1, s0
 
     print(f"\n{label}:")
-    print(f"  {'gs':>6s}  {'r_compl':>10s}  {'r_cone':>10s}  {'r_gap':>10s}")
+    print(
+        f"  {'gs':>6s}  {'r_compl':>10s}  {'r_cone':>10s}  {'r_gap':>10s}"
+        f"  {'r_ds_compl':>10s}  {'r_ds_dual':>10s}  {'r_mdp_dir':>10s}"
+    )
     for gs in gs_list:
         cfg = newton.solvers.RaisimConfig(max_gs_iterations=gs)
         sv = newton.solvers.SolverRaisim(model, config=cfg)
@@ -58,7 +61,10 @@ def measure(label, model, gs_list):
         model.collide(st, contacts)
         sv.step(st, so, ctrl, contacts, dt)
         res = compute_ncp_residuals(sv, so, contacts, dt)
-        print(f"  {gs:>6d}  {res['r_compl']:>10.6f}  {res['r_cone']:>10.6f}  {res['r_gap']:>10.6f}")
+        print(
+            f"  {gs:>6d}  {res['r_compl']:>10.6f}  {res['r_cone']:>10.6f}  {res['r_gap']:>10.6f}"
+            f"  {res['r_ds_compl']:>10.6f}  {res['r_ds_dual']:>10.6f}  {res['r_mdp_dir']:>10.6f}"
+        )
 
 
 def build_sphere():
