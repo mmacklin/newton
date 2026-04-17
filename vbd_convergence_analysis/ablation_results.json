@@ -1,0 +1,762 @@
+{
+  "Newton Main (original)": {
+    "seed_42": {
+      "has_nan": true,
+      "min_z": NaN,
+      "rest_med_rms": NaN,
+      "rest_max_rms": NaN,
+      "rest_med_disp": NaN,
+      "rest_max_disp": NaN,
+      "rest_pops": 90,
+      "conv_ratio": NaN,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/newton_main_original_seed42.mp4"
+    },
+    "seed_123": {
+      "has_nan": true,
+      "min_z": NaN,
+      "rest_med_rms": NaN,
+      "rest_max_rms": NaN,
+      "rest_med_disp": NaN,
+      "rest_max_disp": NaN,
+      "rest_pops": 90,
+      "conv_ratio": NaN,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/newton_main_original_seed123.mp4"
+    },
+    "seed_456": {
+      "has_nan": true,
+      "min_z": NaN,
+      "rest_med_rms": NaN,
+      "rest_max_rms": NaN,
+      "rest_med_disp": NaN,
+      "rest_max_disp": NaN,
+      "rest_pops": 90,
+      "conv_ratio": NaN,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/newton_main_original_seed456.mp4"
+    },
+    "seed_789": {
+      "has_nan": true,
+      "min_z": NaN,
+      "rest_med_rms": NaN,
+      "rest_max_rms": NaN,
+      "rest_med_disp": NaN,
+      "rest_max_disp": NaN,
+      "rest_pops": 90,
+      "conv_ratio": NaN,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/newton_main_original_seed789.mp4"
+    }
+  },
+  "+ Quadratic SC penalty": {
+    "seed_42": {
+      "has_nan": false,
+      "min_z": 0.0039019754622131586,
+      "rest_med_rms": 0.0034453117987141013,
+      "rest_max_rms": 0.01028730534017086,
+      "rest_med_disp": 0.0005159952124813572,
+      "rest_max_disp": 0.002056634984910488,
+      "rest_pops": 45,
+      "conv_ratio": 0.0008320951244104391,
+      "video_path": ""
+    },
+    "seed_123": {
+      "has_nan": false,
+      "min_z": 0.004102065693587065,
+      "rest_med_rms": 0.00944104976952076,
+      "rest_max_rms": 0.018436774611473083,
+      "rest_med_disp": 0.0005217636644374579,
+      "rest_max_disp": 0.0017419698415324092,
+      "rest_pops": 46,
+      "conv_ratio": 0.0008908733377374185,
+      "video_path": ""
+    },
+    "seed_456": {
+      "has_nan": false,
+      "min_z": 0.003897999878972769,
+      "rest_med_rms": 0.00847164262086153,
+      "rest_max_rms": 0.025072921067476273,
+      "rest_med_disp": 0.0011645026388578117,
+      "rest_max_disp": 0.011073173023760319,
+      "rest_pops": 84,
+      "conv_ratio": 0.0010519447064238744,
+      "video_path": ""
+    },
+    "seed_789": {
+      "has_nan": false,
+      "min_z": 0.004191857762634754,
+      "rest_med_rms": 0.009390447288751602,
+      "rest_max_rms": 0.03522592782974243,
+      "rest_med_disp": 0.00109351787250489,
+      "rest_max_disp": 0.0102977454662323,
+      "rest_pops": 82,
+      "conv_ratio": 0.000905485326155437,
+      "video_path": ""
+    }
+  },
+  "+ Absolute damping": {
+    "seed_42": {
+      "has_nan": false,
+      "min_z": -0.003550939029082656,
+      "rest_med_rms": 0.0022976105101406574,
+      "rest_max_rms": 0.003848097287118435,
+      "rest_med_disp": 0.00030776804487686604,
+      "rest_max_disp": 0.0006292840116657317,
+      "rest_pops": 6,
+      "conv_ratio": 0.17604032918478138,
+      "video_path": ""
+    },
+    "seed_123": {
+      "has_nan": false,
+      "min_z": -0.006101976614445448,
+      "rest_med_rms": 0.003516725613735616,
+      "rest_max_rms": 0.019031427800655365,
+      "rest_med_disp": 0.000470473722089082,
+      "rest_max_disp": 0.0057881367392838,
+      "rest_pops": 42,
+      "conv_ratio": 0.15965293909157807,
+      "video_path": ""
+    },
+    "seed_456": {
+      "has_nan": false,
+      "min_z": -0.0021352479234337807,
+      "rest_med_rms": 0.004230136051774025,
+      "rest_max_rms": 0.00854519847780466,
+      "rest_med_disp": 0.0010495561873540282,
+      "rest_max_disp": 0.0035500163212418556,
+      "rest_pops": 61,
+      "conv_ratio": 0.2686529468512654,
+      "video_path": ""
+    },
+    "seed_789": {
+      "has_nan": false,
+      "min_z": -0.0007888076943345368,
+      "rest_med_rms": 0.0023475305642932653,
+      "rest_max_rms": 0.004067341797053814,
+      "rest_med_disp": 0.0004410748224472627,
+      "rest_max_disp": 0.001206121640279889,
+      "rest_pops": 31,
+      "conv_ratio": 0.1630846501779153,
+      "video_path": ""
+    }
+  },
+  "All Fixes (IPC)": {
+    "seed_42": {
+      "has_nan": false,
+      "min_z": -0.0031150802969932556,
+      "rest_med_rms": 0.002263931091874838,
+      "rest_max_rms": 0.003436428029090166,
+      "rest_med_disp": 0.00029862209339626133,
+      "rest_max_disp": 0.0007650383049622178,
+      "rest_pops": 19,
+      "conv_ratio": 0.17091929582591214,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/all_fixes_ipc_seed42.mp4"
+    },
+    "seed_123": {
+      "has_nan": false,
+      "min_z": -0.006678290665149689,
+      "rest_med_rms": 0.0027053336380049586,
+      "rest_max_rms": 0.005797113757580519,
+      "rest_med_disp": 0.00030018200050108135,
+      "rest_max_disp": 0.001395335653796792,
+      "rest_pops": 13,
+      "conv_ratio": 0.5057088772666506,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/all_fixes_ipc_seed123.mp4"
+    },
+    "seed_456": {
+      "has_nan": false,
+      "min_z": -0.0020797208417207003,
+      "rest_med_rms": 0.002435475238598883,
+      "rest_max_rms": 0.008788310922682285,
+      "rest_med_disp": 0.0003999762120656669,
+      "rest_max_disp": 0.0026360417250543833,
+      "rest_pops": 29,
+      "conv_ratio": 0.12785697179001093,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/all_fixes_ipc_seed456.mp4"
+    },
+    "seed_789": {
+      "has_nan": false,
+      "min_z": -0.002459605224430561,
+      "rest_med_rms": 0.004025207366794348,
+      "rest_max_rms": 0.028908679261803627,
+      "rest_med_disp": 0.0010295232059434056,
+      "rest_max_disp": 0.005667415447533131,
+      "rest_pops": 55,
+      "conv_ratio": 0.1911552782594293,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/all_fixes_ipc_seed789.mp4"
+    }
+  },
+  "P/D kf=1e3": {
+    "seed_42": {
+      "has_nan": false,
+      "min_z": -0.0017433109460398555,
+      "rest_med_rms": 0.008152829948812723,
+      "rest_max_rms": 0.01587405428290367,
+      "rest_med_disp": 0.0006065144843887538,
+      "rest_max_disp": 0.00496466550976038,
+      "rest_pops": 51,
+      "conv_ratio": 0.092285713245527,
+      "video_path": ""
+    },
+    "seed_123": {
+      "has_nan": false,
+      "min_z": -0.0030610202811658382,
+      "rest_med_rms": 0.009698728565126657,
+      "rest_max_rms": 0.06217147037386894,
+      "rest_med_disp": 0.0013453327119350433,
+      "rest_max_disp": 0.016283651813864708,
+      "rest_pops": 90,
+      "conv_ratio": 0.0817001480829389,
+      "video_path": ""
+    },
+    "seed_456": {
+      "has_nan": false,
+      "min_z": -0.0047347345389425755,
+      "rest_med_rms": 0.011558305937796831,
+      "rest_max_rms": 0.0173946600407362,
+      "rest_med_disp": 0.0009836038807407022,
+      "rest_max_disp": 0.004400639794766903,
+      "rest_pops": 85,
+      "conv_ratio": 0.20416108398696392,
+      "video_path": ""
+    },
+    "seed_789": {
+      "has_nan": false,
+      "min_z": -0.0012014351086691022,
+      "rest_med_rms": 0.012054577004164457,
+      "rest_max_rms": 0.07208653539419174,
+      "rest_med_disp": 0.0011912784539163113,
+      "rest_max_disp": 0.01606396771967411,
+      "rest_pops": 88,
+      "conv_ratio": 0.1021530106099106,
+      "video_path": ""
+    }
+  },
+  "P/D kf=5e3": {
+    "seed_42": {
+      "has_nan": false,
+      "min_z": -0.0017547050956636667,
+      "rest_med_rms": 0.004853012738749385,
+      "rest_max_rms": 0.008584982715547085,
+      "rest_med_disp": 0.0004663657600758597,
+      "rest_max_disp": 0.002142943674698472,
+      "rest_pops": 39,
+      "conv_ratio": 0.09332927345737888,
+      "video_path": ""
+    },
+    "seed_123": {
+      "has_nan": false,
+      "min_z": -0.0033283301163464785,
+      "rest_med_rms": 0.0069868615828454494,
+      "rest_max_rms": 0.01890670508146286,
+      "rest_med_disp": 0.0009859328565653414,
+      "rest_max_disp": 0.0046590156853199005,
+      "rest_pops": 63,
+      "conv_ratio": 0.09422369472390521,
+      "video_path": ""
+    },
+    "seed_456": {
+      "has_nan": false,
+      "min_z": -0.003233932424336672,
+      "rest_med_rms": 0.009382907301187515,
+      "rest_max_rms": 0.01923857443034649,
+      "rest_med_disp": 0.0009777705126907676,
+      "rest_max_disp": 0.006948560010641813,
+      "rest_pops": 81,
+      "conv_ratio": 0.09247100053875101,
+      "video_path": ""
+    },
+    "seed_789": {
+      "has_nan": false,
+      "min_z": -4.535727930488065e-05,
+      "rest_med_rms": 0.009095868095755577,
+      "rest_max_rms": 0.034208640456199646,
+      "rest_med_disp": 0.0010945986723527312,
+      "rest_max_disp": 0.0094874557107687,
+      "rest_pops": 76,
+      "conv_ratio": 0.09082557572622646,
+      "video_path": ""
+    }
+  },
+  "All Fixes (P/D kf=1e4)": {
+    "seed_42": {
+      "has_nan": false,
+      "min_z": -0.0014971919590607285,
+      "rest_med_rms": 0.00524132652208209,
+      "rest_max_rms": 0.014997797086834908,
+      "rest_med_disp": 0.0005798200727440417,
+      "rest_max_disp": 0.007133581675589085,
+      "rest_pops": 48,
+      "conv_ratio": 0.09108940364884274,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/all_fixes_p_d_kf1e4_seed42.mp4"
+    },
+    "seed_123": {
+      "has_nan": false,
+      "min_z": -0.0034788057673722506,
+      "rest_med_rms": 0.005918917013332248,
+      "rest_max_rms": 0.014837333001196384,
+      "rest_med_disp": 0.0011632993700914085,
+      "rest_max_disp": 0.005669592879712582,
+      "rest_pops": 75,
+      "conv_ratio": 0.08589211554651736,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/all_fixes_p_d_kf1e4_seed123.mp4"
+    },
+    "seed_456": {
+      "has_nan": false,
+      "min_z": -0.00296305981464684,
+      "rest_med_rms": 0.005008083302527666,
+      "rest_max_rms": 0.011082102544605732,
+      "rest_med_disp": 0.00046218381612561643,
+      "rest_max_disp": 0.004792299121618271,
+      "rest_pops": 35,
+      "conv_ratio": 0.09047546309741185,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/all_fixes_p_d_kf1e4_seed456.mp4"
+    },
+    "seed_789": {
+      "has_nan": false,
+      "min_z": -0.0006387900793924928,
+      "rest_med_rms": 0.005158417858183384,
+      "rest_max_rms": 0.044273197650909424,
+      "rest_med_disp": 0.0010144156985916197,
+      "rest_max_disp": 0.008471149951219559,
+      "rest_pops": 69,
+      "conv_ratio": 0.0897797781012446,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/all_fixes_p_d_kf1e4_seed789.mp4"
+    }
+  },
+  "P/D kf=5e4": {
+    "seed_42": {
+      "has_nan": false,
+      "min_z": -0.0024649181868880987,
+      "rest_med_rms": 0.002877188380807638,
+      "rest_max_rms": 0.0038782875053584576,
+      "rest_med_disp": 0.00034732990025077015,
+      "rest_max_disp": 0.0011566735338419676,
+      "rest_pops": 23,
+      "conv_ratio": 0.10136753346749264,
+      "video_path": ""
+    },
+    "seed_123": {
+      "has_nan": false,
+      "min_z": -0.005252635106444359,
+      "rest_med_rms": 0.0020954046631231904,
+      "rest_max_rms": 0.012030593119561672,
+      "rest_med_disp": 0.00030423636781051755,
+      "rest_max_disp": 0.003958656452596188,
+      "rest_pops": 19,
+      "conv_ratio": 0.08701378041246022,
+      "video_path": ""
+    },
+    "seed_456": {
+      "has_nan": false,
+      "min_z": -0.0023136360105127096,
+      "rest_med_rms": 0.005557016469538212,
+      "rest_max_rms": 0.009174955077469349,
+      "rest_med_disp": 0.0014584079035557806,
+      "rest_max_disp": 0.0032122167758643627,
+      "rest_pops": 90,
+      "conv_ratio": 0.0928459010615527,
+      "video_path": ""
+    },
+    "seed_789": {
+      "has_nan": false,
+      "min_z": -0.0007046802784316242,
+      "rest_med_rms": 0.004654971184208989,
+      "rest_max_rms": 0.010201956145465374,
+      "rest_med_disp": 0.0007271122885867953,
+      "rest_max_disp": 0.002701961202546954,
+      "rest_pops": 73,
+      "conv_ratio": 0.1026940309610101,
+      "video_path": ""
+    }
+  },
+  "P/D kf=1e5": {
+    "seed_42": {
+      "has_nan": false,
+      "min_z": -0.003246133914217353,
+      "rest_med_rms": 0.0028699820395559072,
+      "rest_max_rms": 0.012780467979609966,
+      "rest_med_disp": 0.00047716102562844753,
+      "rest_max_disp": 0.007365075405687094,
+      "rest_pops": 44,
+      "conv_ratio": 0.10469852903936332,
+      "video_path": ""
+    },
+    "seed_123": {
+      "has_nan": false,
+      "min_z": -0.005174742080271244,
+      "rest_med_rms": 0.003216406679712236,
+      "rest_max_rms": 0.010684615932404995,
+      "rest_med_disp": 0.0004932070150971413,
+      "rest_max_disp": 0.0036636420991271734,
+      "rest_pops": 42,
+      "conv_ratio": 0.10083820440876096,
+      "video_path": ""
+    },
+    "seed_456": {
+      "has_nan": false,
+      "min_z": -0.0021385690197348595,
+      "rest_med_rms": 0.0027423592982813716,
+      "rest_max_rms": 0.009953811764717102,
+      "rest_med_disp": 0.0005706704687327147,
+      "rest_max_disp": 0.003767332760617137,
+      "rest_pops": 47,
+      "conv_ratio": 0.4223116276931147,
+      "video_path": ""
+    },
+    "seed_789": {
+      "has_nan": false,
+      "min_z": -0.0004024130757898092,
+      "rest_med_rms": 0.0027342839166522026,
+      "rest_max_rms": 0.005085172597318888,
+      "rest_med_disp": 0.00039216586446855217,
+      "rest_max_disp": 0.000743541051633656,
+      "rest_pops": 28,
+      "conv_ratio": 0.10294197357351084,
+      "video_path": ""
+    }
+  },
+  "R0. AVBD ramp": {
+    "seed_42": {
+      "has_nan": false,
+      "min_z": -0.0002965716412290931,
+      "rest_med_rms": 0.004157342482358217,
+      "rest_max_rms": 0.01141028106212616,
+      "rest_med_disp": 0.00046502865734510124,
+      "rest_max_disp": 0.002807925920933485,
+      "rest_pops": 41,
+      "conv_ratio": 0.14630316183203212,
+      "video_path": ""
+    },
+    "seed_123": {
+      "has_nan": false,
+      "min_z": -0.0010471343994140625,
+      "rest_med_rms": 0.004504008684307337,
+      "rest_max_rms": 0.014629827812314034,
+      "rest_med_disp": 0.0005369203572627157,
+      "rest_max_disp": 0.0048328847624361515,
+      "rest_pops": 49,
+      "conv_ratio": 0.13288280415544676,
+      "video_path": ""
+    },
+    "seed_456": {
+      "has_nan": false,
+      "min_z": -0.0014265460195019841,
+      "rest_med_rms": 0.0053957197815179825,
+      "rest_max_rms": 0.011639394797384739,
+      "rest_med_disp": 0.0005802280502393842,
+      "rest_max_disp": 0.0037718056701123714,
+      "rest_pops": 53,
+      "conv_ratio": 0.1502889316886316,
+      "video_path": ""
+    },
+    "seed_789": {
+      "has_nan": false,
+      "min_z": -5.2016206609550864e-05,
+      "rest_med_rms": 0.0097961132414639,
+      "rest_max_rms": 0.035299770534038544,
+      "rest_med_disp": 0.0016279974952340126,
+      "rest_max_disp": 0.006816823501139879,
+      "rest_pops": 83,
+      "conv_ratio": 0.1594958763448901,
+      "video_path": ""
+    }
+  },
+  "R1. No AVBD": {
+    "seed_42": {
+      "has_nan": false,
+      "min_z": -0.0016883044736459851,
+      "rest_med_rms": 0.004391394322738051,
+      "rest_max_rms": 0.018609272316098213,
+      "rest_med_disp": 0.0004493046581046656,
+      "rest_max_disp": 0.005810428876429796,
+      "rest_pops": 30,
+      "conv_ratio": 0.09396964663991819,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/r1_no_avbd_seed42.mp4"
+    },
+    "seed_123": {
+      "has_nan": false,
+      "min_z": -0.003928911406546831,
+      "rest_med_rms": 0.004883952671661973,
+      "rest_max_rms": 0.013409748673439026,
+      "rest_med_disp": 0.0006106181244831532,
+      "rest_max_disp": 0.004416814539581537,
+      "rest_pops": 56,
+      "conv_ratio": 0.08685466037938579,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/r1_no_avbd_seed123.mp4"
+    },
+    "seed_456": {
+      "has_nan": false,
+      "min_z": -0.002955783624202013,
+      "rest_med_rms": 0.0046182190999388695,
+      "rest_max_rms": 0.013117814436554909,
+      "rest_med_disp": 0.00047236893442459404,
+      "rest_max_disp": 0.00448532123118639,
+      "rest_pops": 40,
+      "conv_ratio": 0.08719751071385684,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/r1_no_avbd_seed456.mp4"
+    },
+    "seed_789": {
+      "has_nan": false,
+      "min_z": -0.0012219119817018509,
+      "rest_med_rms": 0.009022265672683716,
+      "rest_max_rms": 0.013249175623059273,
+      "rest_med_disp": 0.001333581458311528,
+      "rest_max_disp": 0.0027055307291448116,
+      "rest_pops": 83,
+      "conv_ratio": 0.09905400749575755,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/r1_no_avbd_seed789.mp4"
+    }
+  },
+  "R2. Alpha=0.7": {
+    "seed_42": {
+      "has_nan": false,
+      "min_z": -0.003277404699474573,
+      "rest_med_rms": 0.007435300853103399,
+      "rest_max_rms": 0.014208843931555748,
+      "rest_med_disp": 0.0010386380599811673,
+      "rest_max_disp": 0.007415954489260912,
+      "rest_pops": 80,
+      "conv_ratio": 0.12431720958723262,
+      "video_path": ""
+    },
+    "seed_123": {
+      "has_nan": false,
+      "min_z": -0.004473645240068436,
+      "rest_med_rms": 0.007199706044048071,
+      "rest_max_rms": 0.015707574784755707,
+      "rest_med_disp": 0.00114461564226076,
+      "rest_max_disp": 0.008306731469929218,
+      "rest_pops": 81,
+      "conv_ratio": 0.09950621504566814,
+      "video_path": ""
+    },
+    "seed_456": {
+      "has_nan": false,
+      "min_z": -0.004195437766611576,
+      "rest_med_rms": 0.00441963947378099,
+      "rest_max_rms": 0.026831936091184616,
+      "rest_med_disp": 0.0007153234910219908,
+      "rest_max_disp": 0.004661440383642912,
+      "rest_pops": 62,
+      "conv_ratio": 0.11639988865357187,
+      "video_path": ""
+    },
+    "seed_789": {
+      "has_nan": false,
+      "min_z": -0.0012070760130882263,
+      "rest_med_rms": 0.01160829933360219,
+      "rest_max_rms": 0.04969897121191025,
+      "rest_med_disp": 0.0015260475338436663,
+      "rest_max_disp": 0.01751217618584633,
+      "rest_pops": 90,
+      "conv_ratio": 0.11614488730404968,
+      "video_path": ""
+    }
+  },
+  "R3. Alpha=0.5": {
+    "seed_42": {
+      "has_nan": false,
+      "min_z": -0.004932214040309191,
+      "rest_med_rms": 0.0072473653126508,
+      "rest_max_rms": 0.018685517832636833,
+      "rest_med_disp": 0.0009122957999352366,
+      "rest_max_disp": 0.006516082677990198,
+      "rest_pops": 69,
+      "conv_ratio": 0.1429372846030324,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/r3_alpha0.5_seed42.mp4"
+    },
+    "seed_123": {
+      "has_nan": false,
+      "min_z": -0.005649783182889223,
+      "rest_med_rms": 0.0042626375798136,
+      "rest_max_rms": 0.00707661546766758,
+      "rest_med_disp": 0.00047616341907996684,
+      "rest_max_disp": 0.002188279526308179,
+      "rest_pops": 37,
+      "conv_ratio": 0.13204794763808186,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/r3_alpha0.5_seed123.mp4"
+    },
+    "seed_456": {
+      "has_nan": false,
+      "min_z": -0.005534162744879723,
+      "rest_med_rms": 0.005754866637289524,
+      "rest_max_rms": 0.01241040788590908,
+      "rest_med_disp": 0.000644825806375593,
+      "rest_max_disp": 0.006570353638380766,
+      "rest_pops": 58,
+      "conv_ratio": 0.14715343411975895,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/r3_alpha0.5_seed456.mp4"
+    },
+    "seed_789": {
+      "has_nan": false,
+      "min_z": -0.002565620467066765,
+      "rest_med_rms": 0.007425192045047879,
+      "rest_max_rms": 0.016912808641791344,
+      "rest_med_disp": 0.0010608253651298583,
+      "rest_max_disp": 0.006668278947472572,
+      "rest_pops": 90,
+      "conv_ratio": 0.1397030264157631,
+      "video_path": "/home/horde/newton-vbd-convergence/vbd_convergence_analysis/videos/ablation/r3_alpha0.5_seed789.mp4"
+    }
+  },
+  "R4. Chebyshev auto": {
+    "seed_42": {
+      "has_nan": false,
+      "min_z": -0.0004800981259904802,
+      "rest_med_rms": 0.004847577074542642,
+      "rest_max_rms": 0.03741082549095154,
+      "rest_med_disp": 0.0006163993384689093,
+      "rest_max_disp": 0.004227513447403908,
+      "rest_pops": 52,
+      "conv_ratio": 0.05488128763481244,
+      "video_path": ""
+    },
+    "seed_123": {
+      "has_nan": false,
+      "min_z": -0.0012771987821906805,
+      "rest_med_rms": 0.008215592242777348,
+      "rest_max_rms": 0.07020476460456848,
+      "rest_med_disp": 0.0008556163229513913,
+      "rest_max_disp": 0.009301841259002686,
+      "rest_pops": 62,
+      "conv_ratio": 0.07119656752525706,
+      "video_path": ""
+    },
+    "seed_456": {
+      "has_nan": false,
+      "min_z": 0.0007764186593703926,
+      "rest_med_rms": 0.005817419150844216,
+      "rest_max_rms": 0.01148417592048645,
+      "rest_med_disp": 0.000813295686384663,
+      "rest_max_disp": 0.0031591574661433697,
+      "rest_pops": 70,
+      "conv_ratio": 0.064214521355918,
+      "video_path": ""
+    },
+    "seed_789": {
+      "has_nan": false,
+      "min_z": 0.0020975477527827024,
+      "rest_med_rms": 0.004665514687076211,
+      "rest_max_rms": 0.055938005447387695,
+      "rest_med_disp": 0.0005544498271774501,
+      "rest_max_disp": 0.011089018546044827,
+      "rest_pops": 51,
+      "conv_ratio": 0.07113944443674516,
+      "video_path": ""
+    }
+  },
+  "R5. sc_ke=1e5": {
+    "seed_42": {
+      "has_nan": false,
+      "min_z": -0.0024079750292003155,
+      "rest_med_rms": 0.0022889692336320877,
+      "rest_max_rms": 0.01612178608775139,
+      "rest_med_disp": 0.0002959234261652455,
+      "rest_max_disp": 0.0032506973948329687,
+      "rest_pops": 27,
+      "conv_ratio": 0.22991927238019597,
+      "video_path": ""
+    },
+    "seed_123": {
+      "has_nan": false,
+      "min_z": -0.004863165318965912,
+      "rest_med_rms": 0.003980196546763182,
+      "rest_max_rms": 0.0075051309540867805,
+      "rest_med_disp": 0.0005776477628387511,
+      "rest_max_disp": 0.0025615047197788954,
+      "rest_pops": 53,
+      "conv_ratio": 0.4867213160517531,
+      "video_path": ""
+    },
+    "seed_456": {
+      "has_nan": false,
+      "min_z": -0.001097406609915197,
+      "rest_med_rms": 0.002699766308069229,
+      "rest_max_rms": 0.018881045281887054,
+      "rest_med_disp": 0.0004640777187887579,
+      "rest_max_disp": 0.0048285964876413345,
+      "rest_pops": 41,
+      "conv_ratio": 2.140649331746051,
+      "video_path": ""
+    },
+    "seed_789": {
+      "has_nan": false,
+      "min_z": -0.0015558501472696662,
+      "rest_med_rms": 0.004805940901860595,
+      "rest_max_rms": 0.008112150244414806,
+      "rest_med_disp": 0.0007093943131621927,
+      "rest_max_disp": 0.0016278937691822648,
+      "rest_pops": 57,
+      "conv_ratio": 0.1284078969143514,
+      "video_path": ""
+    }
+  },
+  "R6. sc_ke=1e3": {
+    "seed_42": {
+      "has_nan": false,
+      "min_z": -0.0025905980728566647,
+      "rest_med_rms": 0.01119306543841958,
+      "rest_max_rms": 0.018985232338309288,
+      "rest_med_disp": 0.0014356638421304524,
+      "rest_max_disp": 0.00555530795827508,
+      "rest_pops": 88,
+      "conv_ratio": 0.42865723433431435,
+      "video_path": ""
+    },
+    "seed_123": {
+      "has_nan": false,
+      "min_z": -0.005773583427071571,
+      "rest_med_rms": 0.008422891609370708,
+      "rest_max_rms": 0.014619984664022923,
+      "rest_med_disp": 0.0010873886058107018,
+      "rest_max_disp": 0.003953136038035154,
+      "rest_pops": 90,
+      "conv_ratio": 0.3659266159236087,
+      "video_path": ""
+    },
+    "seed_456": {
+      "has_nan": false,
+      "min_z": -0.0037454613484442234,
+      "rest_med_rms": 0.006479684729129076,
+      "rest_max_rms": 0.009681020863354206,
+      "rest_med_disp": 0.0009288150758948177,
+      "rest_max_disp": 0.0035321505274623632,
+      "rest_pops": 89,
+      "conv_ratio": 0.3222171040560273,
+      "video_path": ""
+    },
+    "seed_789": {
+      "has_nan": false,
+      "min_z": -0.004921664949506521,
+      "rest_med_rms": 0.006016584346070886,
+      "rest_max_rms": 0.015611142851412296,
+      "rest_med_disp": 0.0008583080198150128,
+      "rest_max_disp": 0.0037430108059197664,
+      "rest_pops": 87,
+      "conv_ratio": 0.32741823499257705,
+      "video_path": ""
+    }
+  },
+  "_metadata": {
+    "seeds": [
+      42,
+      123,
+      456,
+      789
+    ],
+    "num_frames": 180,
+    "rest_start": 90,
+    "fps": 60,
+    "substeps": 4,
+    "iterations": 10,
+    "default_runtime": {
+      "step_length": 1.0,
+      "avbd_beta": 0.0,
+      "contact_ke_body": 2500.0,
+      "soft_contact_ke": 10000.0,
+      "soft_contact_kd": 0.01,
+      "soft_contact_kf": 10000.0,
+      "friction_epsilon": 0.0001,
+      "chebyshev_rho": 0.0
+    },
+    "total_time_s": 6416.927804276813
+  }
+}
