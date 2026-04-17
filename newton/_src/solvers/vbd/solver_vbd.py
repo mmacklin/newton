@@ -2018,6 +2018,7 @@ class SolverVBD(SolverBase):
                         model.particle_colors,
                         # body-particle contact
                         self.friction_epsilon,
+                        model.soft_contact_kf,
                         model.particle_radius,
                         contacts.soft_contact_particle,
                         contacts.soft_contact_count,
@@ -2080,6 +2081,7 @@ class SolverVBD(SolverBase):
                         self.particle_self_contact_radius,
                         self.model.soft_contact_ke,
                         self.model.soft_contact_kd,
+                        self.model.soft_contact_kf,
                         self.model.soft_contact_mu,
                         self.friction_epsilon,
                         self.trimesh_collision_detector.edge_edge_parallel_epsilon,
@@ -2247,6 +2249,7 @@ class SolverVBD(SolverBase):
                         self.body_inv_mass_effective,
                         # AVBD body-particle soft contact penalties and material properties
                         self.friction_epsilon,
+                        model.soft_contact_kf,
                         self.body_particle_contact_penalty_k,
                         self.body_particle_contact_material_kd,
                         self.body_particle_contact_material_mu,
@@ -2288,6 +2291,7 @@ class SolverVBD(SolverBase):
                         model.body_com,
                         self.body_inv_mass_effective,
                         self.friction_epsilon,
+                        model.soft_contact_kf,
                         self.body_body_contact_penalty_k,
                         self.body_body_contact_material_kd,
                         self.body_body_contact_material_mu,
@@ -2562,6 +2566,7 @@ class SolverVBD(SolverBase):
                 self.body_body_contact_material_kd,
                 self.body_body_contact_material_mu,
                 float(self.friction_epsilon),
+                float(self.model.soft_contact_kf),
             ],
             outputs=[
                 self._rigid_contact_body0,

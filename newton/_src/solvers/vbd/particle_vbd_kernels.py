@@ -42,6 +42,11 @@ NUM_THREADS_PER_COLLISION_PRIMITIVE = 4
 TILE_SIZE_TRI_MESH_ELASTICITY_SOLVE = 16
 TILE_SIZE_SELF_CONTACT_SOLVE = 8
 
+# Friction model selection (compile-time via wp.static).
+# "ipc"          – IPC C¹ ramp regularized Coulomb (default, uses friction_epsilon)
+# "primal_dual"  – Macklin et al. 2020 linear spring + Coulomb (uses friction_kf)
+VBD_FRICTION_MODEL = "ipc"
+
 
 class mat32(wp.types.matrix(shape=(3, 2), dtype=wp.float32)):
     pass
@@ -1363,6 +1368,7 @@ def evaluate_edge_edge_contact(
     collision_damping: float,
     friction_coefficient: float,
     friction_epsilon: float,
+    friction_kf: float,
     dt: float,
     edge_edge_parallel_epsilon: float,
 ):
@@ -1443,7 +1449,7 @@ def evaluate_edge_edge_contact(
             )
         # fmt: on
 
-        friction_force, friction_hessian = compute_friction(friction_coefficient, -dEdD, T, u, eps_U)
+        friction_force, friction_hessian = compute_friction(friction_coefficient, -dEdD, T, u, eps_U, friction_kf)
         friction_force = friction_force * v_bary
         friction_hessian = friction_hessian * v_bary * v_bary
 
@@ -1491,6 +1497,7 @@ def evaluate_edge_edge_contact_2_vertices(
     collision_damping: float,
     friction_coefficient: float,
     friction_epsilon: float,
+    friction_kf: float,
     dt: float,
     edge_edge_parallel_epsilon: float,
 ):
@@ -1568,7 +1575,7 @@ def evaluate_edge_edge_contact_2_vertices(
             )
         # fmt: on
 
-        friction_force, friction_hessian = compute_friction(friction_coefficient, -dEdD, T, u, eps_U)
+        friction_force, friction_hessian = compute_friction(friction_coefficient, -dEdD, T, u, eps_U, friction_kf)
 
         # # fmt: off
         # if wp.static("contact_force_hessian_ee" in VBD_DEBUG_PRINTING_OPTIONS):
@@ -1630,6 +1637,7 @@ def evaluate_vertex_triangle_collision_force_hessian(
     collision_damping: float,
     friction_coefficient: float,
     friction_epsilon: float,
+    friction_kf: float,
     dt: float,
 ):
     a = pos[tri_indices[tri, 0]]
@@ -1671,7 +1679,7 @@ def evaluate_vertex_triangle_collision_force_hessian(
         u = wp.transpose(T) * dx
         eps_U = friction_epsilon * dt
 
-        friction_force, friction_hessian = compute_friction(friction_coefficient, -dEdD, T, u, eps_U)
+        friction_force, friction_hessian = compute_friction(friction_coefficient, -dEdD, T, u, eps_U, friction_kf)
 
         # fmt: off
         if wp.static("contact_force_hessian_vt" in VBD_DEBUG_PRINTING_OPTIONS):
@@ -1719,6 +1727,7 @@ def evaluate_vertex_triangle_collision_force_hessian_4_vertices(
     collision_damping: float,
     friction_coefficient: float,
     friction_epsilon: float,
+    friction_kf: float,
     dt: float,
 ):
     a = pos[tri_indices[tri, 0]]
@@ -1759,7 +1768,7 @@ def evaluate_vertex_triangle_collision_force_hessian_4_vertices(
         u = wp.transpose(T) * dx
         eps_U = friction_epsilon * dt
 
-        friction_force, friction_hessian = compute_friction(friction_coefficient, -dEdD, T, u, eps_U)
+        friction_force, friction_hessian = compute_friction(friction_coefficient, -dEdD, T, u, eps_U, friction_kf)
 
         # fmt: off
         if wp.static("contact_force_hessian_vt" in VBD_DEBUG_PRINTING_OPTIONS):
@@ -1857,36 +1866,40 @@ def evaluate_vertex_triangle_collision_force_hessian_4_vertices(
 
 
 @wp.func
-def compute_friction(mu: float, normal_contact_force: float, T: mat32, u: wp.vec2, eps_u: float):
-    """
-    Returns the 1D friction force and hessian.
-    Args:
-        mu: Friction coefficient.
-        normal_contact_force: normal contact force.
-        T: Transformation matrix (3x2 matrix).
-        u: 2D displacement vector.
-    """
-    # Friction
+def compute_friction(
+    mu: float,
+    normal_contact_force: float,
+    T: mat32,
+    u: wp.vec2,
+    eps_u: float,
+    friction_kf: float,
+):
+    """Regularized Coulomb friction force and approximate Hessian."""
     u_norm = wp.length(u)
 
     if u_norm > 0.0:
-        # IPC friction
-        if u_norm > eps_u:
-            # constant stage
-            f1_SF_over_x = 1.0 / u_norm
+        if wp.static(VBD_FRICTION_MODEL == "primal_dual"):
+            coulomb_limit = mu * normal_contact_force
+            if friction_kf * u_norm < coulomb_limit:
+                hessian_scale = friction_kf
+            else:
+                hessian_scale = coulomb_limit / u_norm
         else:
-            # smooth transition
-            f1_SF_over_x = (-u_norm / eps_u + 2.0) / eps_u
+            if u_norm > eps_u:
+                f1_SF_over_x = 1.0 / u_norm
+            else:
+                f1_SF_over_x = (-u_norm / eps_u + 2.0) / eps_u
+            hessian_scale = mu * normal_contact_force * f1_SF_over_x
 
-        force = -mu * normal_contact_force * T * (f1_SF_over_x * u)
-
-        # Different from IPC, we treat the contact normal as constant
-        # this significantly improves the stability
-        hessian = mu * normal_contact_force * T * (f1_SF_over_x * wp.identity(2, float)) * wp.transpose(T)
+        force = -T * (hessian_scale * u)
     else:
+        if wp.static(VBD_FRICTION_MODEL == "primal_dual"):
+            hessian_scale = friction_kf
+        else:
+            hessian_scale = mu * normal_contact_force * 2.0 / eps_u
         force = wp.vec3(0.0, 0.0, 0.0)
-        hessian = wp.mat33(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
+    hessian = T * (hessian_scale * wp.identity(2, float)) * wp.transpose(T)
     return force, hessian
 
 
@@ -2055,6 +2068,7 @@ def accumulate_self_contact_force_and_hessian(
     collision_radius: float,
     soft_contact_ke: float,
     soft_contact_kd: float,
+    soft_contact_kf: float,
     friction_mu: float,
     friction_epsilon: float,
     edge_edge_parallel_epsilon: float,
@@ -2096,6 +2110,7 @@ def accumulate_self_contact_force_and_hessian(
                             soft_contact_kd,
                             friction_mu,
                             friction_epsilon,
+                            soft_contact_kf,
                             dt,
                             edge_edge_parallel_epsilon,
                         )
@@ -2158,6 +2173,7 @@ def accumulate_self_contact_force_and_hessian(
                         soft_contact_kd,
                         friction_mu,
                         friction_epsilon,
+                        soft_contact_kf,
                         dt,
                     )
 
@@ -2520,6 +2536,7 @@ def accumulate_contact_force_and_hessian_no_self_contact(
     particle_colors: wp.array(dtype=int),
     # body-particle contact
     friction_epsilon: float,
+    soft_contact_kf: float,
     particle_radius: wp.array(dtype=float),
     body_particle_contact_particle: wp.array(dtype=int),
     body_particle_contact_count: wp.array(dtype=int),
@@ -2564,6 +2581,7 @@ def accumulate_contact_force_and_hessian_no_self_contact(
                 contact_kd,
                 contact_mu,
                 friction_epsilon,
+                soft_contact_kf,
                 particle_radius,
                 shape_material_mu,
                 shape_body,
@@ -3021,6 +3039,7 @@ def accumulate_particle_body_contact_force_and_hessian(
     particle_colors: wp.array(dtype=int),
     # body-particle contact
     friction_epsilon: float,
+    soft_contact_kf: float,
     particle_radius: wp.array(dtype=float),
     body_particle_contact_particle: wp.array(dtype=int),
     body_particle_contact_count: wp.array(dtype=int),
@@ -3065,6 +3084,7 @@ def accumulate_particle_body_contact_force_and_hessian(
                 contact_kd,
                 contact_mu,
                 friction_epsilon,
+                soft_contact_kf,
                 particle_radius,
                 shape_material_mu,
                 shape_body,
@@ -3435,6 +3455,7 @@ def accumulate_contact_force_and_hessian(
     collision_radius: float,
     soft_contact_ke: float,
     soft_contact_kd: float,
+    soft_contact_kf: float,
     friction_mu: float,
     friction_epsilon: float,
     edge_edge_parallel_epsilon: float,
@@ -3491,6 +3512,7 @@ def accumulate_contact_force_and_hessian(
                             soft_contact_kd,
                             friction_mu,
                             friction_epsilon,
+                            soft_contact_kf,
                             dt,
                             edge_edge_parallel_epsilon,
                         )
@@ -3553,6 +3575,7 @@ def accumulate_contact_force_and_hessian(
                         soft_contact_kd,
                         friction_mu,
                         friction_epsilon,
+                        soft_contact_kf,
                         dt,
                     )
 
@@ -3593,6 +3616,7 @@ def accumulate_contact_force_and_hessian(
                 soft_contact_kd,
                 friction_mu,
                 friction_epsilon,
+                soft_contact_kf,
                 particle_radius,
                 shape_material_mu,
                 shape_body,

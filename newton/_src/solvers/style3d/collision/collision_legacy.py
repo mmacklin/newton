@@ -210,6 +210,7 @@ class CollisionHandler:
                 self.model.soft_contact_kd,
                 self.model.soft_contact_mu,
                 self.friction_epsilon,
+                self.model.soft_contact_kf,
                 self.trimesh_collision_detector.edge_edge_parallel_epsilon,
                 # body-particle contact
                 self.model.particle_radius,

@@ -44,6 +44,8 @@ _DRIVE_LIMIT_MODE_DRIVE = wp.constant(3)
 _SMALL_LENGTH_EPS = wp.constant(1.0e-9)
 """Small length tolerance (e.g., segment length checks)"""
 
+VBD_FRICTION_MODEL = "ipc"
+
 _USE_SMALL_ANGLE_APPROX = wp.constant(True)
 """If True use first-order small-angle rotation approximation; if False use closed-form rotation update"""
 
@@ -535,6 +537,7 @@ def evaluate_rigid_contact_from_collision(
     contact_kd: float,  # Contact damping coefficient
     friction_mu: float,  # Coulomb friction coefficient
     friction_epsilon: float,  # Friction regularization parameter
+    friction_kf: float,  # Spring stiffness for primal/dual friction
     dt: float,
 ):
     """Compute contact forces and 3x3 Hessian blocks for a rigid contact pair.
@@ -637,7 +640,7 @@ def evaluate_rigid_contact_from_collision(
 
         # Projected isotropic friction (no explicit tangent basis)
         f_friction, K_friction = compute_projected_isotropic_friction(
-            friction_mu, normal_load, contact_normal, u, eps_u
+            friction_mu, normal_load, contact_normal, u, eps_u, friction_kf
         )
         f_total = f_total + f_friction
         K_total = K_total + K_friction
@@ -680,6 +683,7 @@ def evaluate_body_particle_contact(
     body_particle_contact_kd: float,
     friction_mu: float,
     friction_epsilon: float,
+    friction_kf: float,
     particle_radius: wp.array(dtype=float),
     shape_material_mu: wp.array(dtype=float),
     shape_body: wp.array(dtype=int),
@@ -798,7 +802,7 @@ def evaluate_body_particle_contact(
         # Friction using 3D projector approach (consistent with rigid-rigid contacts)
         eps_u = friction_epsilon * dt
         friction_force, friction_hessian = compute_projected_isotropic_friction(
-            mu, body_contact_force_norm, n, relative_translation, eps_u
+            mu, body_contact_force_norm, n, relative_translation, eps_u, friction_kf
         )
         body_contact_force = body_contact_force + friction_force
         body_contact_hessian = body_contact_hessian + friction_hessian
@@ -816,6 +820,7 @@ def compute_projected_isotropic_friction(
     n_hat: wp.vec3,
     slip_u: wp.vec3,
     eps_u: float,
+    friction_kf: float,
 ) -> tuple[wp.vec3, wp.mat33]:
     """Isotropic Coulomb friction in world frame using projector P = I - n n^T.
 
@@ -827,6 +832,7 @@ def compute_projected_isotropic_friction(
         n_hat: Unit contact normal (world frame).
         slip_u: Tangential slip displacement over dt (world frame).
         eps_u: Smoothing distance (same units as slip_u, > 0).
+        friction_kf: Spring stiffness for primal/dual friction model.
 
     Returns:
         tuple[wp.vec3, wp.mat33]: (force, Hessian) in world frame.
@@ -837,19 +843,31 @@ def compute_projected_isotropic_friction(
     u_norm = wp.length(u_t)
 
     if u_norm > 0.0:
-        # IPC-style regularization
-        if u_norm > eps_u:
-            f1_SF_over_x = 1.0 / u_norm
+        if wp.static(VBD_FRICTION_MODEL == "primal_dual"):
+            coulomb_limit = friction_mu * normal_load
+            if friction_kf * u_norm < coulomb_limit:
+                scale = friction_kf
+            else:
+                scale = coulomb_limit / u_norm
         else:
-            f1_SF_over_x = (-u_norm / eps_u + 2.0) / eps_u
+            # IPC-style regularization
+            if u_norm > eps_u:
+                f1_SF_over_x = 1.0 / u_norm
+            else:
+                f1_SF_over_x = (-u_norm / eps_u + 2.0) / eps_u
+            scale = friction_mu * normal_load * f1_SF_over_x
 
         # Factor common scalar; force aligned with u_t, Hessian proportional to projector
-        scale = friction_mu * normal_load * f1_SF_over_x
         f = -(scale * u_t)
         K = scale * (wp.identity(3, float) - wp.outer(n_hat, n_hat))
     else:
+        if wp.static(VBD_FRICTION_MODEL == "primal_dual"):
+            scale = friction_kf
+        else:
+            scale = friction_mu * normal_load * 2.0 / eps_u
         f = wp.vec3(0.0)
-        K = wp.mat33(0.0)
+
+    K = scale * (wp.identity(3, float) - wp.outer(n_hat, n_hat))
 
     return f, K
 
@@ -2089,6 +2107,7 @@ def accumulate_body_body_contacts_per_body(
     body_com: wp.array(dtype=wp.vec3),
     body_inv_mass: wp.array(dtype=float),
     friction_epsilon: float,
+    soft_contact_kf: float,
     contact_penalty_k: wp.array(dtype=float),
     contact_material_kd: wp.array(dtype=float),
     contact_material_mu: wp.array(dtype=float),
@@ -2191,6 +2210,7 @@ def accumulate_body_body_contacts_per_body(
             contact_kd,
             contact_mu,
             friction_epsilon,
+            soft_contact_kf,
             dt,
         )
 
@@ -2238,6 +2258,7 @@ def compute_rigid_contact_forces(
     contact_material_kd: wp.array(dtype=float),
     contact_material_mu: wp.array(dtype=float),
     friction_epsilon: float,
+    soft_contact_kf: float,
     # Outputs (length = rigid_contact_max)
     out_body0: wp.array(dtype=wp.int32),
     out_body1: wp.array(dtype=wp.int32),
@@ -2331,6 +2352,7 @@ def compute_rigid_contact_forces(
         contact_kd,
         contact_mu,
         friction_epsilon,
+        soft_contact_kf,
         dt,
     )
 
@@ -2353,6 +2375,7 @@ def accumulate_body_particle_contacts_per_body(
     body_inv_mass: wp.array(dtype=float),
     # AVBD body-particle soft contact penalties and material properties
     friction_epsilon: float,
+    soft_contact_kf: float,
     body_particle_contact_penalty_k: wp.array(dtype=float),
     body_particle_contact_material_kd: wp.array(dtype=float),
     body_particle_contact_material_mu: wp.array(dtype=float),
@@ -2455,6 +2478,7 @@ def accumulate_body_particle_contacts_per_body(
             contact_kd,
             contact_mu,
             friction_epsilon,
+            soft_contact_kf,
             particle_radius,
             shape_material_mu,
             shape_body,

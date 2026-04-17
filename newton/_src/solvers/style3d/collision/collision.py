@@ -208,6 +208,7 @@ class Collision:
                 self.model.soft_contact_kd,
                 self.model.soft_contact_mu,
                 self.friction_epsilon,
+                self.model.soft_contact_kf,
                 self.model.particle_radius,
                 contacts.soft_contact_particle,
                 contacts.soft_contact_count,
