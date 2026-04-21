@@ -1,7 +1,25 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 The Newton Developers
 # SPDX-License-Identifier: Apache-2.0
 
+import numpy as np
 import warp as wp
+
+
+def _transform_point_np(pose: np.ndarray, point: np.ndarray) -> np.ndarray:
+    """Apply a Newton transform (px,py,pz,qx,qy,qz,qw) to a 3D point using numpy."""
+    p = pose[:3]
+    q = pose[3:]  # qx,qy,qz,qw
+    qx, qy, qz, qw = q[0], q[1], q[2], q[3]
+    # quaternion rotation: q * v * q_conj
+    t = 2.0 * np.cross(q[:3], point)
+    return point + qw * t + np.cross(q[:3], t) + p
+
+
+def _transform_vector_np(pose: np.ndarray, vec: np.ndarray) -> np.ndarray:
+    """Rotate a 3D vector by the quaternion in a Newton transform."""
+    q = pose[3:]
+    t = 2.0 * np.cross(q[:3], vec)
+    return vec + q[3] * t + np.cross(q[:3], t)
 
 from ...core.types import override
 from ...sim import Contacts, Control, Model, State
@@ -26,6 +44,11 @@ from .kernels import (
     solve_springs,
     solve_tetrahedra,
     update_body_velocities,
+)
+from .tendon_kernels import (
+    distribute_tendon_rest_lengths,
+    solve_tendon_segments,
+    update_tendon_attachments,
 )
 
 
@@ -118,10 +141,151 @@ class SolverXPBD(SolverBase):
         self._particle_delta_counter = 0
         self._body_delta_counter = 0
 
+        # tendon state
+        self._init_tendon_state(model)
+
         if model.particle_count > 1 and model.particle_grid is not None:
             # reserve space for the particle hash grid
             with wp.ScopedDevice(model.device):
                 model.particle_grid.reserve(model.particle_count)
+
+    def _init_tendon_state(self, model: Model) -> None:
+        """Allocate mutable tendon state arrays and build the segment-to-link mapping."""
+        if model.tendon_segment_count == 0:
+            self.tendon_seg_rest_length = None
+            self.tendon_seg_attachment_l = None
+            self.tendon_seg_attachment_r = None
+            self.tendon_seg_lambda = None
+            self.tendon_seg_link_l = None
+            self.tendon_total_cable = None
+            return
+
+        with wp.ScopedDevice(model.device):
+            self.tendon_seg_attachment_l = wp.zeros(model.tendon_segment_count, dtype=wp.vec3)
+            self.tendon_seg_attachment_r = wp.zeros(model.tendon_segment_count, dtype=wp.vec3)
+            self.tendon_seg_lambda = wp.zeros(model.tendon_segment_count, dtype=float)
+
+            # build seg_link_l mapping: for each segment, the index of its left link
+            tendon_start_np = model.tendon_start.numpy()
+            seg_link_l = []
+            for t in range(model.tendon_count):
+                start = tendon_start_np[t]
+                end = tendon_start_np[t + 1]
+                for link_idx in range(start, end - 1):
+                    seg_link_l.append(link_idx)
+            self.tendon_seg_link_l = wp.array(seg_link_l, dtype=wp.int32, device=model.device)
+
+            # remember which segments need auto-computed rest lengths
+            rest_np = model.tendon_seg_rest_length.numpy().copy()
+            auto_mask = rest_np < 0.0
+
+            # set rest lengths to 0 for the attachment update pass (avoids clamping issues)
+            rest_np[auto_mask] = 0.0
+            self.tendon_seg_rest_length = wp.array(rest_np, dtype=float, device=model.device)
+
+            self._init_tendon_attachment_points(model, auto_mask)
+
+    def _init_tendon_attachment_points(self, model: Model, auto_mask: np.ndarray) -> None:
+        """Compute initial attachment points and auto-compute rest lengths."""
+        body_q = model.body_q
+        if body_q is None:
+            return
+
+        tendon_start_np = model.tendon_start.numpy()
+        link_body_np = model.tendon_link_body.numpy()
+        link_offset_np = model.tendon_link_offset.numpy()
+        body_q_np = body_q.numpy()
+
+        att_l = np.zeros((model.tendon_segment_count, 3), dtype=np.float32)
+        att_r = np.zeros((model.tendon_segment_count, 3), dtype=np.float32)
+
+        seg = 0
+        for t in range(model.tendon_count):
+            start = tendon_start_np[t]
+            end = tendon_start_np[t + 1]
+            for i in range(start, end - 1):
+                body_l = link_body_np[i]
+                body_r = link_body_np[i + 1]
+                off_l = link_offset_np[i]
+                off_r = link_offset_np[i + 1]
+                att_l[seg] = _transform_point_np(body_q_np[body_l], off_l)
+                att_r[seg] = _transform_point_np(body_q_np[body_r], off_r)
+                seg += 1
+
+        with wp.ScopedDevice(model.device):
+            self.tendon_seg_attachment_l = wp.array(att_l, dtype=wp.vec3, device=model.device)
+            self.tendon_seg_attachment_r = wp.array(att_r, dtype=wp.vec3, device=model.device)
+
+        # run attachment update to get proper tangent points (rest_length is 0 so the
+        # arc-length updates won't matter — we'll overwrite rest lengths after)
+        wp.launch(
+            kernel=update_tendon_attachments,
+            dim=model.tendon_segment_count,
+            inputs=[
+                body_q,
+                model.body_com,
+                model.tendon_start,
+                model.tendon_link_body,
+                model.tendon_link_type,
+                model.tendon_link_radius,
+                model.tendon_link_orientation,
+                model.tendon_link_offset,
+                model.tendon_link_axis,
+                self.tendon_seg_rest_length,
+                self.tendon_seg_attachment_l,
+                self.tendon_seg_attachment_r,
+                self.tendon_seg_lambda,
+                self.tendon_seg_link_l,
+            ],
+            device=model.device,
+        )
+
+        # set rest lengths from current distances for auto-compute segments
+        att_l_np = self.tendon_seg_attachment_l.numpy()
+        att_r_np = self.tendon_seg_attachment_r.numpy()
+        rest_np = self.tendon_seg_rest_length.numpy()
+        for i in range(model.tendon_segment_count):
+            if auto_mask[i]:
+                rest_np[i] = np.linalg.norm(att_r_np[i] - att_l_np[i])
+        self.tendon_seg_rest_length = wp.array(rest_np, dtype=float, device=model.device)
+
+        # compute total cable length per tendon = sum(rest) + sum(wrap_arc * radius)
+        link_type_np = model.tendon_link_type.numpy()
+        link_radius_np = model.tendon_link_radius.numpy()
+        link_offset_np = model.tendon_link_offset.numpy()
+        link_axis_np = model.tendon_link_axis.numpy()
+
+        total_cable = np.zeros(model.tendon_count, dtype=np.float32)
+        seg = 0
+        for t in range(model.tendon_count):
+            start = tendon_start_np[t]
+            end = tendon_start_np[t + 1]
+            num_links = end - start
+            seg_base = seg
+            cable_len = 0.0
+            for s in range(num_links - 1):
+                cable_len += rest_np[seg_base + s]
+            for i in range(start + 1, end - 1):
+                if link_type_np[i] == 0:  # ROLLING
+                    body_idx = link_body_np[i]
+                    q = body_q_np[body_idx]
+                    center = _transform_point_np(q, link_offset_np[i])
+                    normal = _transform_vector_np(q, link_axis_np[i])
+                    radius = link_radius_np[i]
+                    seg_left = seg_base + (i - start) - 1
+                    seg_right = seg_base + (i - start)
+                    pt_dep = att_r_np[seg_left]
+                    pt_arr = att_l_np[seg_right]
+                    r_l = pt_dep - center
+                    r_r = pt_arr - center
+                    cross_val = np.dot(np.cross(r_l, r_r), normal)
+                    dot_val = np.dot(r_l, r_r)
+                    theta = abs(np.arctan2(cross_val, dot_val))
+                    cable_len += theta * radius
+            total_cable[t] = cable_len
+            seg += num_links - 1
+
+        self.tendon_total_cable = wp.array(total_cable, dtype=float, device=model.device)
 
     @override
     def notify_model_changed(self, flags: int) -> None:
@@ -346,6 +510,51 @@ class SolverXPBD(SolverBase):
             edge_constraint_lambdas = None
             if model.edge_count:
                 edge_constraint_lambdas = wp.empty_like(model.edge_rest_angle)
+
+            # tendon pre-solve: update attachment points and redistribute rest lengths
+            if model.tendon_segment_count > 0 and body_q is not None:
+                self.tendon_seg_lambda.zero_()
+                wp.launch(
+                    kernel=update_tendon_attachments,
+                    dim=model.tendon_segment_count,
+                    inputs=[
+                        body_q,
+                        model.body_com,
+                        model.tendon_start,
+                        model.tendon_link_body,
+                        model.tendon_link_type,
+                        model.tendon_link_radius,
+                        model.tendon_link_orientation,
+                        model.tendon_link_offset,
+                        model.tendon_link_axis,
+                        self.tendon_seg_rest_length,
+                        self.tendon_seg_attachment_l,
+                        self.tendon_seg_attachment_r,
+                        self.tendon_seg_lambda,
+                        self.tendon_seg_link_l,
+                    ],
+                    device=model.device,
+                )
+                if model.tendon_count > 0:
+                    wp.launch(
+                        kernel=distribute_tendon_rest_lengths,
+                        dim=model.tendon_count,
+                        inputs=[
+                            model.tendon_start,
+                            self.tendon_total_cable,
+                            model.tendon_link_body,
+                            model.tendon_link_type,
+                            model.tendon_link_radius,
+                            model.tendon_link_offset,
+                            model.tendon_link_axis,
+                            body_q,
+                            self.tendon_seg_rest_length,
+                            self.tendon_seg_attachment_l,
+                            self.tendon_seg_attachment_r,
+                            self.tendon_seg_link_l,
+                        ],
+                        device=model.device,
+                    )
 
             for i in range(self.iterations):
                 with wp.ScopedTimer(f"iteration_{i}", False):
@@ -607,6 +816,40 @@ class SolverXPBD(SolverBase):
                         )
 
                         body_q, body_qd = self._apply_body_deltas(model, state_in, state_out, body_deltas, dt)
+
+                    # solve tendon segment distance constraints
+                    if model.tendon_segment_count > 0 and body_q is not None:
+                        if requires_grad:
+                            body_deltas = wp.zeros_like(body_deltas)
+                        else:
+                            body_deltas.zero_()
+
+                        wp.launch(
+                            kernel=solve_tendon_segments,
+                            dim=model.tendon_segment_count,
+                            inputs=[
+                                body_q,
+                                body_qd,
+                                model.body_com,
+                                self.body_inv_mass_effective,
+                                self.body_inv_inertia_effective,
+                                model.tendon_link_body,
+                                self.tendon_seg_rest_length,
+                                self.tendon_seg_attachment_l,
+                                self.tendon_seg_attachment_r,
+                                model.tendon_seg_compliance,
+                                model.tendon_seg_damping,
+                                self.tendon_seg_lambda,
+                                self.tendon_seg_link_l,
+                                self.joint_linear_relaxation,
+                                dt,
+                            ],
+                            outputs=[body_deltas],
+                            device=model.device,
+                        )
+
+                        body_q, body_qd = self._apply_body_deltas(model, state_in, state_out, body_deltas, dt)
+
 
             self._contact_impulse = contact_impulse
             self._contact_impulse_capacity = contacts.rigid_contact_max if contacts is not None else 0

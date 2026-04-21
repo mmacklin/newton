@@ -966,6 +966,30 @@ class ModelBuilder:
         self.spring_control: list[float] = []
         """Spring control activations accumulated for :attr:`Model.spring_control`."""
 
+        # tendons (cable-driven mechanisms)
+        self.tendon_start: list[int] = []
+        """Start index into link arrays for each tendon."""
+        self.tendon_link_body: list[int] = []
+        """Body index for each tendon link."""
+        self.tendon_link_type: list[int] = []
+        """Link type (TendonLinkType enum) for each tendon link."""
+        self.tendon_link_radius: list[float] = []
+        """Contact radius [m] for each tendon link."""
+        self.tendon_link_orientation: list[int] = []
+        """Winding direction (+1/-1) for each tendon link."""
+        self.tendon_link_mu: list[float] = []
+        """Friction coefficient at each tendon link."""
+        self.tendon_link_offset: list[tuple[float, float, float]] = []
+        """Local-frame offset of the cable plane center on each body [m]."""
+        self.tendon_link_axis: list[tuple[float, float, float]] = []
+        """Local-frame normal of the cable plane on each body."""
+        self.tendon_seg_compliance: list[float] = []
+        """Compliance [m/N] for each tendon segment."""
+        self.tendon_seg_damping: list[float] = []
+        """Damping for each tendon segment."""
+        self.tendon_seg_rest_length: list[float] = []
+        """Initial rest length [m] for each tendon segment."""
+
         # triangles
         self.tri_indices: list[tuple[int, int, int]] = []
         """Triangle connectivity accumulated for :attr:`Model.tri_indices`."""
@@ -4242,6 +4266,76 @@ class ModelBuilder:
             custom_attributes=custom_attributes,
             **kwargs,
         )
+
+    def add_tendon(self) -> int:
+        """Begin a new tendon. Returns the tendon index.
+
+        After calling this, add links via :meth:`add_tendon_link`. Each pair
+        of consecutive links implicitly creates a tendon segment (distance
+        constraint) between them.
+
+        Returns:
+            The index of the new tendon.
+        """
+        tendon_idx = len(self.tendon_start)
+        self.tendon_start.append(len(self.tendon_link_body))
+        return tendon_idx
+
+    def add_tendon_link(
+        self,
+        body: int,
+        link_type: int = 0,
+        radius: float = 0.0,
+        orientation: int = 1,
+        mu: float = 0.0,
+        offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        axis: tuple[float, float, float] = (0.0, 0.0, 1.0),
+        compliance: float = 0.0,
+        damping: float = 0.0,
+        rest_length: float = -1.0,
+    ) -> int:
+        """Add a link (waypoint) to the most recently created tendon.
+
+        If this is not the first link in the tendon, a segment is implicitly
+        created between this link and the previous one. The ``compliance``,
+        ``damping``, and ``rest_length`` parameters apply to that segment.
+
+        Args:
+            body: Rigid body index this link is attached to.
+            link_type: :class:`~newton._src.sim.tendon.TendonLinkType` value
+                (0 = ROLLING, 1 = ATTACHMENT, 2 = PINHOLE).
+            radius: Contact radius [m] for ROLLING links (pulley radius).
+            orientation: Winding direction, +1 or -1.
+            mu: Coulomb friction coefficient at this contact.
+            offset: Local-frame position of the cable plane center on the body [m].
+            axis: Local-frame normal of the cable plane on the body.
+            compliance: Compliance [m/N] for the segment ending at this link
+                (ignored for the first link of a tendon).
+            damping: Damping coefficient for the segment ending at this link.
+            rest_length: Rest length [m] for the segment ending at this link.
+                If negative, will be computed from initial body positions during
+                finalization.
+
+        Returns:
+            The link index.
+        """
+        link_idx = len(self.tendon_link_body)
+        self.tendon_link_body.append(body)
+        self.tendon_link_type.append(link_type)
+        self.tendon_link_radius.append(radius)
+        self.tendon_link_orientation.append(orientation)
+        self.tendon_link_mu.append(mu)
+        self.tendon_link_offset.append(offset)
+        self.tendon_link_axis.append(axis)
+
+        # create a segment for every link after the first in this tendon
+        tendon_link_start = self.tendon_start[-1]
+        if link_idx > tendon_link_start:
+            self.tendon_seg_compliance.append(compliance)
+            self.tendon_seg_damping.append(damping)
+            self.tendon_seg_rest_length.append(rest_length)
+
+        return link_idx
 
     def add_equality_constraint(
         self,
@@ -10044,6 +10138,35 @@ class ModelBuilder:
             m.spring_stiffness = _to_wp_array(self.spring_stiffness, wp.float32, requires_grad=requires_grad)
             m.spring_damping = _to_wp_array(self.spring_damping, wp.float32, requires_grad=requires_grad)
             m.spring_control = _to_wp_array(self.spring_control, wp.float32, requires_grad=requires_grad)
+
+            # ---------------------
+            # tendons
+
+            tendon_count = len(self.tendon_start)
+            link_count = len(self.tendon_link_body)
+            seg_count = len(self.tendon_seg_rest_length)
+
+            if tendon_count > 0:
+                tendon_start = self.tendon_start + [link_count]
+                m.tendon_start = wp.array(tendon_start, dtype=wp.int32)
+                m.tendon_link_body = wp.array(self.tendon_link_body, dtype=wp.int32)
+                m.tendon_link_type = wp.array(self.tendon_link_type, dtype=wp.int32)
+                m.tendon_link_radius = wp.array(self.tendon_link_radius, dtype=wp.float32, requires_grad=requires_grad)
+                m.tendon_link_orientation = wp.array(self.tendon_link_orientation, dtype=wp.int32)
+                m.tendon_link_mu = wp.array(self.tendon_link_mu, dtype=wp.float32, requires_grad=requires_grad)
+                m.tendon_link_offset = wp.array(self.tendon_link_offset, dtype=wp.vec3)
+                m.tendon_link_axis = wp.array(self.tendon_link_axis, dtype=wp.vec3)
+                m.tendon_seg_compliance = wp.array(
+                    self.tendon_seg_compliance, dtype=wp.float32, requires_grad=requires_grad
+                )
+                m.tendon_seg_damping = wp.array(self.tendon_seg_damping, dtype=wp.float32, requires_grad=requires_grad)
+                m.tendon_seg_rest_length = wp.array(
+                    self.tendon_seg_rest_length, dtype=wp.float32, requires_grad=requires_grad
+                )
+
+            m.tendon_count = tendon_count
+            m.tendon_link_count = link_count
+            m.tendon_segment_count = seg_count
 
             # ---------------------
             # triangles

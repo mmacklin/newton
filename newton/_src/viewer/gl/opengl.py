@@ -971,6 +971,7 @@ class RendererGL:
         self.draw_fps = True
         self.draw_shadows = True
         self.draw_wireframe = False
+        self.show_wireframe_overlay = False
         self.wireframe_line_width = 1.5  # pixels
         self.line_width = 1.5  # pixels, for all log_lines batches
         self.arrow_scale = 1.0  # uniform scale for arrow line width and head size
@@ -1839,6 +1840,32 @@ class RendererGL:
             self._draw_objects(objects)
 
         gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_FILL)
+
+        if self.show_wireframe_overlay:
+            self._shape_shader.update(
+                view_matrix=self._view_matrix,
+                projection_matrix=self._projection_matrix,
+                view_pos=self.camera.pos,
+                fog_color=(0.0, 0.0, 0.0),
+                up_axis=self.camera.up_axis,
+                sun_direction=self._sun_direction,
+                enable_shadows=False,
+                shadow_texture=self._shadow_texture,
+                light_space_matrix=self._light_space_matrix,
+                light_color=(0.0, 0.0, 0.0),
+                sky_color=(0.0, 0.0, 0.0),
+                ground_color=(0.0, 0.0, 0.0),
+                diffuse_scale=0.0,
+                specular_scale=0.0,
+                exposure=1.0,
+            )
+            gl.glEnable(gl.GL_POLYGON_OFFSET_LINE)
+            gl.glPolygonOffset(-1.0, -1.0)
+            gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
+            with self._shape_shader:
+                self._draw_objects(objects)
+            gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_FILL)
+            gl.glDisable(gl.GL_POLYGON_OFFSET_LINE)
 
         check_gl_error()
 
