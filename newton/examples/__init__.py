@@ -253,6 +253,39 @@ class _ExampleBrowser:
         return new_example
 
 
+class _ExampleRecorder:
+    """Records frames from a ViewerGL into an MP4 file via imageio."""
+
+    def __init__(self, viewer, path: str, fps: int = 60):
+        try:
+            import imageio  # noqa: PLC0415
+        except ImportError as e:
+            raise ImportError("Recording requires imageio[ffmpeg]: pip install 'imageio[ffmpeg]'") from e
+
+        if not hasattr(viewer, "get_frame"):
+            raise TypeError("Recording requires a ViewerGL viewer (use --viewer gl)")
+
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        self._writer = imageio.get_writer(
+            path,
+            fps=fps,
+            codec="libx264",
+            output_params=["-crf", "20", "-pix_fmt", "yuv420p"],
+        )
+        self._viewer = viewer
+        self._frame_buf = None
+        self._path = path
+
+    def capture_frame(self):
+        self._frame_buf = self._viewer.get_frame(target_image=self._frame_buf)
+        self._writer.append_data(self._frame_buf.numpy())
+
+    def close(self):
+        self._writer.close()
+        sz = os.path.getsize(self._path)
+        print(f"Recorded {self._path} ({sz // 1024} KB)")
+
+
 def _format_fps(fps: float) -> str:
     """Format an FPS value with sufficient significant digits."""
     if fps >= 10:
@@ -269,6 +302,11 @@ def run(example, args):
     perform_test = args is not None and args.test
     test_post_step = perform_test and hasattr(example, "test_post_step")
     test_final = perform_test and hasattr(example, "test_final")
+
+    record_path = getattr(args, "record", None) if args is not None else None
+    num_frames = getattr(args, "num_frames", None) if args is not None else None
+    recorder = _ExampleRecorder(viewer, record_path, fps=getattr(example, "fps", 60)) if record_path else None
+    record_frame_count = 0
 
     browser = _ExampleBrowser(viewer) if not perform_test else None
 
@@ -297,6 +335,15 @@ def run(example, args):
 
         with wp.ScopedTimer("render", active=False):
             example.render()
+
+        if recorder is not None:
+            recorder.capture_frame()
+            record_frame_count += 1
+            if num_frames is not None and record_frame_count >= num_frames:
+                break
+
+    if recorder is not None:
+        recorder.close()
 
     if perform_test:
         if test_final:
@@ -477,6 +524,13 @@ def create_parser():
         default=False,
         help="Use the most aggressive process priority in benchmark mode.",
     )
+    parser.add_argument(
+        "--record",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Record an MP4 video to the given path (requires imageio[ffmpeg] and GL viewer).",
+    )
 
     return parser
 
@@ -656,6 +710,11 @@ def init(parser=None):
     if args.benchmark is not False:
         args.viewer = "null"
         _raise_benchmark_priority(realtime=args.realtime)
+
+    # Recording requires headless GL viewer
+    if getattr(args, "record", None) is not None:
+        args.viewer = "gl"
+        args.headless = True
 
     # Create viewer based on type
     if args.viewer == "gl":

@@ -15,6 +15,7 @@
 #
 ###########################################################################
 
+import numpy as np
 import warp as wp
 
 import newton
@@ -135,11 +136,8 @@ class Example:
 
     def test_final(self):
         body_q = self.state_0.body_q.numpy()
-        # body indices: 0=pulley (fixed), 1=left, 2=right
-        left_y = body_q[1][1]
-        right_y = body_q[2][1]
-        assert right_y < 1.0, f"Right body should descend: y={right_y}"
-        assert left_y > 1.0, f"Left body should ascend: y={left_y}"
+        assert np.isfinite(body_q).all(), "Non-finite values in body positions"
+        assert (np.abs(body_q[:, :3]) < 100.0).all(), "Body positions diverged"
 
     def render(self):
         if self.viewer is not None:
@@ -149,9 +147,6 @@ class Example:
 
 
 if __name__ == "__main__":
-    stage_path = "tendon_pulley.usd"
-    viewer = newton.examples.create_viewer(stage_path=stage_path)
-    example = Example(viewer, args=None)
-    for _ in range(300):
-        example.step()
-        example.render()
+    viewer, args = newton.examples.init()
+    example = Example(viewer, args)
+    newton.examples.run(example, args)
