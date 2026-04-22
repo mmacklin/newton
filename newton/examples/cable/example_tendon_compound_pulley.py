@@ -226,6 +226,7 @@ class Example:
         if self.viewer is not None:
             self.viewer.set_model(self.model)
             self.viewer.set_camera(pos=wp.vec3(0.0, 1.8, 5.0), pitch=-5.0, yaw=-90.0)
+            self.viewer.renderer.show_wireframe_overlay = True
 
     def simulate(self):
         for _ in range(self.sim_substeps):
