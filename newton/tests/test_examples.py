@@ -282,7 +282,21 @@ add_example_test(
 )
 add_example_test(
     TestCableExamples,
+    name="cable.example_tendon_pinhole",
+    devices=test_devices,
+    use_viewer=True,
+    test_options={"num-frames": 100},
+)
+add_example_test(
+    TestCableExamples,
     name="cable.example_tendon_rolling_pulley",
+    devices=test_devices,
+    use_viewer=True,
+    test_options={"num-frames": 100},
+)
+add_example_test(
+    TestCableExamples,
+    name="cable.example_tendon_equilibrium",
     devices=test_devices,
     use_viewer=True,
     test_options={"num-frames": 100},

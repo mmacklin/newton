@@ -2,18 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ###########################################################################
-# Example Tendon Rolling Pulley
+# Example Tendon Equilibrium
 #
-# Atwood machine: two weights connected by a tendon routed over a
-# dynamic pulley constrained by a hinge joint.  The heavier weight
-# descends, pulling the lighter weight up; the pulley rotates freely
-# under cable tension — no kinematic rotation tracking needed.
+# Two equal-mass weights connected by a tendon over a dynamic pulley.
+# With equal masses, neither side should move — the system stays in
+# static equilibrium, verifying that the XPBD tendon constraint
+# correctly balances symmetric loads.
 #
-# The pulley has finite mass and inertia, so the XPBD constraint
-# solve correctly transmits force between the two sides of the cable
-# through the pulley body.
-#
-# Command: python -m newton.examples tendon_rolling_pulley
+# Command: python -m newton.examples tendon_equilibrium
 #
 ###########################################################################
 
@@ -42,6 +38,7 @@ class Example:
 
         self.pulley_radius = 0.15
         pulley_mass = 0.5
+        weight_mass = 2.0
 
         pulley = builder.add_body(
             xform=wp.transform(p=wp.vec3(0.0, 0.0, 3.5), q=wp.quat_identity()),
@@ -51,11 +48,9 @@ class Example:
         builder.add_shape_cylinder(
             pulley, xform=wp.transform(q=q_cyl), radius=self.pulley_radius, half_height=0.04
         )
-        self.pulley_idx = pulley
 
         Dof = newton.ModelBuilder.JointDofConfig
 
-        # Hinge joint: pulley fixed in space, free to rotate about Y
         j_pulley = builder.add_joint_d6(
             parent=-1,
             child=pulley,
@@ -70,7 +65,7 @@ class Example:
 
         self.left_idx = left = builder.add_link(
             xform=wp.transform(p=wp.vec3(-0.5, 0.0, 2.0), q=wp.quat_identity()),
-            mass=1.0,
+            mass=weight_mass,
         )
         builder.add_shape_box(left, hx=0.08, hy=0.08, hz=0.08)
         j1 = builder.add_joint_d6(
@@ -84,9 +79,9 @@ class Example:
 
         self.right_idx = right = builder.add_link(
             xform=wp.transform(p=wp.vec3(0.5, 0.0, 2.0), q=wp.quat_identity()),
-            mass=3.0,
+            mass=weight_mass,
         )
-        builder.add_shape_box(right, hx=0.12, hy=0.12, hz=0.12)
+        builder.add_shape_box(right, hx=0.08, hy=0.08, hz=0.08)
         j2 = builder.add_joint_d6(
             parent=-1,
             child=right,
@@ -123,7 +118,7 @@ class Example:
         builder.add_tendon_link(
             body=right,
             link_type=int(TendonLinkType.ATTACHMENT),
-            offset=(0.0, 0.0, 0.12),
+            offset=(0.0, 0.0, 0.08),
             axis=axis,
             compliance=1.0e-6,
             damping=0.1,
@@ -143,6 +138,10 @@ class Example:
         self.state_1 = self.model.state()
         self.control = self.model.control()
         self.contacts = self.model.contacts()
+
+        bq = self.state_0.body_q.numpy()
+        self.y_left_0 = float(bq[self.left_idx][2])
+        self.y_right_0 = float(bq[self.right_idx][2])
 
         if self.viewer is not None:
             self.viewer.set_model(self.model)
@@ -168,7 +167,7 @@ class Example:
             att_r = self.solver.tendon_seg_attachment_r.numpy()
             att_l = self.solver.tendon_seg_attachment_l.numpy()
             body_q = self.state_0.body_q.numpy()
-            pulley_z = body_q[self.pulley_idx][2]
+            pulley_z = body_q[0][2]
             assert att_r[0][2] > pulley_z, (
                 f"Cable should wrap over pulley: left tangent z={att_r[0][2]:.3f} <= center z={pulley_z:.3f}"
             )
@@ -179,7 +178,16 @@ class Example:
     def test_final(self):
         body_q = self.state_0.body_q.numpy()
         assert np.isfinite(body_q).all(), "Non-finite values in body positions"
-        assert (np.abs(body_q[:, :3]) < 100.0).all(), "Body positions diverged"
+
+        y_left = float(body_q[self.left_idx][2])
+        y_right = float(body_q[self.right_idx][2])
+        drift_left = abs(y_left - self.y_left_0)
+        drift_right = abs(y_right - self.y_right_0)
+        drift_diff = abs((y_left - self.y_left_0) - (y_right - self.y_right_0))
+
+        assert drift_left < 0.05, f"Left weight drifted {drift_left:.4f} m"
+        assert drift_right < 0.05, f"Right weight drifted {drift_right:.4f} m"
+        assert drift_diff < 0.02, f"Asymmetric drift: {drift_diff:.4f} m"
 
     def render(self):
         if self.viewer is not None:

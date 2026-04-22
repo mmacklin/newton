@@ -45,35 +45,35 @@ class Example:
         s = np.sin(np.pi / 4)
         c = np.cos(np.pi / 4)
 
-        # P1 at (-r, +r, +1), axis Y — wraps in XZ plane
+        # P1 at (-r, +r, +4), axis Y — wraps in XZ plane
         # Inner edge at x=0 aligns with P2 center; y=+r matches P2 tangent offset
         self.q_p1_init = np.array([-s, 0.0, 0.0, c])
         q_p1_wp = wp.quat(*self.q_p1_init.tolist())
         p1 = builder.add_body(
-            xform=wp.transform(p=wp.vec3(-self.r1, self.r1, 1.0), q=q_p1_wp),
+            xform=wp.transform(p=wp.vec3(-self.r1, self.r1, 4.0), q=q_p1_wp),
             mass=0.0,
             is_kinematic=True,
         )
         builder.add_shape_cylinder(p1, radius=self.r1, half_height=0.06)
         self.p1_idx = p1
 
-        # P2 at (0, 0, -1), axis X — wraps in YZ plane
+        # P2 at (0, 0, +2), axis X — wraps in YZ plane
         self.q_p2_init = np.array([0.0, s, 0.0, c])
         q_p2_wp = wp.quat(*self.q_p2_init.tolist())
         p2 = builder.add_body(
-            xform=wp.transform(p=wp.vec3(0.0, 0.0, -1.0), q=q_p2_wp),
+            xform=wp.transform(p=wp.vec3(0.0, 0.0, 2.0), q=q_p2_wp),
             mass=0.0,
             is_kinematic=True,
         )
         builder.add_shape_cylinder(p2, radius=self.r2, half_height=0.3)
         self.p2_idx = p2
 
-        # P3 at (+r, -r, +1), axis Y — wraps in XZ plane
+        # P3 at (+r, -r, +4), axis Y — wraps in XZ plane
         # Inner edge at x=0 aligns with P2 center; y=-r matches P2 tangent offset
         self.q_p3_init = np.array([-s, 0.0, 0.0, c])
         q_p3_wp = wp.quat(*self.q_p3_init.tolist())
         p3 = builder.add_body(
-            xform=wp.transform(p=wp.vec3(self.r3, -self.r3, 1.0), q=q_p3_wp),
+            xform=wp.transform(p=wp.vec3(self.r3, -self.r3, 4.0), q=q_p3_wp),
             mass=0.0,
             is_kinematic=True,
         )
@@ -84,7 +84,7 @@ class Example:
         free_lin = [Dof(axis=Axis.X), Dof(axis=Axis.Y), Dof(axis=Axis.Z)]
         free_ang = [Dof(axis=Axis.X), Dof(axis=Axis.Y), Dof(axis=Axis.Z)]
 
-        sphere_pos = wp.vec3(-2.0 * self.r1, self.r1, -2.0)
+        sphere_pos = wp.vec3(-2.0 * self.r1, self.r1, 1.0)
         left = builder.add_link(
             xform=wp.transform(p=sphere_pos, q=wp.quat_identity()),
             mass=1.5,
@@ -99,7 +99,7 @@ class Example:
             child_xform=wp.transform(),
         )
 
-        box_pos = wp.vec3(2.0 * self.r3, -self.r3, -2.0)
+        box_pos = wp.vec3(2.0 * self.r3, -self.r3, 1.0)
         right = builder.add_link(
             xform=wp.transform(p=box_pos, q=wp.quat_identity()),
             mass=3.5,
@@ -172,6 +172,7 @@ class Example:
             rest_length=-1.0,
         )
 
+        builder.add_ground_plane()
         self.model = builder.finalize()
 
         self.solver = newton.solvers.SolverXPBD(
@@ -191,7 +192,7 @@ class Example:
 
         if self.viewer is not None:
             self.viewer.set_model(self.model)
-            self.viewer.set_camera(pos=wp.vec3(3.0, -5.2, 0.0), pitch=-5.0, yaw=120.0)
+            self.viewer.set_camera(pos=wp.vec3(3.0, -5.2, 2.5), pitch=5.0, yaw=120.0)
             if hasattr(self.viewer, "renderer"):
                 self.viewer.renderer.show_wireframe_overlay = True
 
@@ -242,8 +243,8 @@ class Example:
 
         sphere_pos = body_q[3][:3]
         box_pos = body_q[4][:3]
-        sphere_moved = np.linalg.norm(sphere_pos - np.array([-0.4, 0.2, -2.0])) > 0.1
-        box_moved = np.linalg.norm(box_pos - np.array([0.4, -0.2, -2.0])) > 0.1
+        sphere_moved = np.linalg.norm(sphere_pos - np.array([-0.4, 0.2, 1.0])) > 0.1
+        box_moved = np.linalg.norm(box_pos - np.array([0.4, -0.2, 1.0])) > 0.1
         assert sphere_moved, f"Sphere should have moved from start: {sphere_pos}"
         assert box_moved, f"Box should have moved from start: {box_pos}"
 

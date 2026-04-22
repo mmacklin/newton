@@ -1,15 +1,17 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 The Newton Developers
+# SPDX-FileCopyrightText: Copyright (c) 2026 The Newton Developers
 # SPDX-License-Identifier: Apache-2.0
 
 ###########################################################################
-# Example Tendon Pulley
+# Example Tendon Pinhole
 #
-# Simplest tendon demonstration: a fixed anchor point with a cable
-# attached to a hanging weight.  The tendon acts as a unilateral
-# distance constraint — the weight swings freely under gravity like
-# a pendulum on a string.
+# A cable threaded through a pinhole (eyelet) on a fixed guide body.
+# Two weights hang on either side — the heavier weight pulls cable
+# through the pinhole, descending while the lighter weight ascends.
 #
-# Command: python -m newton.examples tendon_pulley
+# Unlike a rolling pulley, the pinhole has no radius and no wrap arc.
+# The cable simply passes through a single point on the body.
+#
+# Command: python -m newton.examples tendon_pinhole
 #
 ###########################################################################
 
@@ -20,6 +22,7 @@ import newton
 import newton.examples
 from newton._src.sim.builder import Axis
 from newton._src.sim.tendon import TendonLinkType
+from newton.examples.cable.cable import get_tendon_cable_lines
 
 
 class Example:
@@ -35,45 +38,71 @@ class Example:
 
         builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=-9.81)
 
-        anchor = builder.add_body(
-            xform=wp.transform(p=wp.vec3(0.0, 0.0, 3.0), q=wp.quat_identity()),
+        Dof = newton.ModelBuilder.JointDofConfig
+
+        guide = builder.add_body(
+            xform=wp.transform(p=wp.vec3(0.0, 0.0, 3.5), q=wp.quat_identity()),
             mass=0.0,
             is_kinematic=True,
         )
-        builder.add_shape_sphere(anchor, radius=0.05)
+        builder.add_shape_sphere(guide, radius=0.05)
 
-        weight = builder.add_body(
-            xform=wp.transform(p=wp.vec3(0.5, 0.0, 1.5), q=wp.quat_identity()),
-            mass=2.0,
+        planar_lin = [Dof(axis=Axis.X), Dof(axis=Axis.Z)]
+        planar_ang = [Dof(axis=Axis.Y)]
+
+        self.left_idx = left = builder.add_link(
+            xform=wp.transform(p=wp.vec3(-0.3, 0.0, 2.0), q=wp.quat_identity()),
+            mass=1.0,
         )
-        builder.add_shape_box(weight, hx=0.10, hy=0.10, hz=0.10)
-
-        Dof = newton.ModelBuilder.JointDofConfig
-        free_lin = [Dof(axis=Axis.X), Dof(axis=Axis.Y), Dof(axis=Axis.Z)]
-        free_ang = [Dof(axis=Axis.X), Dof(axis=Axis.Y), Dof(axis=Axis.Z)]
-        j = builder.add_joint_d6(
+        builder.add_shape_box(left, hx=0.06, hy=0.06, hz=0.06)
+        j1 = builder.add_joint_d6(
             parent=-1,
-            child=weight,
-            linear_axes=free_lin,
-            angular_axes=free_ang,
-            parent_xform=wp.transform(p=wp.vec3(0.5, 0.0, 1.5), q=wp.quat_identity()),
+            child=left,
+            linear_axes=planar_lin,
+            angular_axes=planar_ang,
+            parent_xform=wp.transform(p=wp.vec3(-0.3, 0.0, 2.0), q=wp.quat_identity()),
             child_xform=wp.transform(),
         )
-        builder.add_articulation([j])
+        builder.add_articulation([j1])
 
+        self.right_idx = right = builder.add_link(
+            xform=wp.transform(p=wp.vec3(0.3, 0.0, 2.0), q=wp.quat_identity()),
+            mass=3.0,
+        )
+        builder.add_shape_box(right, hx=0.10, hy=0.10, hz=0.10)
+        j2 = builder.add_joint_d6(
+            parent=-1,
+            child=right,
+            linear_axes=planar_lin,
+            angular_axes=planar_ang,
+            parent_xform=wp.transform(p=wp.vec3(0.3, 0.0, 2.0), q=wp.quat_identity()),
+            child_xform=wp.transform(),
+        )
+        builder.add_articulation([j2])
+
+        axis = (0.0, 1.0, 0.0)
         builder.add_tendon()
         builder.add_tendon_link(
-            body=anchor,
+            body=left,
             link_type=int(TendonLinkType.ATTACHMENT),
-            offset=(0.0, 0.0, 0.0),
-            axis=(0.0, 1.0, 0.0),
+            offset=(0.0, 0.0, 0.06),
+            axis=axis,
         )
         builder.add_tendon_link(
-            body=weight,
+            body=guide,
+            link_type=int(TendonLinkType.PINHOLE),
+            offset=(0.0, 0.0, 0.0),
+            axis=axis,
+            compliance=1.0e-6,
+            damping=0.1,
+            rest_length=-1.0,
+        )
+        builder.add_tendon_link(
+            body=right,
             link_type=int(TendonLinkType.ATTACHMENT),
             offset=(0.0, 0.0, 0.10),
-            axis=(0.0, 1.0, 0.0),
-            compliance=1.0e-5,
+            axis=axis,
+            compliance=1.0e-6,
             damping=0.1,
             rest_length=-1.0,
         )
@@ -93,9 +122,9 @@ class Example:
         self.control = self.model.control()
         self.contacts = self.model.contacts()
 
-        if viewer is not None:
+        if self.viewer is not None:
             self.viewer.set_model(self.model)
-            self.viewer.set_camera(pos=wp.vec3(0.0, -4.0, 1.5), pitch=5.0, yaw=90.0)
+            self.viewer.set_camera(pos=wp.vec3(0.0, -4.0, 2.0), pitch=5.0, yaw=90.0)
             if hasattr(self.viewer, "renderer"):
                 self.viewer.renderer.show_wireframe_overlay = True
 
@@ -115,17 +144,13 @@ class Example:
     def test_final(self):
         body_q = self.state_0.body_q.numpy()
         assert np.isfinite(body_q).all(), "Non-finite values in body positions"
-        weight_z = body_q[1][2]
-        assert weight_z < 2.5, f"Weight should be below anchor: z={weight_z}"
+        assert (np.abs(body_q[:, :3]) < 100.0).all(), "Body positions diverged"
 
     def render(self):
         if self.viewer is not None:
             self.viewer.begin_frame(self.sim_time)
             self.viewer.log_state(self.state_0)
-            att_l = self.solver.tendon_seg_attachment_l.numpy()
-            att_r = self.solver.tendon_seg_attachment_r.numpy()
-            starts = wp.array(att_l, dtype=wp.vec3)
-            ends = wp.array(att_r, dtype=wp.vec3)
+            starts, ends = get_tendon_cable_lines(self.solver, self.model, self.state_0)
             self.viewer.log_lines("cable", starts, ends, colors=(0.9, 0.2, 0.2), width=0.008)
             self.viewer.end_frame()
 

@@ -39,48 +39,49 @@ class Example:
         self.viewer = viewer
         self.args = args
 
-        builder = newton.ModelBuilder(up_axis=Axis.Y, gravity=-9.81)
+        builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=-9.81)
 
         self.r1 = 0.20
         self.r2 = 0.15
         self.r3 = 0.22
 
         p1 = builder.add_body(
-            xform=wp.transform(p=wp.vec3(-0.6, 2.8, 0.0), q=wp.quat_identity()),
+            xform=wp.transform(p=wp.vec3(-0.6, 0.0, 3.8), q=wp.quat_identity()),
             mass=0.0,
             is_kinematic=True,
         )
-        builder.add_shape_cylinder(p1, radius=self.r1, half_height=0.05)
+        q_cyl = wp.quat(np.sin(np.pi / 4.0), 0.0, 0.0, np.cos(np.pi / 4.0))
+        builder.add_shape_cylinder(p1, xform=wp.transform(q=q_cyl), radius=self.r1, half_height=0.05)
         self.p1_idx = p1
 
         p2 = builder.add_body(
-            xform=wp.transform(p=wp.vec3(0.5, 3.4, 0.0), q=wp.quat_identity()),
+            xform=wp.transform(p=wp.vec3(0.5, 0.0, 4.4), q=wp.quat_identity()),
             mass=0.0,
             is_kinematic=True,
         )
-        builder.add_shape_cylinder(p2, radius=self.r2, half_height=0.04)
+        builder.add_shape_cylinder(p2, xform=wp.transform(q=q_cyl), radius=self.r2, half_height=0.04)
         self.p2_idx = p2
 
         p3 = builder.add_body(
-            xform=wp.transform(p=wp.vec3(1.5, 2.6, 0.0), q=wp.quat_identity()),
+            xform=wp.transform(p=wp.vec3(1.5, 0.0, 3.6), q=wp.quat_identity()),
             mass=0.0,
             is_kinematic=True,
         )
-        builder.add_shape_cylinder(p3, radius=self.r3, half_height=0.05)
+        builder.add_shape_cylinder(p3, xform=wp.transform(q=q_cyl), radius=self.r3, half_height=0.05)
         self.p3_idx = p3
 
         sphere_deco = builder.add_body(
-            xform=wp.transform(p=wp.vec3(0.5, 0.15, 0.4), q=wp.quat_identity()),
+            xform=wp.transform(p=wp.vec3(0.5, 0.4, 1.15), q=wp.quat_identity()),
             mass=0.0,
             is_kinematic=True,
         )
         builder.add_shape_sphere(sphere_deco, radius=0.15)
 
         Dof = newton.ModelBuilder.JointDofConfig
-        planar_lin = [Dof(axis=Axis.X), Dof(axis=Axis.Y)]
-        planar_ang = [Dof(axis=Axis.Z)]
+        planar_lin = [Dof(axis=Axis.X), Dof(axis=Axis.Z)]
+        planar_ang = [Dof(axis=Axis.Y)]
 
-        capsule_pos = wp.vec3(-0.9, 1.2, 0.0)
+        capsule_pos = wp.vec3(-0.9, 0.0, 2.2)
         q_vert = wp.quat(np.sin(np.pi / 4.0), 0.0, 0.0, np.cos(np.pi / 4.0))
         left = builder.add_link(
             xform=wp.transform(p=capsule_pos, q=wp.quat_identity()),
@@ -101,7 +102,7 @@ class Example:
             child_xform=wp.transform(p=wp.vec3(0.0, 0.0, 0.0), q=wp.quat_identity()),
         )
 
-        box_pos = wp.vec3(1.8, 1.0, 0.0)
+        box_pos = wp.vec3(1.8, 0.0, 2.0)
         right = builder.add_link(
             xform=wp.transform(p=box_pos, q=wp.quat_identity()),
             mass=4.0,
@@ -119,20 +120,20 @@ class Example:
         builder.add_articulation([j1])
         builder.add_articulation([j2])
 
-        axis = (0.0, 0.0, 1.0)
+        axis = (0.0, 1.0, 0.0)
         builder.add_tendon()
 
         builder.add_tendon_link(
             body=left,
             link_type=int(TendonLinkType.ATTACHMENT),
-            offset=(0.0, 0.14, 0.0),
+            offset=(0.0, 0.0, 0.14),
             axis=axis,
         )
         builder.add_tendon_link(
             body=p1,
             link_type=int(TendonLinkType.ROLLING),
             radius=self.r1,
-            orientation=-1,
+            orientation=1,
             mu=0.0,
             offset=(0.0, 0.0, 0.0),
             axis=axis,
@@ -144,7 +145,7 @@ class Example:
             body=p2,
             link_type=int(TendonLinkType.ROLLING),
             radius=self.r2,
-            orientation=-1,
+            orientation=1,
             mu=0.0,
             offset=(0.0, 0.0, 0.0),
             axis=axis,
@@ -156,7 +157,7 @@ class Example:
             body=p3,
             link_type=int(TendonLinkType.ROLLING),
             radius=self.r3,
-            orientation=-1,
+            orientation=1,
             mu=0.0,
             offset=(0.0, 0.0, 0.0),
             axis=axis,
@@ -167,13 +168,14 @@ class Example:
         builder.add_tendon_link(
             body=right,
             link_type=int(TendonLinkType.ATTACHMENT),
-            offset=(0.0, 0.15, 0.0),
+            offset=(0.0, 0.0, 0.15),
             axis=axis,
             compliance=1.0e-5,
             damping=0.1,
             rest_length=-1.0,
         )
 
+        builder.add_ground_plane()
         self.model = builder.finalize()
 
         self.solver = newton.solvers.SolverXPBD(
@@ -193,7 +195,7 @@ class Example:
 
         if self.viewer is not None:
             self.viewer.set_model(self.model)
-            self.viewer.set_camera(pos=wp.vec3(0.4, 2.0, 7.0), pitch=-5.0, yaw=-90.0)
+            self.viewer.set_camera(pos=wp.vec3(0.4, -7.0, 2.5), pitch=5.0, yaw=90.0)
             if hasattr(self.viewer, "renderer"):
                 self.viewer.renderer.show_wireframe_overlay = True
 
@@ -214,32 +216,46 @@ class Example:
             # pulleys, so the linear displacement is the same everywhere.
             # Measure it from the first segment (capsule->P1).
             d_cable = rest_after[0] - rest_before[0]
-            self.p1_angle += d_cable / self.r1
-            self.p2_angle += d_cable / self.r2
-            self.p3_angle += d_cable / self.r3
+            self.p1_angle -= d_cable / self.r1
+            self.p2_angle -= d_cable / self.r2
+            self.p3_angle -= d_cable / self.r3
 
             for idx, angle in [
                 (self.p1_idx, self.p1_angle),
                 (self.p2_idx, self.p2_angle),
                 (self.p3_idx, self.p3_angle),
             ]:
-                qz = np.sin(angle / 2.0)
+                qy = np.sin(angle / 2.0)
                 qw = np.cos(angle / 2.0)
-                set_body_quat(self.state_0, idx, [0.0, 0.0, qz, qw])
+                set_body_quat(self.state_0, idx, [0.0, qy, 0.0, qw])
 
     def step(self):
         self.simulate()
         self.sim_time += self.frame_dt
+
+    def test_post_step(self):
+        if self.sim_time < self.frame_dt * 1.5:
+            att_r = self.solver.tendon_seg_attachment_r.numpy()
+            att_l = self.solver.tendon_seg_attachment_l.numpy()
+            body_q = self.state_0.body_q.numpy()
+            p1_z = body_q[self.p1_idx][2]
+            p3_z = body_q[self.p3_idx][2]
+            assert att_r[0][2] > p1_z, (
+                f"Cable should wrap over P1: arrival tangent z={att_r[0][2]:.3f} <= center z={p1_z:.3f}"
+            )
+            assert att_l[3][2] > p3_z, (
+                f"Cable should wrap over P3: departure tangent z={att_l[3][2]:.3f} <= center z={p3_z:.3f}"
+            )
 
     def test_final(self):
         body_q = self.state_0.body_q.numpy()
         assert np.isfinite(body_q).all(), "Non-finite values in body positions"
 
         # body 0=P1, 1=P2, 2=P3, 3=sphere, 4=capsule(light), 5=box(heavy)
-        capsule_y = body_q[4][1]
-        box_y = body_q[5][1]
-        assert box_y < 1.0, f"Box (heavy) should descend: y={box_y}"
-        assert capsule_y > 1.2, f"Capsule (light) should ascend: y={capsule_y}"
+        capsule_z = body_q[4][2]
+        box_z = body_q[5][2]
+        assert box_z < 3.0, f"Box (heavy) should descend: z={box_z}"
+        assert capsule_z > 1.5, f"Capsule (light) should ascend: z={capsule_z}"
 
         angles = [self.p1_angle, self.p2_angle, self.p3_angle]
         signs = [np.sign(a) for a in angles if abs(a) > 0.01]
