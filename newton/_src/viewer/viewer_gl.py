@@ -194,6 +194,8 @@ class ViewerGL(ViewerBase):
         vsync: bool = False,
         headless: bool = False,
         plot_history_size: int = 250,
+        record_path: str | None = None,
+        record_fps: int = 60,
     ):
         """
         Initialize the OpenGL viewer and UI.
@@ -205,6 +207,9 @@ class ViewerGL(ViewerBase):
             headless: Run in headless mode (no window).
             plot_history_size: Maximum number of samples kept per
                 :meth:`log_scalar` signal for the live time-series plots.
+            record_path: If set, record an MP4 video to this path.
+                Requires ``imageio[ffmpeg]``.
+            record_fps: Frame rate for the recorded video [Hz].
         """
         if not isinstance(plot_history_size, int) or isinstance(plot_history_size, bool):
             raise TypeError("plot_history_size must be an integer")
@@ -294,6 +299,27 @@ class ViewerGL(ViewerBase):
         # Initialize PBO (Pixel Buffer Object) resources used in the `get_frame` method.
         self._pbo = None
         self._wp_pbo = None
+
+        # MP4 recording state
+        self._record_writer = None
+        self._record_frame_buf = None
+        self._record_path = None
+        if record_path is not None:
+            import os  # noqa: PLC0415
+
+            try:
+                import imageio  # noqa: PLC0415
+            except ImportError as e:
+                raise ImportError("Recording requires imageio[ffmpeg]: pip install 'imageio[ffmpeg]'") from e
+
+            os.makedirs(os.path.dirname(os.path.abspath(record_path)), exist_ok=True)
+            self._record_path = record_path
+            self._record_writer = imageio.get_writer(
+                record_path,
+                fps=record_fps,
+                codec="libx264",
+                output_params=["-crf", "20", "-pix_fmt", "yuv420p"],
+            )
 
     def _hash_geometry(self, geo_type: int, geo_scale, thickness: float, is_solid: bool, geo_src=None) -> int:
         # For capsules, ignore (radius, half_height) in the geometry hash so varying-length capsules batch together.
@@ -1430,6 +1456,10 @@ class ViewerGL(ViewerBase):
         """
         self._update()
 
+        if self._record_writer is not None and not self.renderer.has_exit():
+            self._record_frame_buf = self.get_frame(target_image=self._record_frame_buf)
+            self._record_writer.append_data(self._record_frame_buf.numpy())
+
     @override
     def apply_forces(self, state: nt.State):
         """
@@ -1590,6 +1620,13 @@ class ViewerGL(ViewerBase):
         """
         Close the viewer and clean up resources.
         """
+        if self._record_writer is not None:
+            self._record_writer.close()
+            import os  # noqa: PLC0415
+
+            sz = os.path.getsize(self._record_path)
+            print(f"Recorded {self._record_path} ({sz // 1024} KB)")
+            self._record_writer = None
         self.renderer.close()
 
     @property
