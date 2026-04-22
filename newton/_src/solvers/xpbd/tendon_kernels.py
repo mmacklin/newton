@@ -27,40 +27,32 @@ def tangent_point_circle(
 ) -> wp.vec3:
     """Compute the tangent point on a circle from an external point.
 
-    Works in the cable plane defined by *plane_normal*.  The *orientation*
-    (+1 or -1) selects which of the two tangent lines is used (corresponding
-    to the winding direction of the cable around the pulley).
+    The source point *p* is projected into the cable plane defined by
+    *plane_normal* through *center* before computing the tangent, so *p*
+    need not lie in the plane.  This matches the original Cable Joints
+    paper which works in each cylinder's own profile frame.
 
     Algorithm 3 from Müller et al. 2018, adapted to 3D cable planes.
     """
     d = center - p
-    dist = wp.length(d)
-    if dist <= radius:
-        return center - wp.normalize(d) * radius
+    # project into the cable plane — use in-plane distance for tangent angle
+    d_proj = d - wp.dot(d, plane_normal) * plane_normal
+    dist_in_plane = wp.length(d_proj)
+    if dist_in_plane <= radius:
+        if dist_in_plane < 1.0e-8:
+            fallback = wp.vec3(1.0, 0.0, 0.0) - wp.dot(wp.vec3(1.0, 0.0, 0.0), plane_normal) * plane_normal
+            return center + wp.normalize(fallback) * radius
+        return center - wp.normalize(d_proj) * radius
 
-    # project into the cable plane to get the 2D angle
-    # build a local frame: u = d/|d| projected, v = plane_normal x u
-    d_norm = d / dist
-    # remove any out-of-plane component
-    d_in_plane = d_norm - wp.dot(d_norm, plane_normal) * plane_normal
-    d_in_plane_len = wp.length(d_in_plane)
-    if d_in_plane_len < 1.0e-8:
-        d_in_plane = wp.vec3(1.0, 0.0, 0.0) - wp.dot(wp.vec3(1.0, 0.0, 0.0), plane_normal) * plane_normal
-        d_in_plane_len = wp.length(d_in_plane)
-    u = d_in_plane / d_in_plane_len
+    u = d_proj / dist_in_plane
     v = wp.cross(plane_normal, u)
 
-    # 2D: angle from center to p in the (u, v) frame
-    dx = wp.dot(d, u)
-    dy = wp.dot(d, v)
-    alpha = wp.atan2(dy, dx)
-    phi = wp.asin(wp.min(radius / dist, 1.0))
+    phi = wp.asin(wp.min(radius / dist_in_plane, 1.0))
 
-    # select tangent based on orientation
     if orientation > 0:
-        angle = alpha - 1.5707963 - phi  # alpha - pi/2 - phi
+        angle = -1.5707963 - phi  # -pi/2 - phi
     else:
-        angle = alpha + 1.5707963 + phi  # alpha + pi/2 + phi
+        angle = 1.5707963 + phi  # +pi/2 + phi
 
     return center + radius * (wp.cos(angle) * u + wp.sin(angle) * v)
 
@@ -214,9 +206,6 @@ def update_tendon_attachments(
     normal_l = wp.transform_vector(pose_l, axis_l)
     normal_r = wp.transform_vector(pose_r, axis_r)
 
-    # use average normal for the segment
-    avg_normal = wp.normalize(normal_l + normal_r)
-
     # previous attachment points
     old_al = seg_attachment_l[seg]
     old_ar = seg_attachment_r[seg]
@@ -228,60 +217,26 @@ def update_tendon_attachments(
     both_rolling = (type_l == int(TendonLinkType.ROLLING)) and (type_r == int(TendonLinkType.ROLLING))
 
     if both_rolling and radius_l > 0.0 and radius_r > 0.0:
-        # circle-circle tangent
-        new_al = tangent_circle_circle(
-            center_l, radius_l, orient_l,
-            center_r, radius_r, orient_r,
-            avg_normal,
-        )
-        # compute the B tangent as well
-        d = center_r - center_l
-        dist = wp.length(d)
-        d_in_plane = d - wp.dot(d, avg_normal) * avg_normal
-        d_in_plane_len = wp.length(d_in_plane)
-        if d_in_plane_len < 1.0e-8:
-            d_in_plane = wp.vec3(1.0, 0.0, 0.0) - wp.dot(wp.vec3(1.0, 0.0, 0.0), avg_normal) * avg_normal
-            d_in_plane_len = wp.length(d_in_plane)
-        u = d_in_plane / d_in_plane_len
-        v = wp.cross(avg_normal, u)
-        dx = wp.dot(d, u)
-        dy = wp.dot(d, v)
-        alpha = wp.atan2(dy, dx)
-
-        same_orient = (orient_l * orient_r) > 0
-        if same_orient:
-            r_virtual = radius_r - radius_l
-        else:
-            r_virtual = radius_l + radius_r
-        r_abs = wp.abs(r_virtual)
-        clamped_dist = wp.max(dist, r_abs + 1.0e-8)
-        phi = wp.asin(wp.min(r_abs / clamped_dist, 1.0))
-        sign_r = 1.0
-        if r_virtual < 0.0:
-            sign_r = -1.0
-
-        if same_orient:
-            if orient_r > 0:
-                angle_b = alpha - 1.5707963 - phi * sign_r
-            else:
-                angle_b = alpha + 1.5707963 + phi * sign_r
-        else:
-            if orient_r > 0:
-                angle_b = alpha - 1.5707963 + phi * sign_r
-            else:
-                angle_b = alpha + 1.5707963 - phi * sign_r
-
-        new_ar = center_r + radius_r * (wp.cos(angle_b) * u + wp.sin(angle_b) * v)
+        # Per-cylinder iterative tangent computation: each tangent is
+        # computed in its own cylinder's wrapping plane, then we iterate
+        # until the pair converges.  This correctly handles non-coplanar
+        # cylinders (e.g. right-angle drives) where averaging normals
+        # would pull tangent points off the actual wrapping circles.
+        new_al = center_l
+        new_ar = center_r
+        for _iter in range(4):
+            new_ar = tangent_point_circle(new_al, center_r, radius_r, normal_r, orient_r)
+            new_al = tangent_point_circle(new_ar, center_l, radius_l, normal_l, -orient_l)
 
     elif type_l == int(TendonLinkType.ROLLING) and radius_l > 0.0:
-        # left is circle, right is a point — departure tangent uses negated orientation
+        # left is circle, right is a point — departure tangent in left's plane
         new_ar = center_r
-        new_al = tangent_point_circle(center_r, center_l, radius_l, avg_normal, -orient_l)
+        new_al = tangent_point_circle(center_r, center_l, radius_l, normal_l, -orient_l)
 
     elif type_r == int(TendonLinkType.ROLLING) and radius_r > 0.0:
-        # right is circle, left is a point — arrival tangent uses direct orientation
+        # right is circle, left is a point — arrival tangent in right's plane
         new_al = center_l
-        new_ar = tangent_point_circle(center_l, center_r, radius_r, avg_normal, orient_r)
+        new_ar = tangent_point_circle(center_l, center_r, radius_r, normal_r, orient_r)
 
     else:
         # both are points (pinhole/attachment to pinhole/attachment)

@@ -2,14 +2,19 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ###########################################################################
-# Example Tendon Compound Pulley
+# Example Tendon Cable Machine
 #
-# Compound pulley system with two kinematic pulleys and two weights.
-# The cable routes: left weight -> P1 (rolling) -> P2 (rolling) -> right
-# weight.  Both pulleys rotate under the no-slip assumption, with
-# orientation driven by per-substep rest-length changes.
+# Cable machine with three pulleys of varying sizes routing a single
+# tendon from a light capsule weight to a heavy box weight.  A
+# decorative sphere sits at ground level.  The box descends under
+# gravity, pulling the capsule upward through the pulley chain.  All
+# three pulleys rotate under the no-slip assumption, with orientation
+# driven by per-substep rest-length changes.
 #
-# Command: python -m newton.examples tendon_compound_pulley
+# Demonstrates complex multi-pulley routing with diverse body shapes
+# (capsules, boxes, cylinders, spheres).
+#
+# Command: python -m newton.examples tendon_cable_machine
 #
 ###########################################################################
 
@@ -111,11 +116,12 @@ class Example:
 
         builder = newton.ModelBuilder(up_axis=Axis.Y, gravity=-9.81)
 
-        self.r1 = 0.25
-        self.r2 = 0.20
+        self.r1 = 0.20
+        self.r2 = 0.15
+        self.r3 = 0.22
 
         p1 = builder.add_body(
-            xform=wp.transform(p=wp.vec3(-0.5, 3.0, 0.0), q=wp.quat_identity()),
+            xform=wp.transform(p=wp.vec3(-0.6, 2.8, 0.0), q=wp.quat_identity()),
             mass=0.0,
             is_kinematic=True,
         )
@@ -123,42 +129,65 @@ class Example:
         self.p1_idx = p1
 
         p2 = builder.add_body(
-            xform=wp.transform(p=wp.vec3(0.5, 2.5, 0.0), q=wp.quat_identity()),
+            xform=wp.transform(p=wp.vec3(0.5, 3.4, 0.0), q=wp.quat_identity()),
             mass=0.0,
             is_kinematic=True,
         )
-        builder.add_shape_cylinder(p2, radius=self.r2, half_height=0.05)
+        builder.add_shape_cylinder(p2, radius=self.r2, half_height=0.04)
         self.p2_idx = p2
+
+        p3 = builder.add_body(
+            xform=wp.transform(p=wp.vec3(1.5, 2.6, 0.0), q=wp.quat_identity()),
+            mass=0.0,
+            is_kinematic=True,
+        )
+        builder.add_shape_cylinder(p3, radius=self.r3, half_height=0.05)
+        self.p3_idx = p3
+
+        sphere_deco = builder.add_body(
+            xform=wp.transform(p=wp.vec3(0.5, 0.15, 0.4), q=wp.quat_identity()),
+            mass=0.0,
+            is_kinematic=True,
+        )
+        builder.add_shape_sphere(sphere_deco, radius=0.15)
 
         Dof = newton.ModelBuilder.JointDofConfig
         planar_lin = [Dof(axis=Axis.X), Dof(axis=Axis.Y)]
         planar_ang = [Dof(axis=Axis.Z)]
 
+        capsule_pos = wp.vec3(-0.9, 1.2, 0.0)
+        q_vert = wp.quat(np.sin(np.pi / 4.0), 0.0, 0.0, np.cos(np.pi / 4.0))
         left = builder.add_link(
-            xform=wp.transform(p=wp.vec3(-0.8, 1.0, 0.0), q=wp.quat_identity()),
-            mass=1.5,
+            xform=wp.transform(p=capsule_pos, q=wp.quat_identity()),
+            mass=1.0,
         )
-        builder.add_shape_box(left, hx=0.09, hy=0.09, hz=0.09)
+        builder.add_shape_capsule(
+            left,
+            xform=wp.transform(q=q_vert),
+            radius=0.06,
+            half_height=0.08,
+        )
         j1 = builder.add_joint_d6(
             parent=-1,
             child=left,
             linear_axes=planar_lin,
             angular_axes=planar_ang,
-            parent_xform=wp.transform(p=wp.vec3(-0.8, 1.0, 0.0), q=wp.quat_identity()),
+            parent_xform=wp.transform(p=capsule_pos, q=wp.quat_identity()),
             child_xform=wp.transform(p=wp.vec3(0.0, 0.0, 0.0), q=wp.quat_identity()),
         )
 
+        box_pos = wp.vec3(1.8, 1.0, 0.0)
         right = builder.add_link(
-            xform=wp.transform(p=wp.vec3(0.8, 1.0, 0.0), q=wp.quat_identity()),
+            xform=wp.transform(p=box_pos, q=wp.quat_identity()),
             mass=4.0,
         )
-        builder.add_shape_box(right, hx=0.13, hy=0.13, hz=0.13)
+        builder.add_shape_box(right, hx=0.12, hy=0.15, hz=0.10)
         j2 = builder.add_joint_d6(
             parent=-1,
             child=right,
             linear_axes=planar_lin,
             angular_axes=planar_ang,
-            parent_xform=wp.transform(p=wp.vec3(0.8, 1.0, 0.0), q=wp.quat_identity()),
+            parent_xform=wp.transform(p=box_pos, q=wp.quat_identity()),
             child_xform=wp.transform(p=wp.vec3(0.0, 0.0, 0.0), q=wp.quat_identity()),
         )
 
@@ -167,10 +196,11 @@ class Example:
 
         axis = (0.0, 0.0, 1.0)
         builder.add_tendon()
+
         builder.add_tendon_link(
             body=left,
             link_type=int(TendonLinkType.ATTACHMENT),
-            offset=(0.0, 0.09, 0.0),
+            offset=(0.0, 0.14, 0.0),
             axis=axis,
         )
         builder.add_tendon_link(
@@ -198,9 +228,21 @@ class Example:
             rest_length=-1.0,
         )
         builder.add_tendon_link(
+            body=p3,
+            link_type=int(TendonLinkType.ROLLING),
+            radius=self.r3,
+            orientation=-1,
+            mu=0.0,
+            offset=(0.0, 0.0, 0.0),
+            axis=axis,
+            compliance=1.0e-5,
+            damping=0.1,
+            rest_length=-1.0,
+        )
+        builder.add_tendon_link(
             body=right,
             link_type=int(TendonLinkType.ATTACHMENT),
-            offset=(0.0, 0.13, 0.0),
+            offset=(0.0, 0.15, 0.0),
             axis=axis,
             compliance=1.0e-5,
             damping=0.1,
@@ -222,10 +264,11 @@ class Example:
 
         self.p1_angle = 0.0
         self.p2_angle = 0.0
+        self.p3_angle = 0.0
 
         if self.viewer is not None:
             self.viewer.set_model(self.model)
-            self.viewer.set_camera(pos=wp.vec3(0.0, 1.8, 5.0), pitch=-5.0, yaw=-90.0)
+            self.viewer.set_camera(pos=wp.vec3(0.4, 2.0, 7.0), pitch=-5.0, yaw=-90.0)
             if hasattr(self.viewer, "renderer"):
                 self.viewer.renderer.show_wireframe_overlay = True
 
@@ -242,19 +285,22 @@ class Example:
 
             rest_after = self.solver.tendon_seg_rest_length.numpy()
 
-            # both pulleys rotate CW (negative z) when cable flows left-to-right
-            d0 = rest_after[0] - rest_before[0]
-            self.p1_angle += d0 / self.r1
+            # In a series pulley chain the same cable passes through all
+            # pulleys, so the linear displacement is the same everywhere.
+            # Measure it from the first segment (capsule->P1).
+            d_cable = rest_after[0] - rest_before[0]
+            self.p1_angle += d_cable / self.r1
+            self.p2_angle += d_cable / self.r2
+            self.p3_angle += d_cable / self.r3
 
-            d2 = rest_after[2] - rest_before[2]
-            self.p2_angle -= d2 / self.r2
-
-            qz1 = np.sin(self.p1_angle / 2.0)
-            qw1 = np.cos(self.p1_angle / 2.0)
-            qz2 = np.sin(self.p2_angle / 2.0)
-            qw2 = np.cos(self.p2_angle / 2.0)
-            _set_body_quat(self.state_0, self.p1_idx, [0.0, 0.0, qz1, qw1])
-            _set_body_quat(self.state_0, self.p2_idx, [0.0, 0.0, qz2, qw2])
+            for idx, angle in [
+                (self.p1_idx, self.p1_angle),
+                (self.p2_idx, self.p2_angle),
+                (self.p3_idx, self.p3_angle),
+            ]:
+                qz = np.sin(angle / 2.0)
+                qw = np.cos(angle / 2.0)
+                _set_body_quat(self.state_0, idx, [0.0, 0.0, qz, qw])
 
     def step(self):
         self.simulate()
@@ -264,23 +310,26 @@ class Example:
         body_q = self.state_0.body_q.numpy()
         assert np.isfinite(body_q).all(), "Non-finite values in body positions"
 
-        # body 0=P1, 1=P2, 2=left (light), 3=right (heavy)
-        left_y = body_q[2][1]
-        right_y = body_q[3][1]
-        assert right_y < 1.0, f"Right (heavy) body should descend: y={right_y}"
-        assert left_y > 1.0, f"Left (light) body should ascend: y={left_y}"
+        # body 0=P1, 1=P2, 2=P3, 3=sphere, 4=capsule(light), 5=box(heavy)
+        capsule_y = body_q[4][1]
+        box_y = body_q[5][1]
+        assert box_y < 1.0, f"Box (heavy) should descend: y={box_y}"
+        assert capsule_y > 1.2, f"Capsule (light) should ascend: y={capsule_y}"
 
-        # both pulleys should rotate the same direction (both negative = CW)
-        assert self.p1_angle * self.p2_angle > 0, (
-            f"Pulleys should rotate same direction: P1={self.p1_angle:.2f}, P2={self.p2_angle:.2f}"
-        )
+        angles = [self.p1_angle, self.p2_angle, self.p3_angle]
+        signs = [np.sign(a) for a in angles if abs(a) > 0.01]
+        if len(signs) > 1:
+            assert all(s == signs[0] for s in signs), (
+                f"Pulleys should rotate same direction: "
+                f"P1={self.p1_angle:.2f}, P2={self.p2_angle:.2f}, P3={self.p3_angle:.2f}"
+            )
 
     def render(self):
         if self.viewer is not None:
             self.viewer.begin_frame(self.sim_time)
             self.viewer.log_state(self.state_0)
             starts, ends = _get_tendon_cable_lines(self.solver, self.model, self.state_0)
-            self.viewer.log_lines("cable", starts, ends, colors=(0.2, 0.7, 1.0), width=0.008)
+            self.viewer.log_lines("cable", starts, ends, colors=(1.0, 0.6, 0.1), width=0.008)
             self.viewer.end_frame()
 
 

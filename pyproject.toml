@@ -152,7 +152,10 @@ torch = [
 ]
 
 [dependency-groups]
-dev = ["asv>=0.6.4"]
+dev = [
+    "asv>=0.6.4",
+    "imageio[ffmpeg]>=2.37.3",
+]
 
 [tool.ruff]
 cache-dir = ".cache/ruff"

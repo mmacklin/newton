@@ -207,7 +207,8 @@ class Example:
         if self.viewer is not None:
             self.viewer.set_model(self.model)
             self.viewer.set_camera(pos=wp.vec3(0.0, 1.5, 4.0), pitch=-5.0, yaw=-90.0)
-            self.viewer.renderer.show_wireframe_overlay = True
+            if hasattr(self.viewer, "renderer"):
+                self.viewer.renderer.show_wireframe_overlay = True
 
     def simulate(self):
         for _ in range(self.sim_substeps):
