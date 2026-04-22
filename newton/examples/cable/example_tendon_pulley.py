@@ -120,6 +120,7 @@ class Example:
 
         if viewer is not None:
             self.viewer.set_model(self.model)
+            self.viewer.set_camera(pos=wp.vec3(0.0, 1.5, 4.0), pitch=-5.0, yaw=-90.0)
 
     def simulate(self):
         for _ in range(self.sim_substeps):
