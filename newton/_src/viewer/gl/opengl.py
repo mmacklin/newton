@@ -1024,9 +1024,25 @@ class RendererGL:
 
         self._title = title
 
-        try:
-            # try to enable MSAA
-            config = pyglet.gl.Config(sample_buffers=1, samples=8, double_buffer=True)
+        self.msaa_samples = 0
+        for samples in (8, 4, 2):
+            try:
+                config = pyglet.gl.Config(sample_buffers=1, samples=samples, double_buffer=True)
+                self.window = pyglet.window.Window(
+                    width=screen_width,
+                    height=screen_height,
+                    caption=title,
+                    resizable=True,
+                    vsync=vsync,
+                    visible=not headless,
+                    config=config,
+                )
+                gl.glEnable(gl.GL_MULTISAMPLE)
+                self.msaa_samples = samples
+                break
+            except pyglet.window.NoSuchConfigException:
+                continue
+        else:
             self.window = pyglet.window.Window(
                 width=screen_width,
                 height=screen_height,
@@ -1034,22 +1050,7 @@ class RendererGL:
                 resizable=True,
                 vsync=vsync,
                 visible=not headless,
-                config=config,
             )
-            gl.glEnable(gl.GL_MULTISAMPLE)
-            # remember sample count for later (e.g., resolving FBO)
-            self.msaa_samples = 4
-        except pyglet.window.NoSuchConfigException:
-            print("Warning: Could not get MSAA config, falling back to non-AA.")
-            self.window = pyglet.window.Window(
-                width=screen_width,
-                height=screen_height,
-                caption=title,
-                resizable=True,
-                vsync=vsync,
-                visible=not headless,
-            )
-            self.msaa_samples = 0
 
         self._set_icon()
 
