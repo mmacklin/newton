@@ -1,0 +1,97 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 The Newton Developers
+# SPDX-License-Identifier: Apache-2.0
+
+"""Shared utilities for tendon/cable examples."""
+
+import numpy as np
+import warp as wp
+
+from newton._src.sim.tendon import TendonLinkType
+
+
+def quat_multiply(q1, q2):
+    """Multiply two quaternions in (x, y, z, w) format."""
+    x1, y1, z1, w1 = q1
+    x2, y2, z2, w2 = q2
+    return np.array([
+        w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+        w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+        w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+        w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+    ])
+
+
+def get_tendon_cable_lines(solver, model, state):
+    """Build line-segment arrays for tendon visualization including arc wraps."""
+    att_l = solver.tendon_seg_attachment_l.numpy()
+    att_r = solver.tendon_seg_attachment_r.numpy()
+
+    starts_list = []
+    ends_list = []
+    for i in range(model.tendon_segment_count):
+        starts_list.append(att_l[i])
+        ends_list.append(att_r[i])
+
+    tendon_start = model.tendon_start.numpy()
+    link_type = model.tendon_link_type.numpy()
+    link_body = model.tendon_link_body.numpy()
+    link_offset = model.tendon_link_offset.numpy()
+    link_axis = model.tendon_link_axis.numpy()
+    body_q = state.body_q.numpy()
+
+    seg = 0
+    for t in range(model.tendon_count):
+        start = tendon_start[t]
+        end = tendon_start[t + 1]
+        num_links = end - start
+        for i in range(start + 1, end - 1):
+            if link_type[i] == int(TendonLinkType.ROLLING):
+                b = link_body[i]
+                pose = body_q[b]
+                p = pose[:3]
+                q = pose[3:]
+                off = link_offset[i]
+                ax = link_axis[i]
+                t2 = 2.0 * np.cross(q[:3], off)
+                center = off + q[3] * t2 + np.cross(q[:3], t2) + p
+                t2n = 2.0 * np.cross(q[:3], ax)
+                normal = ax + q[3] * t2n + np.cross(q[:3], t2n)
+
+                seg_left = seg + (i - start) - 1
+                seg_right = seg + (i - start)
+                pt_dep = att_r[seg_left]
+                pt_arr = att_l[seg_right]
+
+                r_dep = pt_dep - center
+                r_arr = pt_arr - center
+                cross_val = np.dot(np.cross(r_dep, r_arr), normal)
+                dot_val = np.dot(r_dep, r_arr)
+                total_angle = np.arctan2(cross_val, dot_val)
+                if np.isnan(total_angle):
+                    continue
+
+                n_arc = max(8, int(abs(total_angle) / 0.2))
+                for j in range(n_arc):
+                    frac0 = j / n_arc
+                    frac1 = (j + 1) / n_arc
+                    angle0 = frac0 * total_angle
+                    angle1 = frac1 * total_angle
+                    c0, s0 = np.cos(angle0), np.sin(angle0)
+                    p0 = center + r_dep * c0 + np.cross(normal, r_dep) * s0
+                    c1, s1 = np.cos(angle1), np.sin(angle1)
+                    p1 = center + r_dep * c1 + np.cross(normal, r_dep) * s1
+                    starts_list.append(p0)
+                    ends_list.append(p1)
+
+        seg += num_links - 1
+
+    starts = wp.array(np.array(starts_list, dtype=np.float32), dtype=wp.vec3)
+    ends = wp.array(np.array(ends_list, dtype=np.float32), dtype=wp.vec3)
+    return starts, ends
+
+
+def set_body_quat(state, body_idx, quat_xyzw):
+    """Write a quaternion (x,y,z,w) into body_q for a kinematic body."""
+    bq = state.body_q.numpy()
+    bq[body_idx][3:7] = quat_xyzw
+    state.body_q = wp.array(bq, dtype=wp.transform, device=state.body_q.device)
