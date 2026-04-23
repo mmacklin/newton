@@ -254,18 +254,23 @@ def distribute_tendon_rest_lengths(
     tendon_link_body: wp.array(dtype=int),
     tendon_link_type: wp.array(dtype=int),
     tendon_link_radius: wp.array(dtype=float),
+    tendon_link_orientation: wp.array(dtype=int),
+    tendon_link_mu: wp.array(dtype=float),
     tendon_link_offset: wp.array(dtype=wp.vec3),
     tendon_link_axis: wp.array(dtype=wp.vec3),
     body_q: wp.array(dtype=wp.transform),
+    body_qd: wp.array(dtype=wp.spatial_vector),
     seg_rest_length: wp.array(dtype=float),
     seg_attachment_l: wp.array(dtype=wp.vec3),
     seg_attachment_r: wp.array(dtype=wp.vec3),
     seg_link_l: wp.array(dtype=int),
+    dt: float,
 ):
-    """Distribute total cable rest length across segments proportional to current lengths.
+    """Distribute cable rest length across segments with friction-aware transfer.
 
-    For each tendon: total_cable (constant) minus wrap arcs gives distributable rest.
-    Proportional distribution equalises stretch ratios, equivalent to a frictionless pulley.
+    For mu=0 contacts: proportional distribution (frictionless, equalises stretch).
+    For mu>0 contacts: transfer rest length at pulley rim speed (omega * R * dt),
+    coupling the cable to the pulley's rotation.
     Launched with dim = tendon_count.
     """
     tendon_id = wp.tid()
@@ -279,6 +284,16 @@ def distribute_tendon_rest_lengths(
     seg_offset = int(0)
     for t in range(tendon_id):
         seg_offset = seg_offset + (tendon_start[t + 1] - tendon_start[t] - 1)
+
+    # check if any rolling contact has mu > 0
+    friction_count = int(0)
+    for i in range(num_links):
+        if i < 1 or i >= num_links - 1:
+            continue
+        link_idx = link_start + i
+        if tendon_link_type[link_idx] == int(TendonLinkType.ROLLING):
+            if tendon_link_mu[link_idx] > 0.0:
+                friction_count = friction_count + 1
 
     # compute total wrap arc at rolling contacts
     total_wrap = float(0.0)
@@ -304,19 +319,91 @@ def distribute_tendon_rest_lengths(
     total_rest = tendon_total_cable[tendon_id] - total_wrap
     total_rest = wp.max(total_rest, 0.0)
 
-    # compute current segment lengths
-    total_length = float(0.0)
-    for s in range(num_segs):
-        seg = seg_offset + s
-        d = wp.length(seg_attachment_r[seg] - seg_attachment_l[seg])
-        total_length = total_length + d
-
-    # distribute proportionally to current lengths
-    if total_length > 1.0e-8:
+    if friction_count == 0:
+        # --- frictionless path: proportional distribution (unchanged) ---
+        total_length = float(0.0)
         for s in range(num_segs):
             seg = seg_offset + s
             d = wp.length(seg_attachment_r[seg] - seg_attachment_l[seg])
-            seg_rest_length[seg] = total_rest * d / total_length
+            total_length = total_length + d
+
+        if total_length > 1.0e-8:
+            for s in range(num_segs):
+                seg = seg_offset + s
+                d = wp.length(seg_attachment_r[seg] - seg_attachment_l[seg])
+                seg_rest_length[seg] = total_rest * d / total_length
+    else:
+        # --- friction path: stick transfer + capstan slip ---
+        for i in range(num_links):
+            if i < 1 or i >= num_links - 1:
+                continue
+            link_idx = link_start + i
+            if tendon_link_type[link_idx] != int(TendonLinkType.ROLLING):
+                continue
+            mu = tendon_link_mu[link_idx]
+            if mu <= 0.0:
+                continue
+
+            body_idx = tendon_link_body[link_idx]
+            pose = body_q[body_idx]
+            normal_world = wp.transform_vector(pose, tendon_link_axis[link_idx])
+            radius = tendon_link_radius[link_idx]
+            orient = tendon_link_orientation[link_idx]
+
+            seg_left = seg_offset + i - 1
+            seg_right = seg_offset + i
+
+            # --- stick: transfer at rim speed ---
+            omega = wp.spatial_bottom(body_qd[body_idx])
+            omega_axis = wp.dot(omega, normal_world)
+            delta = omega_axis * radius * float(orient) * dt
+
+            rest_l = seg_rest_length[seg_left]
+            rest_r = seg_rest_length[seg_right]
+            delta = wp.clamp(delta, -rest_r * 0.5, rest_l * 0.5)
+            rest_l = rest_l - delta
+            rest_r = rest_r + delta
+
+            # --- slip: capstan bound on stretch ratio ---
+            center = wp.transform_point(pose, tendon_link_offset[link_idx])
+            pt_dep = seg_attachment_r[seg_left]
+            pt_arr = seg_attachment_l[seg_right]
+            theta = wrap_angle(pt_dep, pt_arr, center, normal_world)
+            capstan_bound = wp.exp(mu * theta)
+
+            len_l = wp.length(seg_attachment_r[seg_left] - seg_attachment_l[seg_left])
+            len_r = wp.length(seg_attachment_r[seg_right] - seg_attachment_l[seg_right])
+            stretch_l = wp.max(len_l - rest_l, 0.0)
+            stretch_r = wp.max(len_r - rest_r, 0.0)
+
+            # transfer from slack side to tight side if ratio exceeds bound
+            eps = 1.0e-6
+            if stretch_r > stretch_l * capstan_bound + eps:
+                # right is tight: cable slides left → right
+                slip = (stretch_r - capstan_bound * stretch_l) / (1.0 + capstan_bound)
+                slip = wp.min(slip, rest_l * 0.5)
+                rest_l = rest_l - slip
+                rest_r = rest_r + slip
+            elif stretch_l > stretch_r * capstan_bound + eps:
+                # left is tight: cable slides right → left
+                slip = (stretch_l - capstan_bound * stretch_r) / (1.0 + capstan_bound)
+                slip = wp.min(slip, rest_r * 0.5)
+                rest_l = rest_l + slip
+                rest_r = rest_r - slip
+
+            seg_rest_length[seg_left] = rest_l
+            seg_rest_length[seg_right] = rest_r
+
+        # conservation correction: scale rest lengths to match distributable
+        sum_rest = float(0.0)
+        for s in range(num_segs):
+            sum_rest = sum_rest + seg_rest_length[seg_offset + s]
+
+        if sum_rest > 1.0e-8:
+            scale = total_rest / sum_rest
+            for s in range(num_segs):
+                seg = seg_offset + s
+                seg_rest_length[seg] = seg_rest_length[seg] * scale
 
 
 @wp.kernel
@@ -327,6 +414,8 @@ def solve_tendon_segments(
     body_inv_mass: wp.array(dtype=float),
     body_inv_inertia: wp.array(dtype=wp.mat33),
     tendon_link_body: wp.array(dtype=int),
+    tendon_link_type: wp.array(dtype=int),
+    tendon_link_mu: wp.array(dtype=float),
     seg_rest_length: wp.array(dtype=float),
     seg_attachment_l: wp.array(dtype=wp.vec3),
     seg_attachment_r: wp.array(dtype=wp.vec3),
@@ -341,8 +430,11 @@ def solve_tendon_segments(
 ):
     """Phase 3: Solve unilateral distance constraints for each tendon segment.
 
-    Launched with dim = tendon_segment_count. Each segment is a distance
-    constraint between attachment points on two rigid bodies.
+    For mu=0 rolling contacts, the angular Jacobian on the rolling body is
+    zeroed so that the cable cannot apply torque to a frictionless pulley.
+    For mu>0, full angular coupling lets the constraint drive pulley rotation.
+
+    Launched with dim = tendon_segment_count.
     """
     seg = wp.tid()
     link_l = seg_link_l[seg]
@@ -351,10 +443,19 @@ def solve_tendon_segments(
     body_l = tendon_link_body[link_l]
     body_r = tendon_link_body[link_r]
 
+    type_l = tendon_link_type[link_l]
+    type_r = tendon_link_type[link_r]
+    mu_l = tendon_link_mu[link_l]
+    mu_r = tendon_link_mu[link_r]
+
+    # determine angular decoupling: zero angular Jacobian for frictionless rolling bodies
+    decouple_ang_l = (type_l == int(TendonLinkType.ROLLING)) and (mu_l <= 0.0)
+    decouple_ang_r = (type_r == int(TendonLinkType.ROLLING)) and (mu_r <= 0.0)
+
     pose_l = body_q[body_l]
     pose_r = body_q[body_r]
-    vel_l = wp.spatial_top(body_qd[body_l])    # linear velocity
-    omega_l = wp.spatial_bottom(body_qd[body_l])  # angular velocity
+    vel_l = wp.spatial_top(body_qd[body_l])
+    omega_l = wp.spatial_bottom(body_qd[body_l])
     vel_r = wp.spatial_top(body_qd[body_r])
     omega_r = wp.spatial_bottom(body_qd[body_r])
 
@@ -389,11 +490,15 @@ def solve_tendon_segments(
     r_l = x_l - world_com_l
     r_r = x_r - world_com_r
 
-    # Jacobians
+    # Jacobians — zero angular for frictionless rolling bodies
     linear_l = -n
     linear_r = n
-    angular_l = -wp.cross(r_l, n)
-    angular_r = wp.cross(r_r, n)
+    angular_l = wp.vec3(0.0, 0.0, 0.0)
+    angular_r = wp.vec3(0.0, 0.0, 0.0)
+    if not decouple_ang_l:
+        angular_l = -wp.cross(r_l, n)
+    if not decouple_ang_r:
+        angular_r = wp.cross(r_r, n)
 
     # constraint velocity
     derr = (
@@ -425,7 +530,7 @@ def solve_tendon_segments(
 
     seg_lambda[seg] = lambda_prev + d_lambda
 
-    # apply positional corrections
+    # apply positional corrections — zero angular for decoupled bodies
     lin_delta_l = linear_l * (d_lambda * relaxation)
     ang_delta_l = angular_l * (d_lambda * relaxation)
     lin_delta_r = linear_r * (d_lambda * relaxation)
