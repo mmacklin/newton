@@ -324,6 +324,13 @@ add_example_test(
 )
 add_example_test(
     TestCableExamples,
+    name="cable.example_tendon_xy_table",
+    devices=test_devices,
+    use_viewer=True,
+    test_options={"num-frames": 480},
+)
+add_example_test(
+    TestCableExamples,
     name="cable.example_tendon_capstan_friction",
     devices=test_devices,
     use_viewer=True,

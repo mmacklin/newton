@@ -656,22 +656,19 @@ def store_tendon_theta_ref(
     link_end = tendon_start[tendon_id + 1]
     num_links = link_end - link_start
 
-    coupling_theta_ref[tendon_id] = 0.0
-
     for i in range(num_links):
-        if i < 1 or i >= num_links - 1:
-            continue
         link_idx = link_start + i
         if tendon_link_type[link_idx] != int(TendonLinkType.ROLLING):
+            coupling_theta_ref[link_idx] = 0.0
             continue
         if tendon_link_mu[link_idx] <= 0.0:
+            coupling_theta_ref[link_idx] = 0.0
             continue
         body_idx = tendon_link_body[link_idx]
         axis = tendon_link_axis[link_idx]
         q = wp.transform_get_rotation(body_q[body_idx])
         q_vec = wp.vec3(q[0], q[1], q[2])
-        coupling_theta_ref[tendon_id] = 2.0 * wp.atan2(wp.dot(q_vec, axis), q[3])
-        return
+        coupling_theta_ref[link_idx] = 2.0 * wp.atan2(wp.dot(q_vec, axis), q[3])
 
 
 @wp.kernel
@@ -749,7 +746,7 @@ def update_tendon_coupling_rest(
             seg_compliance[seg_right],
         )
 
-        d_theta = theta - coupling_theta_ref[tendon_id]
+        d_theta = theta - coupling_theta_ref[link_idx]
         stick = capstan_stick_fraction(
             tendon_link_mu[link_idx],
             theta_wrap,
@@ -763,8 +760,7 @@ def update_tendon_coupling_rest(
         transfer = wp.clamp(transfer, -rest_r + 1.0e-6, rest_l - 1.0e-6)
         seg_rest_length[seg_left] = rest_l - transfer
         seg_rest_length[seg_right] = rest_r + transfer
-        coupling_theta_ref[tendon_id] = theta
-        return
+        coupling_theta_ref[link_idx] = theta
 
 
 @wp.kernel

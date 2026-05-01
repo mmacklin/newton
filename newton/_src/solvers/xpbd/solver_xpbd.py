@@ -170,7 +170,7 @@ class SolverXPBD(SolverBase):
             self.tendon_seg_attachment_l = wp.zeros(model.tendon_segment_count, dtype=wp.vec3)
             self.tendon_seg_attachment_r = wp.zeros(model.tendon_segment_count, dtype=wp.vec3)
             self.tendon_seg_lambda = wp.zeros(model.tendon_segment_count, dtype=float)
-            self.tendon_coupling_theta_ref = wp.zeros(model.tendon_count, dtype=float)
+            self.tendon_coupling_theta_ref = wp.zeros(model.tendon_link_count, dtype=float)
             self.tendon_noslip_ref = wp.zeros(model.tendon_segment_count, dtype=float)
             self.tendon_noslip_lambda = wp.zeros(model.tendon_segment_count, dtype=float)
 

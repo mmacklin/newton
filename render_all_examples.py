@@ -1,14 +1,12 @@
 """Render all tendon examples headless to MP4."""
 
-import os
-import sys
 import importlib
+import os
+import traceback
 
 os.environ["DISPLAY"] = ":99"
 
 import imageio
-import numpy as np
-import warp as wp
 
 from newton.viewer import ViewerGL
 
@@ -18,6 +16,7 @@ EXAMPLES = [
     ("tendon_compound_pulley", "newton.examples.cable.example_tendon_compound_pulley"),
     ("tendon_cable_machine", "newton.examples.cable.example_tendon_cable_machine"),
     ("tendon_3d_routing", "newton.examples.cable.example_tendon_3d_routing"),
+    ("tendon_xy_table", "newton.examples.cable.example_tendon_xy_table"),
 ]
 
 NUM_FRAMES = 240
@@ -74,7 +73,6 @@ def main():
             paths[name] = mp4_path
         except Exception as e:
             print(f"  FAILED: {e}")
-            import traceback
             traceback.print_exc()
 
     print(f"\n{'='*60}")
