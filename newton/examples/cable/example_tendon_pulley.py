@@ -20,6 +20,7 @@ import newton
 import newton.examples
 from newton._src.sim.builder import Axis
 from newton._src.sim.tendon import TendonLinkType
+from newton.examples.cable.cable import assert_tendon_total_length
 
 
 class Example:
@@ -112,7 +113,11 @@ class Example:
         self.simulate()
         self.sim_time += self.frame_dt
 
+    def test_post_step(self):
+        assert_tendon_total_length(self)
+
     def test_final(self):
+        assert_tendon_total_length(self)
         body_q = self.state_0.body_q.numpy()
         assert np.isfinite(body_q).all(), "Non-finite values in body positions"
         weight_z = body_q[1][2]

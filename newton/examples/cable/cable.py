@@ -90,6 +90,114 @@ def get_tendon_cable_lines(solver, model, state):
     return starts, ends
 
 
+def _transform_point_np(pose, point):
+    p = pose[:3]
+    q = pose[3:]
+    t = 2.0 * np.cross(q[:3], point)
+    return p + point + q[3] * t + np.cross(q[:3], t)
+
+
+def _transform_vector_np(pose, vector):
+    q = pose[3:]
+    t = 2.0 * np.cross(q[:3], vector)
+    return vector + q[3] * t + np.cross(q[:3], t)
+
+
+def get_tendon_total_lengths(solver, model, state):
+    """Return geometric total cable length for each tendon.
+
+    The total includes straight segment distances plus wrap arc lengths at
+    rolling links.  This is the measured counterpart of
+    ``solver.tendon_total_cable``.
+    """
+    if model.tendon_count == 0:
+        return np.zeros(0, dtype=np.float32)
+
+    att_l = solver.tendon_seg_attachment_l.numpy()
+    att_r = solver.tendon_seg_attachment_r.numpy()
+    tendon_start = model.tendon_start.numpy()
+    link_type = model.tendon_link_type.numpy()
+    link_body = model.tendon_link_body.numpy()
+    link_offset = model.tendon_link_offset.numpy()
+    link_axis = model.tendon_link_axis.numpy()
+    link_radius = model.tendon_link_radius.numpy()
+    body_q = state.body_q.numpy()
+
+    lengths = np.zeros(model.tendon_count, dtype=np.float32)
+    seg = 0
+    for t in range(model.tendon_count):
+        start = tendon_start[t]
+        end = tendon_start[t + 1]
+        num_links = end - start
+        seg_base = seg
+        total = 0.0
+
+        for s in range(num_links - 1):
+            total += np.linalg.norm(att_r[seg_base + s] - att_l[seg_base + s])
+
+        for i in range(start + 1, end - 1):
+            if link_type[i] != int(TendonLinkType.ROLLING):
+                continue
+
+            pose = body_q[link_body[i]]
+            center = _transform_point_np(pose, link_offset[i])
+            normal = _transform_vector_np(pose, link_axis[i])
+            seg_left = seg_base + (i - start) - 1
+            seg_right = seg_base + (i - start)
+            r_left = att_r[seg_left] - center
+            r_right = att_l[seg_right] - center
+            cross_val = np.dot(np.cross(r_left, r_right), normal)
+            dot_val = np.dot(r_left, r_right)
+            theta = abs(np.arctan2(cross_val, dot_val))
+            total += theta * link_radius[i]
+
+        lengths[t] = total
+        seg += num_links - 1
+
+    return lengths
+
+
+def assert_tendon_total_length(example, rel_tol=0.05, abs_tol=1.0e-3):
+    """Assert that an example's geometric cable lengths stay near target.
+
+    The check stores peak absolute and relative errors on *example* so a
+    failure reports both the current error and the worst error seen so far.
+    """
+    model = example.model
+    if model.tendon_count == 0:
+        return
+
+    current = get_tendon_total_lengths(example.solver, model, example.state_0)
+    expected = example.solver.tendon_total_cable.numpy()
+    abs_err = np.abs(current - expected)
+    rel_err = abs_err / np.maximum(np.abs(expected), 1.0e-8)
+
+    max_abs = getattr(example, "_tendon_total_length_max_abs_error", None)
+    max_rel = getattr(example, "_tendon_total_length_max_rel_error", None)
+    if max_abs is None or len(max_abs) != len(abs_err):
+        max_abs = np.zeros_like(abs_err)
+        max_rel = np.zeros_like(rel_err)
+
+    max_abs = np.maximum(max_abs, abs_err)
+    max_rel = np.maximum(max_rel, rel_err)
+    example._tendon_total_length_max_abs_error = max_abs
+    example._tendon_total_length_max_rel_error = max_rel
+
+    allowed = abs_tol + rel_tol * np.maximum(np.abs(expected), 1.0e-8)
+    failed = np.nonzero(abs_err > allowed)[0]
+    if len(failed) == 0:
+        return
+
+    details = []
+    for i in failed:
+        details.append(
+            f"tendon {i}: current={current[i]:.6f}, expected={expected[i]:.6f}, "
+            f"abs_err={abs_err[i]:.6f}, rel_err={rel_err[i]:.4%}, "
+            f"max_abs={max_abs[i]:.6f}, max_rel={max_rel[i]:.4%}, allowed={allowed[i]:.6f}"
+        )
+    raise AssertionError("Tendon total cable length error exceeded tolerance: " + "; ".join(details))
+
+
 def set_body_quat(state, body_idx, quat_xyzw):
     """Write a quaternion (x,y,z,w) into body_q for a kinematic body."""
     bq = state.body_q.numpy()

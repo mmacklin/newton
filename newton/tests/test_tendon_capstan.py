@@ -264,13 +264,13 @@ def test_critical_friction(test, device):
         # mu_crit = ln(3)/pi ≈ 0.35 for 3:1 mass ratio
         # Use slightly below critical so there's still some motion
         mu_sub = 0.30
-        model_sub, left_sub, right_sub = build_asymmetric_atwood(
+        model_sub, _, right_sub = build_asymmetric_atwood(
             mass_left=1.0, mass_right=3.0, mu=mu_sub,
         )
         state_sub = run_atwood(model_sub, num_frames=60)
         bq_sub = state_sub.body_q.numpy()
 
-        model_free, left_free, right_free = build_asymmetric_atwood(
+        model_free, _, right_free = build_asymmetric_atwood(
             mass_left=1.0, mass_right=3.0, mu=0.0,
         )
         state_free = run_atwood(model_free, num_frames=60)
@@ -339,6 +339,42 @@ def test_frictionless_dynamic_no_rotation(test, device):
                            f"Light weight should ascend: z={left_z:.3f}")
         test.assertLess(right_z, 2.0,
                         f"Heavy weight should descend: z={right_z:.3f}")
+
+
+def test_dynamic_slip_decreases_with_mu(test, device):
+    """Dynamic pulley: increasing mu transmits more cable motion to the rim."""
+    with wp.ScopedDevice(device):
+        pulley_radius = 0.15
+        mus = [0.0, 0.025, 0.05, 0.10]
+        rim_displacements = []
+
+        for mu in mus:
+            model, _, _, pulley_idx = build_dynamic_atwood(
+                mass_left=1.0, mass_right=3.0, mu=mu,
+                pulley_radius=pulley_radius, pulley_mass=5.0,
+            )
+            state = run_atwood(model, num_frames=30, substeps=8)
+            bq = state.body_q.numpy()
+            test.assertTrue(np.isfinite(bq).all(), f"Non-finite body positions at mu={mu}")
+
+            qy = float(bq[pulley_idx][4])
+            qw = float(bq[pulley_idx][6])
+            dtheta = abs(2.0 * np.arctan2(qy, qw))
+            rim_displacements.append(dtheta * pulley_radius)
+
+        for i in range(len(mus) - 1):
+            test.assertLessEqual(
+                rim_displacements[i],
+                rim_displacements[i + 1] + 0.005,
+                f"Rim displacement should increase as slip decreases: "
+                f"mu={mus[i]} rim={rim_displacements[i]:.4f}, "
+                f"mu={mus[i+1]} rim={rim_displacements[i+1]:.4f}",
+            )
+        test.assertGreater(
+            rim_displacements[-1],
+            rim_displacements[0] + 0.03,
+            f"Finite friction should couple pulley rotation: rims={rim_displacements}",
+        )
 
 
 def test_stick_dx_equals_dtheta_r(test, device):
@@ -420,6 +456,7 @@ add_test(TestTendonCapstan, "high_friction_locked", devices, test_high_friction_
 add_test(TestTendonCapstan, "critical_friction", devices, test_critical_friction)
 add_test(TestTendonCapstan, "friction_monotonic", devices, test_friction_monotonic)
 add_test(TestTendonCapstan, "frictionless_dynamic_no_rotation", devices, test_frictionless_dynamic_no_rotation)
+add_test(TestTendonCapstan, "dynamic_slip_decreases_with_mu", devices, test_dynamic_slip_decreases_with_mu)
 add_test(TestTendonCapstan, "stick_dx_equals_dtheta_r", devices, test_stick_dx_equals_dtheta_r)
 add_test(TestTendonCapstan, "small_inertia_equivalence", devices, test_small_inertia_equivalence)
 

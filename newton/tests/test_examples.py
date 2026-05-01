@@ -322,6 +322,20 @@ add_example_test(
     use_viewer=True,
     test_options={"num-frames": 100},
 )
+add_example_test(
+    TestCableExamples,
+    name="cable.example_tendon_capstan_friction",
+    devices=test_devices,
+    use_viewer=True,
+    test_options={"num-frames": 100},
+)
+add_example_test(
+    TestCableExamples,
+    name="cable.example_tendon_capstan_kinematic",
+    devices=test_devices,
+    use_viewer=True,
+    test_options={"num-frames": 100},
+)
 
 
 class TestClothExamples(unittest.TestCase):

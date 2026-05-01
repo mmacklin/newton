@@ -37,26 +37,139 @@ when `rest_length=-1`).
 ```
 builder.py          add_tendon(), add_tendon_link() — builds Model arrays
 tendon.py           TendonLinkType enum
-solver_xpbd.py      Tendon state init + three-phase kernel dispatch per substep
+solver_xpbd.py      Tendon state init + per-substep kernel dispatch
 tendon_kernels.py   Warp GPU kernels (geometry, rest-length distribution, XPBD solve)
-cable.py            Shared visualization utilities (tangent-point line extraction)
+cable.py            Shared visualization and cable-length test utilities
 ```
 
 ### Solver pipeline (per substep)
 
-1. **`compute_tendon_tangent_points`** — For each rolling contact, compute
+1. **`update_tendon_attachments`** — For each rolling contact, compute
    tangent points from the neighboring waypoints onto the cylinder surface.
    Iterative for 3D (non-coplanar) configurations.
 
-2. **`distribute_tendon_rest_lengths`** — Redistribute rest length across
-   segments proportionally to current segment length, preserving total cable
-   length.  This is the frictionless-pulley model: tension equalizes across
-   all segments.
+2. **`distribute_tendon_rest_lengths`** — Initialize rest lengths across
+   segments while preserving total cable length. This is the free-sliding
+   baseline; rolling friction is applied by the rolling contact rows.
 
 3. **`solve_tendon_segments`** — XPBD position-level constraint solve.
    Each segment enforces `length ≤ rest_length` with configurable compliance
    and damping.  Body positions and velocities are corrected via inverse-mass
-   weighted deltas on the shared rigid bodies.
+   weighted deltas on the shared rigid bodies. Frictional rolling contacts add
+   a no-slip coupling row scaled by the capstan tension bound.
+
+4. **`update_tendon_coupling_rest`** — Per iteration, apply incremental
+   rolling-contact rest-length transfer from accepted rim motion. Kinematic
+   rolling bodies have zero inverse inertia, so their `dtheta` is zero and no
+   rim-motion transfer occurs.
+
+## Formulation decisions
+
+This implementation deliberately separates three ideas that are easy to
+conflate: cable stretch, cable redistribution, and rolling contact friction.
+
+### Cable length is stored once
+
+Each tendon stores a fixed total cable length:
+
+```text
+L_total = sum(segment_rest_lengths) + sum(wrap_angle * radius)
+```
+
+The mutable per-segment rest lengths are the solver's distribution of that
+fixed cable length across straight spans.  Rest length can move between
+neighboring spans, but the target total is not supposed to drift.  The example
+tests measure the geometric total length as straight span lengths plus wrap
+arcs and compare it against this stored target.
+
+Because the segment constraint is unilateral, a slack route can have a current
+taut geometric length smaller than `L_total`.  That is slack, not cable loss.
+Positive error corresponds to actual stretch; negative error corresponds to
+unrepresented slack length.
+
+### Stretch and rolling are separate constraints
+
+The stretch row for a segment is the unilateral XPBD distance constraint:
+
+```text
+C_stretch = |x_r - x_l| - rest <= 0
+```
+
+For rolling links, this row does not directly torque the pulley.  The straight
+span endpoint is a tangent point, and using the stretch row's angular Jacobian
+as the rolling friction model would mix geometric length enforcement with
+rim-contact friction.  Instead, rolling contact is represented by a separate
+constraint row that couples cable travel to rim travel:
+
+```text
+C_roll = dx - sign * R * dtheta = 0
+```
+
+Equivalently, for a segment adjacent to a frictional rolling pulley the implementation
+stores the invariant:
+
+```text
+segment_length + sign * orientation * R * theta = constant
+```
+
+That rolling row has the pulley angular Jacobian.  This keeps the physics
+meaning of the rows clear: stretch enforces cable length, rolling transfers
+linear cable motion into pulley rotation.
+
+### Friction limits force transfer, not geometry
+
+Capstan friction is expressed as a force/tension admissibility condition:
+
+```text
+T_tight / T_slack <= exp(mu * theta_wrap)
+```
+
+The solver estimates the adjacent segment tensions from the lagged compliant
+stretch residuals:
+
+```text
+T ~= max(length - rest, 0) / compliance
+```
+
+Those estimates are used as Coulomb-style lagged data for the friction
+decision.  We chose this over copying stretch multipliers because it keeps the
+friction decision local to the current stretch state and avoids extra lambda
+bookkeeping.
+
+When the capstan bound can support the requested transfer, the rolling contact
+sticks.  When it cannot, transfer is reduced by the capstan stick fraction.
+The same rolling row is used for dynamic and kinematic pulleys; the only
+difference is the inverse mass/inertia supplied to the row.
+
+### Incremental rolling transfer
+
+Rolling transfer is incremental per solver iteration, not a one-time
+redistribution at the start of the step.  The relevant state is:
+
+```text
+dtheta = theta_current - theta_ref
+du = orientation * R * dtheta
+```
+
+After the transfer is applied, `theta_ref` is updated to the current angle.
+This lets redistribution participate in each XPBD iteration rather than
+lagging an entire time step behind the body solve.
+
+### Dynamic and kinematic pulleys use the same row
+
+The special cases follow from the same constraints and force limits:
+
+| Case | Behavior |
+|------|----------|
+| `mu = 0` | No friction transfer. Cable can slide, and a dynamic pulley receives no rolling torque. |
+| Finite `mu`, below critical | Capstan bound allows only partial transfer; relative slip remains. |
+| Large `mu` / stick | Rolling row enforces zero relative slip: cable travel matches `R * dtheta`. |
+| Dynamic pulley | Rolling transfer spins the pulley and couples its effective inertia `I/R^2` into the cable dynamics. |
+| Kinematic pulley | Infinite mass/inertia means zero inverse mass/inertia; `dtheta = 0`, so high friction locks cable transfer. |
+
+For small dynamic pulley inertia, frictionless and no-slip cable trajectories
+become similar because the pulley stores little energy.  Increasing inertia
+makes the rim motion and no-slip coupling easier to see.
 
 ## Examples
 
@@ -72,6 +185,8 @@ headless MP4 capture.
 | `tendon_3d_routing` | Non-coplanar cylinders with iterative 3D tangent solver |
 | `tendon_equilibrium` | Static equilibrium validation |
 | `tendon_pinhole` | Cable through a fixed point |
+| `tendon_capstan_friction` | Dynamic-pulley capstan friction: frictionless, partial grip, no-slip |
+| `tendon_capstan_kinematic` | Kinematic-pulley capstan friction: free slide, partial slip, lock |
 
 Run with:
 ```bash
@@ -101,33 +216,27 @@ Features remaining to port from the reference implementation.
 
 ### Not yet implemented
 
-1. **Capstan friction** — The `mu` parameter is stored but has no effect in
-   the solver.  Friction should bound the tension ratio between adjacent
-   segments at rolling/pinhole contacts via the Euler-Eytelwein equation
-   (`T1/T2 ≤ exp(μθ)`).  Highest-priority missing physics feature.
-   Reference: `Cable::solve()` tension clamping.
-
-2. **Convex hull profiles** — Reference supports arbitrary mesh cross-sections
+1. **Convex hull profiles** — Reference supports arbitrary mesh cross-sections
    by slicing with the cable plane to get a 2D convex hull.  Newton only
    supports circle profiles (cylinders).  Reference: `addLink()` lines
    240–281, `getTangentPointBody()` lines 80–93.
 
-3. **Pinhole rest-length transfer** — Reference transfers rest length between
+2. **Pinhole rest-length transfer** — Reference transfers rest length between
    segments adjacent to a pinhole based on stretch difference.  Newton's
    proportional distribution doesn't do pinhole-specific transfer.
    Reference: lines 526–557.
 
-4. **Merge/split (dynamic rerouting)** — Dynamically add/remove rolling
+3. **Merge/split (dynamic rerouting)** — Dynamically add/remove rolling
    contacts as cables wrap/unwrap around bodies.  Reference: lines 429–522.
 
-5. **Compression compliance** — Separate compliance for slack cable, allowing
+4. **Compression compliance** — Separate compliance for slack cable, allowing
    configurable buckling stiffness.  Reference: `compressionCompliance`.
 
-6. **Rolling limit detection** — Prevent wrap angle from going negative when
+5. **Rolling limit detection** — Prevent wrap angle from going negative when
    cable tries to unwrap past a pulley edge.  Reference: `inLimit` flag,
    lines 573–641.
 
-7. **Curved cable visualization** — Smooth visual samples along cable arcs
+6. **Curved cable visualization** — Smooth visual samples along cable arcs
    and catenary-like curves for slack segments.  Reference:
    `computeSamples()`.
 
@@ -137,6 +246,9 @@ Features remaining to port from the reference implementation.
 - Fixed attachments and pinhole geometry
 - Unilateral XPBD distance constraints
 - Rest-length redistribution (frictionless)
+- Capstan friction for rolling contacts:
+  `T_tight/T_slack <= exp(mu * theta)`, with kinematic lock and dynamic
+  finite-friction no-slip coupling through the same rolling row.
 - 3D iterative tangent computation for non-coplanar pulleys
 - Auto-computed rest lengths (`rest_length=-1`)
 - Dynamic pulley bodies with finite mass/inertia

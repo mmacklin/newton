@@ -8,7 +8,7 @@
 # different capstan friction coefficients on the pulley:
 #
 #   Left:   mu = 0.0   (frictionless)
-#   Center: mu = 0.025 (subcritical — visible slip)
+#   Center: mu = 0.005 (subcritical — visible partial grip)
 #   Right:  mu = 10.0  (no-slip)
 #
 # Each pulley is a dynamic body on a hinge joint, free to rotate about Y.
@@ -19,8 +19,11 @@
 # The XPBD constraint solver couples the pulley's rotational inertia
 # I/R^2 to the system through the shared body.  The capstan bound
 # activates only when the required tension ratio exceeds exp(mu*theta).
-# With dynamic pulleys, the effective critical mu is lower than
-# ln(3)/pi ≈ 0.35 due to pulley inertia, so mu=0.1 still shows slip.
+# The pulleys use an explicit high inertia so the no-slip case has a
+# visibly different weight trajectory from the freely sliding case.
+# With dynamic pulleys, low finite friction spins the pulley only partially.
+# The red tab on each pulley marks rim rotation; the frictionless pulley
+# should translate the cable without spinning.
 #
 # Command: python -m newton.examples tendon_capstan_friction
 #
@@ -33,7 +36,7 @@ import newton
 import newton.examples
 from newton._src.sim.builder import Axis
 from newton._src.sim.tendon import TendonLinkType
-from newton.examples.cable.cable import get_tendon_cable_lines
+from newton.examples.cable.cable import assert_tendon_total_length, get_tendon_cable_lines
 
 
 class Example:
@@ -50,8 +53,14 @@ class Example:
         builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=-9.81)
 
         self.pulley_radius = 0.15
-        pulley_mass = 5.0
-        self.mus = [0.0, 0.025, 10.0]
+        pulley_mass = 20.0
+        pulley_inertia_y = 0.10
+        pulley_inertia = wp.mat33(
+            0.06, 0.0, 0.0,
+            0.0, pulley_inertia_y, 0.0,
+            0.0, 0.0, 0.06,
+        )
+        self.mus = [0.0, 0.005, 10.0]
         self.x_offsets = [-1.5, 0.0, 1.5]
 
         mass_light = 1.0
@@ -67,15 +76,31 @@ class Example:
         self.left_indices = []
         self.right_indices = []
 
-        for i, (mu, x_off) in enumerate(zip(self.mus, self.x_offsets)):
+        for mu, x_off in zip(self.mus, self.x_offsets, strict=True):
             pulley_pos = wp.vec3(x_off, 0.0, 3.5)
             pulley = builder.add_body(
                 xform=wp.transform(p=pulley_pos, q=wp.quat_identity()),
                 mass=pulley_mass,
+                inertia=pulley_inertia,
+                lock_inertia=True,
             )
             builder.add_shape_cylinder(
                 pulley, xform=wp.transform(q=q_cyl),
                 radius=self.pulley_radius, half_height=0.04,
+            )
+            marker_cfg = newton.ModelBuilder.ShapeConfig(
+                density=0.0,
+                has_shape_collision=False,
+                has_particle_collision=False,
+            )
+            builder.add_shape_box(
+                pulley,
+                xform=wp.transform(p=wp.vec3(0.0, 0.0, self.pulley_radius + 0.025)),
+                hx=0.035,
+                hy=0.055,
+                hz=0.012,
+                cfg=marker_cfg,
+                color=(0.95, 0.10, 0.06),
             )
             j_pulley = builder.add_joint_d6(
                 parent=-1, child=pulley,
@@ -181,6 +206,7 @@ class Example:
         self.sim_time += self.frame_dt
 
     def test_post_step(self):
+        assert_tendon_total_length(self)
         if self.sim_time < self.frame_dt * 1.5:
             att_r = self.solver.tendon_seg_attachment_r.numpy()
             att_l = self.solver.tendon_seg_attachment_l.numpy()
@@ -198,6 +224,7 @@ class Example:
                 )
 
     def test_final(self):
+        assert_tendon_total_length(self)
         body_q = self.state_0.body_q.numpy()
         assert np.isfinite(body_q).all(), "Non-finite values in body positions"
 
