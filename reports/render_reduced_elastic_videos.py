@@ -55,7 +55,7 @@ class RevoluteEndpointFixture:
         self.sim_time = 0.0
         self.length = 1.0
         self.z = 0.18
-        self.mode_q0 = 1.0
+        self.mode_q0 = 1.35
 
         builder = newton.ModelBuilder(gravity=0.0)
         builder.add_ground_plane()
@@ -67,8 +67,8 @@ class RevoluteEndpointFixture:
             inertia=inertia,
             mode_count=1,
             mode_mass=[0.03],
-            mode_stiffness=[3.0],
-            mode_damping=[0.08],
+            mode_stiffness=[2.6],
+            mode_damping=[0.06],
             mode_q=[self.mode_q0],
             mode_shape_fn=self._mode_shape,
             label="elastic_torsion_fixture",
@@ -76,7 +76,7 @@ class RevoluteEndpointFixture:
 
         shape_cfg = newton.ModelBuilder.ShapeConfig()
         shape_cfg.density = 0.0
-        builder.add_shape_box(self.body, hx=self.length / 2.0, hy=0.065, hz=0.035, cfg=shape_cfg)
+        builder.add_shape_box(self.body, hx=self.length / 2.0, hy=0.085, hz=0.05, cfg=shape_cfg)
         self.joint = builder.add_joint_revolute(
             parent=-1,
             child=self.body,
@@ -107,7 +107,7 @@ class RevoluteEndpointFixture:
         )
 
         self.viewer.set_model(self.model)
-        self.viewer.set_camera(wp.vec3(0.52, -1.25, 0.66), -27.0, 90.0)
+        self.viewer.set_camera(wp.vec3(0.55, -1.65, 0.8), -25.0, 90.0)
 
     def _mode_shape(self, x: np.ndarray) -> np.ndarray:
         s = float(x[0] + 0.5 * self.length)
@@ -122,7 +122,7 @@ class RevoluteEndpointFixture:
             t = self.sim_time + substep * self.sim_dt
             self.state_0.clear_forces()
             self._joint_f[:] = 0.0
-            self._joint_f[self.elastic_qd_start + 6] = 3.0 * math.sin(4.0 * t)
+            self._joint_f[self.elastic_qd_start + 6] = 3.4 * math.sin(4.0 * t)
             self.control.joint_f.assign(self._joint_f)
             self.solver.step(self.state_0, self.state_1, self.control, None, self.sim_dt)
             self.state_0, self.state_1 = self.state_1, self.state_0

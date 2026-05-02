@@ -73,7 +73,7 @@ class Example:
         self.d = 0.75
         self.z = 0.12
         self.theta2_0 = 0.75
-        self.mode_q0 = np.array([0.08, 0.05, 0.0], dtype=np.float32)
+        self.mode_q0 = np.array([0.08, 0.08, 0.0], dtype=np.float32)
 
         theta3, theta4 = _solve_fourbar(self.theta2_0, self.a, self.b_rest + float(self.mode_q0[0]), self.c, self.d)
         A = np.array([0.0, 0.0, self.z])
@@ -102,8 +102,8 @@ class Example:
             inertia=inertia,
             mode_count=3,
             mode_mass=[0.04, 0.035, 0.035],
-            mode_stiffness=[10.0, 22.0, 352.0],
-            mode_damping=[0.3, 0.35, 0.7],
+            mode_stiffness=[10.0, 18.0, 288.0],
+            mode_damping=[0.3, 0.3, 0.65],
             mode_q=self.mode_q0,
             mode_shape_fn=self._mode_shape,
             label="elastic_coupler",
@@ -118,7 +118,7 @@ class Example:
         shape_cfg = newton.ModelBuilder.ShapeConfig()
         shape_cfg.density = 0.0
         builder.add_shape_box(self.crank, hx=self.a / 2.0, hy=0.035, hz=0.025, cfg=shape_cfg)
-        builder.add_shape_box(self.coupler, hx=self.b_rest / 2.0, hy=0.028, hz=0.025, cfg=shape_cfg)
+        builder.add_shape_box(self.coupler, hx=self.b_rest / 2.0, hy=0.05, hz=0.03, cfg=shape_cfg)
         builder.add_shape_box(self.rocker, hx=self.c / 2.0, hy=0.035, hz=0.025, cfg=shape_cfg)
 
         self.j_drive = builder.add_joint_revolute(
@@ -242,8 +242,8 @@ class Example:
 
         self._joint_f[:] = 0.0
         self._joint_f[self.elastic_qd_start + 6] = 1.1 * math.sin(4.2 * t)
-        self._joint_f[self.elastic_qd_start + 7] = 0.8 * math.sin(3.0 * t)
-        self._joint_f[self.elastic_qd_start + 8] = 4.0 * math.cos(2.4 * t)
+        self._joint_f[self.elastic_qd_start + 7] = 1.4 * math.sin(3.0 * t)
+        self._joint_f[self.elastic_qd_start + 8] = 7.0 * math.cos(2.4 * t)
         self.control.joint_f.assign(self._joint_f)
 
     def simulate(self):

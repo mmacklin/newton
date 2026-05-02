@@ -216,6 +216,30 @@ def test_elastic_shape_mesh_sampling(test, device):
     np.testing.assert_allclose(phi[right, 1], 0.0, atol=1.0e-6)
 
 
+def test_elastic_shape_box_winding(test, device):
+    hx = 0.5
+    hy = 0.05
+    hz = 0.03
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    body = builder.add_body_elastic(mass=1.0, inertia=_identity_inertia(), mode_count=1)
+    builder.add_shape_box(body, hx=hx, hy=hy, hz=hz)
+    builder.color()
+    model = builder.finalize(device=device)
+
+    vertices = model.elastic_shape_vertex_local.numpy()
+    indices = model.elastic_shape_indices.numpy()
+    test.assertGreater(len(indices), 36)
+
+    for tri in indices.reshape((-1, 3)):
+        a, b, c = vertices[tri]
+        normal = np.cross(b - a, c - a)
+        center = (a + b + c) / 3.0
+        axis = int(np.argmax(np.abs(center / np.array([hx, hy, hz], dtype=np.float32))))
+        expected_sign = 1.0 if center[axis] > 0.0 else -1.0
+        test.assertGreater(float(normal[axis] * expected_sign), 0.0)
+
+
 def test_torsion_render_shape_sampling(test, device):
     length = 1.0
     hy = 0.06
@@ -506,6 +530,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_elastic_shape_mesh_sampling",
         test_elastic_shape_mesh_sampling,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_shape_box_winding",
+        test_elastic_shape_box_winding,
         devices=[device],
     )
     add_function_test(

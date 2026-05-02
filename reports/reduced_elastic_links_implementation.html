@@ -148,7 +148,7 @@
 
     <section class="summary">
       <div class="metric"><strong>3</strong><span>new builder entry points</span></div>
-      <div class="metric"><strong>22</strong><span>focused CPU/CUDA unit cases</span></div>
+      <div class="metric"><strong>24</strong><span>focused CPU/CUDA unit cases</span></div>
       <div class="metric"><strong>3</strong><span>headless ViewerGL MP4s</span></div>
       <div class="metric"><strong>2</strong><span>public reduced-elastic examples</span></div>
     </section>
@@ -223,17 +223,17 @@
       <section class="section">
         <h3>Elastic 4-Bar Linkage</h3>
         <p>The coupler is an elastic link in a revolute-jointed four-bar. The orange coupler mesh is deformed directly from axial and Euler-Bernoulli bending modes; the cyan centerline is only a diagnostic overlay.</p>
-        <video controls preload="metadata" src="assets/reduced_elastic_fourbar.mp4"></video>
+        <video controls preload="metadata" src="assets/reduced_elastic_fourbar.mp4?v=mesh-winding-2"></video>
       </section>
       <section class="section">
         <h3>Revolute Torsion Fixture</h3>
         <p>A revolute endpoint aligned with the beam axis leaves the centerline unchanged. The mesh deformation shows the torsional mode that the old centerline-only rendering could not show.</p>
-        <video controls preload="metadata" src="assets/elastic_revolute_endpoint_fixture.mp4"></video>
+        <video controls preload="metadata" src="assets/elastic_revolute_endpoint_fixture.mp4?v=mesh-winding-2"></video>
       </section>
       <section class="section">
         <h3>Cantilever Tip Load</h3>
         <p>A single elastic link uses the exact Euler-Bernoulli cantilever tip-load shape. The modal coordinate tracks the analytic static solution as the load varies.</p>
-        <video controls preload="metadata" src="assets/reduced_elastic_cantilever_beam.mp4"></video>
+        <video controls preload="metadata" src="assets/reduced_elastic_cantilever_beam.mp4?v=mesh-winding-2"></video>
       </section>
     </div>
 
@@ -251,6 +251,7 @@
         <tr><td><code>test_elastic_endpoint_shape_sampling</code></td><td>Sampling mode shapes at ordinary joint child transforms.</td></tr>
         <tr><td><code>test_elastic_render_shape_sampling</code></td><td>Render polyline sampling and quadratic basis sampling for visible elastic body drawing.</td></tr>
         <tr><td><code>test_elastic_shape_mesh_sampling</code></td><td>Actual elastic render mesh vertex sampling for Euler-Bernoulli bending modes.</td></tr>
+        <tr><td><code>test_elastic_shape_box_winding</code></td><td>Generated elastic box render meshes use outward triangle winding for correct backface culling.</td></tr>
         <tr><td><code>test_torsion_render_shape_sampling</code></td><td>Saint-Venant torsion leaves the centerline fixed while rotating surface vertices.</td></tr>
         <tr><td><code>test_cantilever_tip_load_solution</code></td><td>Analytic Euler-Bernoulli cantilever tip-load displacement <code>P L^3 / (3 E I)</code>.</td></tr>
         <tr><td><code>test_elastic_modal_implicit_solution_vbd</code></td><td>Analytic implicit Euler solution for a forced damped modal oscillator.</td></tr>

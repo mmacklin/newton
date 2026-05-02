@@ -9593,10 +9593,10 @@ class ModelBuilder:
         for i in range(segments):
             base = 4 * i
             nxt = base + 4
-            add_quad(base + 0, nxt + 0, nxt + 1, base + 1)
-            add_quad(base + 1, nxt + 1, nxt + 2, base + 2)
-            add_quad(base + 2, nxt + 2, nxt + 3, base + 3)
-            add_quad(base + 3, nxt + 3, nxt + 0, base + 0)
+            add_quad(base + 0, base + 1, nxt + 1, nxt + 0)
+            add_quad(base + 1, base + 2, nxt + 2, nxt + 1)
+            add_quad(base + 2, base + 3, nxt + 3, nxt + 2)
+            add_quad(base + 3, base + 0, nxt + 0, nxt + 3)
 
         add_quad(0, 3, 2, 1)
         end = 4 * segments
