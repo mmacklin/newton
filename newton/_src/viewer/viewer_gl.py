@@ -1833,6 +1833,10 @@ class ViewerGL(ViewerBase):
                     show_visual = self.show_visual
                     changed, self.show_visual = imgui.checkbox("Show Visual", show_visual)
 
+                    # Reduced elastic body visualization
+                    show_elastic_bodies = self.show_elastic_bodies
+                    changed, self.show_elastic_bodies = imgui.checkbox("Show Elastic Bodies", show_elastic_bodies)
+
                     # Inertia boxes toggle
                     show_inertia_boxes = self.show_inertia_boxes
                     changed, self.show_inertia_boxes = imgui.checkbox("Show Inertia Boxes", show_inertia_boxes)

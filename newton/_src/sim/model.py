@@ -411,6 +411,8 @@ class Model:
         """Rigid body labels, shape [body_count], str."""
         self.body_world: wp.array(dtype=wp.int32) | None = None
         """World index for each body, shape [body_count], int. Global entities have index -1."""
+        self.body_elastic_index: wp.array(dtype=wp.int32) | None = None
+        """Reduced elastic body record index for each body, or -1 for rigid bodies, shape [body_count], int."""
         self.body_world_start: wp.array(dtype=wp.int32) | None = None
         """Start index of the first body per world, shape [world_count + 2], int.
 
@@ -495,6 +497,10 @@ class Model:
         """Joint labels, shape [joint_count], str."""
         self.joint_world: wp.array(dtype=wp.int32) | None = None
         """World index for each joint, shape [joint_count], int. -1 for global."""
+        self.joint_parent_elastic_endpoint: wp.array(dtype=wp.int32) | None = None
+        """Internal reduced elastic endpoint cache index for each joint parent endpoint, or -1, shape [joint_count], int."""
+        self.joint_child_elastic_endpoint: wp.array(dtype=wp.int32) | None = None
+        """Internal reduced elastic endpoint cache index for each joint child endpoint, or -1, shape [joint_count], int."""
         self.joint_world_start: wp.array(dtype=wp.int32) | None = None
         """Start index of the first joint per world, shape [world_count + 2], int.
 
@@ -701,6 +707,45 @@ class Model:
         self.constraint_mimic_count: int = 0
         """Total number of mimic constraints in the system."""
 
+        self.elastic_body: wp.array(dtype=wp.int32) | None = None
+        """Body index for each reduced elastic body, shape [elastic_body_count], int."""
+        self.elastic_joint: wp.array(dtype=wp.int32) | None = None
+        """State-owner joint index for each reduced elastic body, shape [elastic_body_count], int."""
+        self.elastic_mode_start: wp.array(dtype=wp.int32) | None = None
+        """Start index of each reduced elastic body's modal data, shape [elastic_body_count], int."""
+        self.elastic_mode_count: wp.array(dtype=wp.int32) | None = None
+        """Number of elastic modes for each reduced elastic body, shape [elastic_body_count], int."""
+        self.elastic_mode_mass: wp.array(dtype=wp.float32) | None = None
+        """Reduced elastic modal masses [kg], shape [sum(elastic_mode_count)], float."""
+        self.elastic_mode_stiffness: wp.array(dtype=wp.float32) | None = None
+        """Reduced elastic modal stiffness values [N/m], shape [sum(elastic_mode_count)], float."""
+        self.elastic_mode_damping: wp.array(dtype=wp.float32) | None = None
+        """Reduced elastic modal damping values [N s/m], shape [sum(elastic_mode_count)], float."""
+        self.elastic_endpoint_joint: wp.array(dtype=wp.int32) | None = None
+        """Joint index for each internal reduced elastic endpoint, shape [elastic_endpoint_count], int."""
+        self.elastic_endpoint_side: wp.array(dtype=wp.int32) | None = None
+        """Endpoint side for each internal reduced elastic endpoint: 0 parent, 1 child, shape [elastic_endpoint_count], int."""
+        self.elastic_endpoint_body: wp.array(dtype=wp.int32) | None = None
+        """Body index for each internal reduced elastic endpoint, shape [elastic_endpoint_count], int."""
+        self.elastic_endpoint_phi: wp.array(dtype=wp.vec3) | None = None
+        """Flattened translational mode samples for reduced elastic endpoints [m per mode], shape [elastic_endpoint_count * elastic_max_mode_count, 3]."""
+        self.elastic_render_point_start: wp.array(dtype=wp.int32) | None = None
+        """Start render point for each reduced elastic body, shape [elastic_body_count], int."""
+        self.elastic_render_point_count: wp.array(dtype=wp.int32) | None = None
+        """Render point count for each reduced elastic body, shape [elastic_body_count], int."""
+        self.elastic_render_point_local: wp.array(dtype=wp.vec3) | None = None
+        """Local render polyline sample points for reduced elastic bodies [m], shape [elastic_render_point_count, 3]."""
+        self.elastic_render_point_phi: wp.array(dtype=wp.vec3) | None = None
+        """Flattened translational mode samples for reduced elastic render points [m per mode], shape [elastic_render_point_count * elastic_max_mode_count, 3]."""
+        self.elastic_render_point_total_count: int = 0
+        """Total number of reduced elastic render polyline sample points."""
+        self.elastic_max_mode_count: int = 0
+        """Maximum reduced elastic mode count across all elastic bodies."""
+        self.elastic_body_count: int = 0
+        """Total number of reduced elastic bodies."""
+        self.elastic_endpoint_count: int = 0
+        """Total number of internal reduced elastic joint endpoints."""
+
         # indices of particles sharing the same color
         self.particle_color_groups: list[wp.array(dtype=wp.int32)] = []
         """Coloring of all particles for Gauss-Seidel iteration (see :class:`~newton.solvers.SolverVBD`). Each array contains indices of particles sharing the same color."""
@@ -741,6 +786,7 @@ class Model:
         self.attribute_frequency["body_inv_mass"] = Model.AttributeFrequency.BODY
         self.attribute_frequency["body_flags"] = Model.AttributeFrequency.BODY
         self.attribute_frequency["body_f"] = Model.AttributeFrequency.BODY
+        self.attribute_frequency["body_elastic_index"] = Model.AttributeFrequency.BODY
         # Extended state attributes — these live on State (not Model) and are only
         # allocated when explicitly requested via request_state_attributes().
         self.attribute_frequency["body_qdd"] = Model.AttributeFrequency.BODY
@@ -758,6 +804,8 @@ class Model:
         self.attribute_frequency["joint_enabled"] = Model.AttributeFrequency.JOINT
         self.attribute_frequency["joint_twist_lower"] = Model.AttributeFrequency.JOINT
         self.attribute_frequency["joint_twist_upper"] = Model.AttributeFrequency.JOINT
+        self.attribute_frequency["joint_parent_elastic_endpoint"] = Model.AttributeFrequency.JOINT
+        self.attribute_frequency["joint_child_elastic_endpoint"] = Model.AttributeFrequency.JOINT
 
         # attributes per joint coord
         self.attribute_frequency["joint_q"] = Model.AttributeFrequency.JOINT_COORD

@@ -1,0 +1,938 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reduced Elastic Links in Newton - FFRF/VBD Plan</title>
+  <style>
+    :root {
+      --bg: #f6f7f5;
+      --paper: #ffffff;
+      --ink: #172126;
+      --muted: #546066;
+      --line: #d7ddda;
+      --soft: #eef2f1;
+      --green: #1f6b57;
+      --blue: #2f5f9d;
+      --red: #9a4a3f;
+      --gold: #8b6a25;
+      --code: #263238;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.48;
+    }
+
+    main {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 32px 24px 56px;
+    }
+
+    header {
+      border-bottom: 1px solid var(--line);
+      padding: 8px 0 24px;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: 38px;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 34px 0 12px;
+      font-size: 24px;
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 22px 0 8px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 2px;
+    }
+
+    code {
+      background: #edf1ef;
+      color: var(--code);
+      border: 1px solid #dbe2df;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-size: 0.92em;
+    }
+
+    pre {
+      overflow-x: auto;
+      background: #172126;
+      color: #f0f4f2;
+      border-radius: 8px;
+      padding: 14px 16px;
+      line-height: 1.42;
+    }
+
+    pre code {
+      background: transparent;
+      border: 0;
+      color: inherit;
+      padding: 0;
+      font-size: 0.9rem;
+    }
+
+    ul, ol {
+      padding-left: 22px;
+      margin: 8px 0 14px;
+    }
+
+    li {
+      margin: 5px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 20px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    th {
+      background: #e8eeeb;
+      font-size: 0.9rem;
+      color: #263238;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .meta div,
+    .panel,
+    .callout {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .meta div {
+      padding: 10px 12px;
+    }
+
+    .label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 3px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin: 14px 0;
+    }
+
+    .grid.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .panel {
+      padding: 16px;
+    }
+
+    .callout {
+      border-left: 4px solid var(--green);
+      padding: 14px 16px;
+      margin: 14px 0;
+      background: #fbfcfb;
+    }
+
+    .callout.warn {
+      border-left-color: var(--gold);
+    }
+
+    .callout.risk {
+      border-left-color: var(--red);
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--soft);
+      color: #314047;
+      font-size: 0.78rem;
+      margin-right: 5px;
+      border: 1px solid var(--line);
+    }
+
+    .diagram {
+      width: 100%;
+      min-height: 260px;
+      background: #fbfcfb;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      margin: 14px 0 18px;
+    }
+
+    .diagram svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .caption {
+      color: var(--muted);
+      font-size: 0.91rem;
+      margin-top: -8px;
+    }
+
+    .toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .toc a {
+      display: inline-block;
+      padding: 6px 9px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 860px) {
+      main {
+        padding: 24px 16px 44px;
+      }
+
+      h1 {
+        font-size: 30px;
+      }
+
+      .meta,
+      .grid,
+      .grid.three {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <span class="tag">Implementation plan</span>
+      <span class="tag">FFRF</span>
+      <span class="tag">VBD target</span>
+      <h1>Reduced Elastic Links in Newton</h1>
+      <p>
+        Plan for adding a link type that owns a rigid floating frame plus reduced elastic
+        coordinates, participates in the body state arrays, and can be constrained to rigid
+        links through standard joints such as revolute joints.
+      </p>
+      <div class="meta">
+        <div><span class="label">Worktree</span><code>/home/horde/newton-reduced</code></div>
+        <div><span class="label">Branch</span><code>horde/reduced-elastic-links</code></div>
+        <div><span class="label">Base</span><code>main@99d78d5f1</code></div>
+        <div><span class="label">Date</span>2026-05-01</div>
+      </div>
+      <nav class="toc" aria-label="Report sections">
+        <a href="#summary">Summary</a>
+        <a href="#ffrf">FFRF model</a>
+        <a href="#current-newton">Current Newton</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#solver">VBD solver</a>
+        <a href="#tests">Tests</a>
+        <a href="#milestones">Milestones</a>
+        <a href="#sources">Sources</a>
+      </nav>
+    </header>
+
+    <section id="summary">
+      <h2>Summary</h2>
+      <div class="callout">
+        <p>
+          The cleanest Newton integration is to model a reduced elastic link as a
+          body-owned state block: one body slot in <code>body_q/body_qd</code> plus one
+          state-owner joint whose generalized coordinates are
+          <code>[pos(3), quat(4), mode_0, mode_1, ...]</code> and velocities are
+          <code>[linear(3), angular(3), mode_dot_0, mode_dot_1, ...]</code>.
+          Physical connections remain normal Newton joints, but their anchors can be
+          attached to deformed material points on the elastic body.
+        </p>
+      </div>
+
+      <div class="grid">
+        <div class="panel">
+          <h3>What should be new</h3>
+          <ul>
+            <li>A reduced elastic link API, proposed as <code>ModelBuilder.add_link_elastic()</code> plus a free-body wrapper <code>add_body_elastic()</code>.</li>
+            <li>A new state-owner joint type, proposed as <code>JointType.ELASTIC</code>, with 7 + N coordinates and 6 + N velocities.</li>
+            <li>Mode data stored on the model: modal mass, stiffness, damping, shape functions sampled at joint endpoint transforms, and optional inertia shape integrals.</li>
+            <li>Elastic-aware joint endpoint evaluation so a revolute joint can connect to a deformed material frame without adding public attachment IDs.</li>
+            <li>A VBD block solve for 6 + N unknowns, where the first six unknowns are floating-frame motion and the remaining unknowns are modal amplitudes.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>What should stay stable</h3>
+          <ul>
+            <li>Rigid bodies and existing joints keep their public behavior.</li>
+            <li>Existing <code>body_q/body_qd</code> remains the pose and spatial velocity source for collision, rendering, and body-space shapes.</li>
+            <li>Existing revolute/ball/fixed/D6 joint solvers are reused after replacing rigid-only endpoint evaluation with endpoint evaluators that understand elastic endpoints.</li>
+            <li>VBD is the first solver target. Generalized solvers can be supported later once the reduced elastic body block is validated.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="diagram" role="img" aria-label="Schematic of four-bar linkage with elastic coupler">
+        <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L0,6 L9,3 z" fill="#2f5f9d"/>
+            </marker>
+          </defs>
+          <rect x="18" y="18" width="864" height="264" rx="8" fill="#ffffff" stroke="#d7ddda"/>
+          <line x1="135" y1="224" x2="735" y2="224" stroke="#263238" stroke-width="8" stroke-linecap="round"/>
+          <circle cx="135" cy="224" r="16" fill="#ffffff" stroke="#172126" stroke-width="5"/>
+          <circle cx="735" cy="224" r="16" fill="#ffffff" stroke="#172126" stroke-width="5"/>
+          <line x1="135" y1="224" x2="278" y2="88" stroke="#1f6b57" stroke-width="16" stroke-linecap="round"/>
+          <line x1="735" y1="224" x2="612" y2="88" stroke="#1f6b57" stroke-width="16" stroke-linecap="round"/>
+          <path d="M278,88 C365,52 512,122 612,88" fill="none" stroke="#9a4a3f" stroke-width="22" stroke-linecap="round"/>
+          <path d="M278,88 C365,70 512,140 612,88" fill="none" stroke="#d9a441" stroke-width="4" stroke-dasharray="9 9" stroke-linecap="round"/>
+          <circle cx="278" cy="88" r="18" fill="#ffffff" stroke="#172126" stroke-width="5"/>
+          <circle cx="612" cy="88" r="18" fill="#ffffff" stroke="#172126" stroke-width="5"/>
+          <text x="450" y="54" text-anchor="middle" fill="#172126" font-size="18" font-family="Inter, sans-serif">Elastic reduced link</text>
+          <text x="450" y="82" text-anchor="middle" fill="#546066" font-size="14" font-family="Inter, sans-serif">floating frame + modal DOFs</text>
+          <text x="102" y="257" text-anchor="middle" fill="#546066" font-size="14" font-family="Inter, sans-serif">ground</text>
+          <text x="764" y="257" text-anchor="middle" fill="#546066" font-size="14" font-family="Inter, sans-serif">ground</text>
+          <text x="216" y="154" text-anchor="middle" fill="#1f6b57" font-size="14" font-family="Inter, sans-serif">rigid link</text>
+          <text x="664" y="154" text-anchor="middle" fill="#1f6b57" font-size="14" font-family="Inter, sans-serif">rigid link</text>
+          <line x1="450" y1="108" x2="450" y2="178" stroke="#2f5f9d" stroke-width="3" marker-end="url(#arrow)"/>
+          <text x="450" y="202" text-anchor="middle" fill="#2f5f9d" font-size="14" font-family="Inter, sans-serif">body_q sync</text>
+        </svg>
+      </div>
+      <p class="caption">
+        The physical revolute joints use their existing parent/child transforms as
+        material frames on rigid or elastic bodies. The elastic link's state-owner
+        joint stores the floating frame and modal coordinates.
+      </p>
+    </section>
+
+    <section id="ffrf">
+      <h2>FFRF Model</h2>
+      <p>
+        The floating frame of reference formulation separates large rigid motion from
+        small local deformation. Shabana's treatment frames this as a deformable body
+        with a moving reference frame, a linear elastic displacement field in that frame,
+        and inertia coupling terms that depend on the assumed displacement field.
+      </p>
+
+      <h3>State</h3>
+      <pre><code>q_elastic  = [r_x, r_y, r_z, quat_x, quat_y, quat_z, quat_w, eta_0, ..., eta_N-1]
+qd_elastic = [v_x, v_y, v_z, omega_x, omega_y, omega_z, eta_dot_0, ..., eta_dot_N-1]</code></pre>
+
+      <p>
+        For a material point with local rest position <code>x0</code>, local mode basis
+        <code>Phi(x0)</code>, modal amplitudes <code>eta</code>, world translation
+        <code>r</code>, and world rotation <code>A</code> from the floating frame:
+      </p>
+      <pre><code>u_local(x0, eta) = x0 + Phi(x0) * eta
+x_world          = r + A * u_local
+v_world          = v + omega x (A * u_local) + A * Phi(x0) * eta_dot</code></pre>
+
+      <p>
+        A strict FFRF implementation also needs generalized mass terms and inertia
+        shape integrals to capture coupling between reference motion and elastic
+        deformation. The first implementation can accept diagonal modal mass for
+        minimal tests, but the model storage should be designed for dense modal mass
+        and coupling data so the public API does not dead-end.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Quantity</th>
+            <th>Initial storage</th>
+            <th>Why it matters</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Mode amplitudes</td>
+            <td><code>joint_q[q_start + 7 : q_start + 7 + N]</code></td>
+            <td>Matches the requested joint-array layout and keeps reduced elastic coordinates in Newton's generalized state.</td>
+          </tr>
+          <tr>
+            <td>Mode velocities</td>
+            <td><code>joint_qd[qd_start + 6 : qd_start + 6 + N]</code></td>
+            <td>Enables damping, modal kinetic energy, and finite-difference validation.</td>
+          </tr>
+          <tr>
+            <td>Floating pose</td>
+            <td><code>joint_q[q_start : q_start + 7]</code> and <code>body_q[body]</code></td>
+            <td>Preserves the existing body pipeline for collision and rendering.</td>
+          </tr>
+          <tr>
+            <td>Endpoint mode values</td>
+            <td>Internal mode samples generated from <code>joint_X_p</code> / <code>joint_X_c</code></td>
+            <td>Lets ordinary joints constrain deformed endpoint position and, when available, deformed endpoint orientation.</td>
+          </tr>
+          <tr>
+            <td>Elastic energy</td>
+            <td><code>elastic_mode_stiffness</code>, <code>elastic_mode_damping</code>, <code>elastic_mode_mass</code></td>
+            <td>Provides the modal oscillator terms for VBD's implicit objective.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="current-newton">
+      <h2>Current Newton Pipeline</h2>
+      <p>
+        The current code already has the two state spaces needed for this feature:
+        generalized joint arrays and body arrays. The missing piece is a variable-size
+        elastic state owner and endpoint evaluation that maps modal deformation into
+        joint constraints.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Relevant behavior</th>
+            <th>Implication</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>newton/_src/sim/enums.py:41</code></td>
+            <td><code>JointType.dof_count()</code> is type/axis based and assumes fixed-size joint coordinate counts.</td>
+            <td><code>JointType.ELASTIC</code> needs per-joint mode count support, not only enum-global sizing.</td>
+          </tr>
+          <tr>
+            <td><code>newton/_src/sim/builder.py:3427</code></td>
+            <td><code>add_joint()</code> appends type, parent/child, anchors, DOF dimensions, starts, and per-DOF arrays.</td>
+            <td>The builder should get an elastic-specific path that appends 7 + N coords, 6 + N velocities, and modal arrays coherently.</td>
+          </tr>
+          <tr>
+            <td><code>newton/_src/sim/articulation.py</code></td>
+            <td>FK/IK branches on joint type and writes <code>body_q/body_qd</code> from <code>joint_q/joint_qd</code>.</td>
+            <td>An elastic owner needs FK sync for the floating frame and mode coordinates, even if VBD is the first dynamic target.</td>
+          </tr>
+          <tr>
+            <td><code>newton/_src/solvers/vbd/solver_vbd.py</code></td>
+            <td>VBD treats rigid bodies as maximal-coordinate blocks and supports rigid joint constraints; <code>FREE</code> joints have no solver constraints.</td>
+            <td>The elastic owner should behave like a zero-constraint state owner, while physical joints remain solver constraints.</td>
+          </tr>
+          <tr>
+            <td><code>newton/_src/solvers/vbd/rigid_vbd_kernels.py</code></td>
+            <td>Rigid joint force/Hessian kernels assume anchors are fixed transforms on rigid body frames and solve a 6 DOF body block.</td>
+            <td>Replace rigid-only anchor evaluation with an endpoint evaluator and add a 6 + N elastic body block solve.</td>
+          </tr>
+          <tr>
+            <td><code>newton/tests/test_physics_validation.py</code></td>
+            <td>Four-bar mechanisms already exist, and VBD paths should use loop joints rather than equality constraints.</td>
+            <td>The elastic four-bar regression should be built as rigid joints plus loop-closing constraints supported by VBD.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn">
+        <p>
+          Current VBD updates <code>body_q/body_qd</code> as primary state for rigid bodies.
+          It does not generally integrate joint positions for rigid joints. Reduced elastic
+          links therefore need explicit synchronization in both directions: initialize
+          the body slot from the owner joint, solve the elastic block, then write the
+          solved pose and modal state back to <code>joint_q/joint_qd</code>.
+        </p>
+      </div>
+    </section>
+
+    <section id="architecture">
+      <h2>Architecture Proposal</h2>
+
+      <h3>State-owner joint plus physical joints</h3>
+      <p>
+        Use a new zero-constraint state-owner joint for each reduced elastic body.
+        This joint owns the requested generalized coordinates. Physical connectivity
+        remains represented by ordinary joints between body IDs. If either endpoint
+        body is elastic, the existing <code>parent_xform</code> or <code>child_xform</code>
+        on that joint is interpreted as a material frame in the elastic body's
+        floating-frame coordinates.
+      </p>
+
+      <pre><code># Proposed user-facing shape.
+builder = newton.ModelBuilder()
+
+ground = -1
+left = builder.add_link(...)
+coupler = builder.add_link_elastic(
+    parent=-1,
+    xform=wp.transform(...),
+    modes=builder.ElasticModes(
+        mass=[...],
+        stiffness=[...],
+        damping=[...],
+    ),
+)
+right = builder.add_link(...)
+
+builder.add_joint_revolute(
+    parent=left,
+    child=coupler,
+    parent_xform=wp.transform(...),
+    child_xform=wp.transform(...),  # material frame on the elastic coupler
+    axis=...,
+)
+builder.add_joint_revolute(
+    parent=coupler,
+    child=right,
+    parent_xform=wp.transform(...),  # material frame on the elastic coupler
+    child_xform=wp.transform(...),
+    axis=...,
+)</code></pre>
+
+      <p>
+        This keeps the existing joint-builder surface. The public docs and examples
+        should use public Newton modules only; internal implementation details stay
+        in <code>newton/_src</code>.
+      </p>
+
+      <h3>Model arrays</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Array</th>
+            <th>Shape</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>body_elastic_index</code></td>
+            <td><code>[body_count]</code></td>
+            <td>Maps a body to its elastic record, or -1 for rigid bodies.</td>
+          </tr>
+          <tr>
+            <td><code>elastic_body</code></td>
+            <td><code>[elastic_body_count]</code></td>
+            <td>Maps each elastic record back to the body slot.</td>
+          </tr>
+          <tr>
+            <td><code>elastic_joint</code></td>
+            <td><code>[elastic_body_count]</code></td>
+            <td>Maps each elastic record to its state-owner joint.</td>
+          </tr>
+          <tr>
+            <td><code>elastic_mode_start</code>, <code>elastic_mode_count</code></td>
+            <td><code>[elastic_body_count]</code></td>
+            <td>Variable-size modal storage indexing.</td>
+          </tr>
+          <tr>
+            <td><code>elastic_mode_mass</code></td>
+            <td><code>[sum_modes]</code> or dense CSR-like block storage</td>
+            <td>Modal kinetic energy. Start diagonal; allow dense extension.</td>
+          </tr>
+          <tr>
+            <td><code>elastic_mode_stiffness</code>, <code>elastic_mode_damping</code></td>
+            <td><code>[sum_modes]</code> or dense block storage</td>
+            <td>Reduced elastic potential and damping.</td>
+          </tr>
+          <tr>
+            <td><code>joint_parent_elastic_endpoint</code>, <code>joint_child_elastic_endpoint</code></td>
+            <td><code>[joint_count]</code></td>
+            <td>Internal endpoint cache index, or -1 for rigid endpoints. Generated from existing joint endpoints, not user-provided IDs.</td>
+          </tr>
+          <tr>
+            <td><code>elastic_endpoint_joint</code>, <code>elastic_endpoint_side</code></td>
+            <td><code>[elastic_endpoint_count]</code></td>
+            <td>Maps each internal elastic endpoint back to a joint and parent/child side.</td>
+          </tr>
+          <tr>
+            <td><code>elastic_endpoint_phi</code></td>
+            <td>Flat <code>[endpoint, mode, xyz]</code> storage</td>
+            <td>Translational mode values sampled at <code>joint_X_p</code> or <code>joint_X_c</code>.</td>
+          </tr>
+          <tr>
+            <td><code>elastic_endpoint_psi</code></td>
+            <td>Optional flat <code>[endpoint, mode, xyz]</code> storage</td>
+            <td>Rotational/slope mode values sampled at the same joint endpoint transform.</td>
+          </tr>
+          <tr>
+            <td><code>joint_mode_count</code></td>
+            <td><code>[joint_count]</code></td>
+            <td>Needed because <code>JointType.ELASTIC</code> has per-joint size 7 + N / 6 + N.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Builder behavior</h3>
+      <ol>
+        <li><code>add_link_elastic()</code> calls the existing body allocation path to create a normal body slot.</li>
+        <li>It appends a <code>JointType.ELASTIC</code> owner joint with parent <code>-1</code> by default, no solver constraint slots, and a child equal to the elastic body.</li>
+        <li>It writes the first 7 coordinates from the body pose, initializes mode amplitudes to zero or user input, and initializes the first 6 velocities from the body spatial velocity.</li>
+        <li>It appends modal properties and records the body-to-elastic and elastic-to-joint maps.</li>
+        <li>Existing joint builders keep their current <code>parent_xform</code> and <code>child_xform</code> API; no public attachment ID is required for the MVP.</li>
+        <li>During finalize, the builder creates internal elastic endpoint cache records for every joint endpoint whose body is elastic.</li>
+        <li>Builder validation ensures each elastic endpoint can sample mode values at the corresponding joint transform and that mode counts match the target elastic body.</li>
+      </ol>
+
+      <div class="callout">
+        <p>
+          This keeps the requested generalized layout while preserving VBD's current
+          maximal-coordinate body solve. It also avoids forcing every physical joint
+          on an elastic body to become a special elastic joint type.
+        </p>
+      </div>
+    </section>
+
+    <section id="solver">
+      <h2>VBD Solver Plan</h2>
+
+      <h3>Endpoint evaluator</h3>
+      <p>
+        Refactor the rigid VBD joint kernels around an endpoint function that can
+        evaluate either a rigid endpoint or an elastic endpoint:
+      </p>
+      <pre><code>Endpoint eval_joint_endpoint(joint, side, state):
+    body = joint_parent or joint_child
+    xform = joint_X_p[joint] or joint_X_c[joint]
+    elastic = body_elastic_index[body]
+
+    if elastic == -1:
+        return rigid_body_anchor(body, xform)
+
+    endpoint = joint_parent_elastic_endpoint[joint] or joint_child_elastic_endpoint[joint]
+    eta = joint_q[elastic_q_start + 7 : elastic_q_start + 7 + N]
+    x_local = xform.p + sum_i elastic_endpoint_phi[endpoint, i] * eta_i
+    q_local = xform.q updated by elastic_endpoint_psi[endpoint, i] if supplied
+    return world_endpoint_with_jacobians(body_q[body], x_local, q_local)</code></pre>
+
+      <p>
+        The evaluator should return world position/orientation, previous-step position,
+        and block Jacobian columns for the active solve body. For a rigid body, the
+        Jacobian has six columns. For an elastic body, it has <code>6 + N</code> columns.
+      </p>
+
+      <h3>Elastic block descent</h3>
+      <p>
+        Add a separate elastic body VBD kernel, likely in
+        <code>newton/_src/solvers/vbd/reduced_elastic_kernels.py</code>. For each
+        elastic body, solve a small dense block:
+      </p>
+      <pre><code>unknown delta = [delta_x(3), delta_theta(3), delta_eta(N)]
+
+energy terms:
+  inertial prediction of floating frame
+  modal inertia
+  modal stiffness: 0.5 * eta^T K eta
+  modal damping / implicit velocity term
+  body contacts using rigid proxy geometry at the floating frame
+  joint constraints evaluated at rigid or elastic endpoints
+
+solve:
+  H * delta = -g
+  apply line search / trust clamp compatible with VBD's current rigid step
+  update body_q and eta
+  normalize quaternion</code></pre>
+
+      <p>
+        Start with a model-level maximum mode count, for example 8 or 16, and store
+        dense gradients/Hessians in flat scratch arrays. This fits Warp's GPU execution
+        model without adding dependencies. Later, specialize kernels or use segmented
+        dense block storage for larger reduced bases.
+      </p>
+
+      <h3>Joint support order</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Stage</th>
+            <th>Joint behavior</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td><code>JointType.ELASTIC</code> owner only</td>
+            <td>Zero constraints; verifies layout, FK sync, modal oscillator, and body pose copying.</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>Ball/fixed/revolute constraints to elastic endpoint positions</td>
+            <td>Position constraints are the most important for a four-bar and provide finite-difference Jacobian coverage.</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>Revolute angular axis alignment with optional rotational modes</td>
+            <td>If <code>psi</code> is not supplied, use the floating-frame orientation at the joint transform and document the limitation.</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>D6 and drive/limit projection</td>
+            <td>Reuse existing D6 projectors after endpoint evaluation is generalized.</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>Deformed contact samples</td>
+            <td>Out of MVP unless required. Start with rigid proxy shapes attached to the floating frame.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>VBD control flow changes</h3>
+      <ol>
+        <li>Initialization: copy the elastic owner joint's floating-frame pose into <code>state_out.body_q</code> and modal state into solver scratch.</li>
+        <li>Coloring: include elastic bodies in the existing body conflict graph. Joints touching elastic endpoints create the same coloring conflicts as rigid joints.</li>
+        <li>Iteration: run rigid body blocks and elastic body blocks by color. Elastic bodies use the 6 + N block solve.</li>
+        <li>Finalization: finite-difference <code>body_q</code> to <code>body_qd</code>, update modal velocities, and write the full owner joint state back to <code>state_out.joint_q/joint_qd</code>.</li>
+        <li>Controls: initially allow modal forces through the owner joint's modal DOFs in <code>control.joint_f</code>. Drives can be added later through the existing per-DOF target arrays.</li>
+      </ol>
+
+      <div class="callout risk">
+        <p>
+          The hard part is not adding the arrays. The hard part is making every
+          constraint force/Hessian path use endpoint Jacobians instead of assuming a
+          six-dimensional rigid endpoint. This should be the central refactor.
+        </p>
+      </div>
+    </section>
+
+    <section id="generalized">
+      <h2>Generalized Solver Compatibility</h2>
+      <p>
+        Featherstone and MuJoCo paths should not be the initial target. Existing
+        generalized solvers use joint-centric recursions and motion subspaces, while
+        this VBD design treats the elastic owner as a body state block plus external
+        constraint joints. Supporting generalized solvers later would require:
+      </p>
+      <ul>
+        <li>Extending <code>jcalc_transform</code>, <code>jcalc_motion</code>, and integration for <code>JointType.ELASTIC</code>.</li>
+        <li>Adding augmented spatial inertia and modal coupling terms to the articulated-body recursion.</li>
+        <li>Representing elastic endpoint constraints as loop constraints or using a different reduced-coordinate assembly.</li>
+        <li>Defining how physical parent joints and the floating-frame owner coexist in a tree articulation without double-owning one body.</li>
+      </ul>
+      <p>
+        For this feature request, the VBD implementation should be the source of truth
+        and generalized solver support should raise a clear <code>NotImplementedError</code>
+        until the reduced dynamics are mature.
+      </p>
+    </section>
+
+    <section id="tests">
+      <h2>Regression And Validation Tests</h2>
+      <p>
+        Per the repo guideline, implementation should start with a failing regression.
+        The first test should demonstrate the requested state layout and fail before
+        the new builder/model path exists.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Test</th>
+            <th>Expected check</th>
+            <th>Why</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>test_elastic_link_layout</code></td>
+            <td>One elastic body creates one body slot and one owner joint with <code>coord_count == 7 + N</code>, <code>dof_count == 6 + N</code>.</td>
+            <td>Locks the core state contract requested for <code>joint_q/joint_qd</code> and <code>body_q/body_qd</code>.</td>
+          </tr>
+          <tr>
+            <td><code>test_elastic_fk_body_sync</code></td>
+            <td><code>eval_fk()</code> copies owner floating-frame pose/velocity to the body slot and preserves modal coordinates.</td>
+            <td>Protects render/collision compatibility.</td>
+          </tr>
+          <tr>
+            <td><code>test_elastic_joint_endpoint_jacobian_fd</code></td>
+            <td>Analytical endpoint Jacobians match finite differences for translation, rotation, and modes.</td>
+            <td>Protects VBD force/Hessian correctness.</td>
+          </tr>
+          <tr>
+            <td><code>test_vbd_single_mode_oscillator</code></td>
+            <td>One free elastic body with one mode follows the implicit modal oscillator trend and damps energy.</td>
+            <td>Validates the elastic block without joint complexity.</td>
+          </tr>
+          <tr>
+            <td><code>test_vbd_revolute_elastic_endpoint</code></td>
+            <td>A rigid link connected to an elastic endpoint through a revolute joint keeps the anchor residual below tolerance.</td>
+            <td>Validates the central connection requirement.</td>
+          </tr>
+          <tr>
+            <td><code>test_vbd_fourbar_elastic_coupler</code></td>
+            <td>Loop closure remains bounded, modal amplitudes remain finite, and high stiffness approaches the rigid coupler result.</td>
+            <td>Directly targets the user's four-bar example.</td>
+          </tr>
+          <tr>
+            <td><code>test_vbd_unsupported_solver_guard</code></td>
+            <td>Non-VBD solvers fail clearly for <code>JointType.ELASTIC</code> until implemented.</td>
+            <td>Prevents silent wrong physics.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="milestones">
+      <h2>Milestones</h2>
+      <ol>
+        <li>
+          <strong>Data contract and public API.</strong>
+          Add <code>JointType.ELASTIC</code>, elastic mode and endpoint-cache model arrays,
+          builder methods, validation, docstrings, and a failing then passing layout test.
+        </li>
+        <li>
+          <strong>State synchronization.</strong>
+          Add FK/IK or dedicated sync kernels for owner joint <-> body slot conversion.
+          Ensure <code>State.joint_coord_count</code> and <code>State.joint_dof_count</code>
+          remain correct with variable-size elastic joints.
+        </li>
+        <li>
+          <strong>Endpoint abstraction.</strong>
+          Refactor VBD rigid joint code so all joint constraints call a rigid/elastic
+          endpoint evaluator. Add finite-difference Jacobian tests before broad solver work.
+        </li>
+        <li>
+          <strong>Elastic VBD block.</strong>
+          Implement 6 + N block solve for free elastic bodies with modal stiffness,
+          damping, external modal forces, and final joint-array writeback.
+        </li>
+        <li>
+          <strong>Joint constraints on elastic endpoints.</strong>
+          Enable ball/fixed/revolute first, then D6. Build the elastic four-bar validation.
+        </li>
+        <li>
+          <strong>Examples and docs.</strong>
+          Add a minimal example in the existing <code>Example</code> class format with
+          <code>test_final()</code>. Update public docs, solver support tables, changelog,
+          and run <code>docs/generate_api.py</code> if public symbols are added.
+        </li>
+      </ol>
+    </section>
+
+    <section id="risks">
+      <h2>Risks And Decisions</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Risk</th>
+            <th>Decision</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>FFRF inertia coupling can be oversimplified by a diagonal modal mass MVP.</td>
+            <td>Store data so dense modal mass and inertia shape integrals can be added without breaking the API. Document the first solver's assumptions.</td>
+          </tr>
+          <tr>
+            <td>Attachment orientation is underdefined if only translational modes are supplied.</td>
+            <td>Allow <code>psi</code> rotational/slope mode data. If absent, use floating-frame orientation and make angular elastic deformation unavailable for revolute axis alignment.</td>
+          </tr>
+          <tr>
+            <td>Existing <code>JointType.dof_count()</code> cannot express 6 + N with variable N.</td>
+            <td>Add explicit per-joint coordinate/DOF sizing for elastic joints rather than overloading linear/angular axis count.</td>
+          </tr>
+          <tr>
+            <td>Four-bar loops may be modeled with equality constraints that VBD does not support.</td>
+            <td>Use VBD-supported loop-closing joints for the elastic four-bar validation, not equality constraints.</td>
+          </tr>
+          <tr>
+            <td>Large mode counts could make each block solve expensive on GPU.</td>
+            <td>Cap initial mode counts, preallocate flat dense scratch buffers, and treat higher counts as a later optimization problem.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="files">
+      <h2>Expected File Changes</h2>
+      <ul>
+        <li><code>newton/_src/sim/enums.py</code>: add <code>JointType.ELASTIC</code> and variable-size count support.</li>
+        <li><code>newton/_src/sim/model.py</code>: add elastic body, mode, and internal endpoint-cache arrays with public docstrings.</li>
+        <li><code>newton/_src/sim/builder.py</code>: add <code>add_link_elastic()</code> and <code>add_body_elastic()</code>; keep existing joint transform arguments as the endpoint API.</li>
+        <li><code>newton/_src/sim/articulation.py</code>: add owner-joint FK sync and clear guards for unsupported generalized recursion paths.</li>
+        <li><code>newton/_src/solvers/vbd/solver_vbd.py</code>: initialize elastic scratch, include elastic colors/adjacency, launch elastic kernels, and write back owner joint state.</li>
+        <li><code>newton/_src/solvers/vbd/rigid_vbd_kernels.py</code>: refactor endpoint evaluation out of rigid-only assumptions.</li>
+        <li><code>newton/_src/solvers/vbd/reduced_elastic_kernels.py</code>: new reduced elastic block kernels.</li>
+        <li><code>newton/tests/test_reduced_elastic_body.py</code>: new layout, FK, endpoint Jacobian, and VBD tests.</li>
+        <li><code>newton/tests/test_physics_validation.py</code>: add the elastic four-bar validation once joint constraints are in place.</li>
+        <li><code>docs/concepts/articulations.rst</code>, <code>newton/solvers.py</code>, <code>CHANGELOG.md</code>: update public support matrix and user-facing behavior notes.</li>
+      </ul>
+    </section>
+
+    <section id="sources">
+      <h2>Sources Consulted</h2>
+      <ul>
+        <li>
+          Ahmed A. Shabana, <em>Dynamics of Multibody Systems</em>, Chapter 5,
+          "Floating Frame of Reference Formulation", Cambridge University Press.
+          <a href="https://www.cambridge.org/core/books/abs/dynamics-of-multibody-systems/floating-frame-of-reference-formulation/BC461ED6E7DB0361FA5A74991FC19E45">Cambridge chapter page</a>,
+          <a href="https://doi.org/10.1017/CBO9780511610523.006">DOI</a>.
+        </li>
+        <li>
+          Anka He Chen, Ziheng Liu, Yin Yang, and Cem Yuksel, "Vertex Block Descent",
+          ACM Transactions on Graphics, 43(4), 2024.
+          <a href="https://graphics.cs.utah.edu/research/projects/vbd/">Utah Graphics project page</a>,
+          <a href="https://arxiv.org/abs/2403.06321">arXiv record</a>,
+          <a href="https://doi.org/10.48550/arXiv.2403.06321">arXiv DOI</a>.
+        </li>
+        <li>
+          Niels van de Wouw et al., "On the use of absolute interface coordinates in the floating frame of reference formulation for flexible multibody dynamics",
+          <em>Multibody System Dynamics</em>, 2018.
+          <a href="https://link.springer.com/article/10.1007/s11044-017-9606-3">Springer article</a>.
+        </li>
+        <li>
+          Chris Giles, Elie Diaz, and Cem Yuksel, "Augmented Vertex Block Descent" project page, consulted for hard-constraint and articulated-body context.
+          <a href="https://graphics.cs.utah.edu/research/projects/avbd/">Utah Graphics AVBD page</a>.
+        </li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

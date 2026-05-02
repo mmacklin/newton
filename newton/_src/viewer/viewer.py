@@ -18,6 +18,7 @@ from __future__ import annotations
 import os
 import sys
 from abc import ABC, abstractmethod
+from itertools import pairwise
 from typing import Any
 
 import numpy as np
@@ -118,6 +119,7 @@ class ViewerBase(ABC):
         self.show_gaussians = False
         self.show_collision = False
         self.show_visual = True
+        self.show_elastic_bodies = True
         self.show_static = False
         self.show_inertia_boxes = False
         self.show_hydro_contact_surface = False
@@ -451,11 +453,119 @@ class ViewerBase(ABC):
             )
 
         self._log_inertia_boxes(state)
+        self._log_elastic_bodies(state)
 
         self._log_triangles(state)
         self._log_particles(state)
         self._log_joints(state)
         self._log_com(state)
+
+    def _log_elastic_bodies(self, state: newton.State):
+        """Render reduced elastic body centerlines from sampled modal shape data."""
+        if (
+            not self.show_visual
+            or not self.show_elastic_bodies
+            or getattr(self.model, "elastic_body_count", 0) == 0
+            or getattr(self.model, "elastic_render_point_total_count", 0) == 0
+        ):
+            self.log_lines("/model/elastic_bodies/centerlines", None, None, None)
+            self.log_points("/model/elastic_bodies/samples", None)
+            self.log_points("/model/elastic_bodies/endpoints", None)
+            return
+
+        body_q = state.body_q.numpy()
+        joint_q = state.joint_q.numpy()
+        elastic_body = self.model.elastic_body.numpy()
+        elastic_joint = self.model.elastic_joint.numpy()
+        elastic_mode_count = self.model.elastic_mode_count.numpy()
+        joint_q_start = self.model.joint_q_start.numpy()
+        body_world = self.model.body_world.numpy()
+        point_start = self.model.elastic_render_point_start.numpy()
+        point_count = self.model.elastic_render_point_count.numpy()
+        point_local = self.model.elastic_render_point_local.numpy()
+        point_phi = self.model.elastic_render_point_phi.numpy()
+        max_modes = int(self.model.elastic_max_mode_count)
+        offsets = self.world_offsets.numpy() if self.world_offsets is not None else None
+
+        def rotate(q: np.ndarray, v: np.ndarray) -> np.ndarray:
+            qv = np.array(q[:3], dtype=float)
+            return v + 2.0 * np.cross(qv, np.cross(qv, v) + q[3] * v)
+
+        def transform_point(xform: np.ndarray, point: np.ndarray) -> np.ndarray:
+            return xform[:3] + rotate(xform[3:7], point)
+
+        line_starts: list[np.ndarray] = []
+        line_ends: list[np.ndarray] = []
+        sample_points: list[np.ndarray] = []
+        endpoint_points: list[np.ndarray] = []
+
+        for elastic_index in range(int(self.model.elastic_body_count)):
+            body = int(elastic_body[elastic_index])
+            world = int(body_world[body])
+            if not self._should_render_world(world):
+                continue
+
+            mode_count = int(elastic_mode_count[elastic_index])
+            q_start = int(joint_q_start[int(elastic_joint[elastic_index])]) + 7
+            start = int(point_start[elastic_index])
+            count = int(point_count[elastic_index])
+            if count < 2:
+                continue
+
+            world_offset = np.zeros(3, dtype=float)
+            if offsets is not None and world >= 0:
+                world_offset = np.array(offsets[world], dtype=float)
+
+            points = []
+            for local_index in range(count):
+                point_index = start + local_index
+                local = np.array(point_local[point_index], dtype=float)
+                for mode in range(mode_count):
+                    if mode < max_modes:
+                        local += point_phi[point_index * max_modes + mode] * joint_q[q_start + mode]
+                points.append(transform_point(body_q[body], local) + world_offset)
+
+            for point_a, point_b in pairwise(points):
+                line_starts.append(point_a)
+                line_ends.append(point_b)
+            sample_points.extend(points)
+            endpoint_points.append(points[0])
+            endpoint_points.append(points[-1])
+
+        if not line_starts:
+            self.log_lines("/model/elastic_bodies/centerlines", None, None, None)
+            self.log_points("/model/elastic_bodies/samples", None)
+            self.log_points("/model/elastic_bodies/endpoints", None)
+            return
+
+        starts = wp.array(np.array(line_starts, dtype=np.float32), dtype=wp.vec3, device=self.device)
+        ends = wp.array(np.array(line_ends, dtype=np.float32), dtype=wp.vec3, device=self.device)
+        colors = wp.array(
+            np.tile(np.array([[0.0, 0.85, 1.0]], dtype=np.float32), (len(line_starts), 1)),
+            dtype=wp.vec3,
+            device=self.device,
+        )
+        markers = wp.array(np.array(endpoint_points, dtype=np.float32), dtype=wp.vec3, device=self.device)
+        samples = wp.array(np.array(sample_points, dtype=np.float32), dtype=wp.vec3, device=self.device)
+        sample_radii = wp.array(
+            np.full(len(sample_points), 0.009, dtype=np.float32), dtype=wp.float32, device=self.device
+        )
+        sample_colors = wp.array(
+            np.tile(np.array([[0.0, 0.85, 1.0]], dtype=np.float32), (len(sample_points), 1)),
+            dtype=wp.vec3,
+            device=self.device,
+        )
+        marker_radii = wp.array(
+            np.full(len(endpoint_points), 0.024, dtype=np.float32), dtype=wp.float32, device=self.device
+        )
+        marker_colors = wp.array(
+            np.tile(np.array([[1.0, 0.35, 0.1]], dtype=np.float32), (len(endpoint_points), 1)),
+            dtype=wp.vec3,
+            device=self.device,
+        )
+        self.log_lines("/model/elastic_bodies/centerlines", starts, ends, colors, width=0.012)
+        self.log_points("/model/elastic_bodies/samples", samples, radii=sample_radii, colors=sample_colors)
+        self.log_points("/model/elastic_bodies/endpoints", markers, radii=marker_radii, colors=marker_colors)
 
     def log_contacts(self, contacts: newton.Contacts, state: newton.State):
         """
