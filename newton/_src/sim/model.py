@@ -739,6 +739,30 @@ class Model:
         """Flattened translational mode samples for reduced elastic render points [m per mode], shape [elastic_render_point_count * elastic_max_mode_count, 3]."""
         self.elastic_render_point_total_count: int = 0
         """Total number of reduced elastic render polyline sample points."""
+        self.elastic_shape_shape: wp.array(dtype=wp.int32) | None = None
+        """Original shape index for each reduced elastic render mesh, shape [elastic_shape_count], int."""
+        self.elastic_shape_body: wp.array(dtype=wp.int32) | None = None
+        """Body index for each reduced elastic render mesh, shape [elastic_shape_count], int."""
+        self.elastic_shape_vertex_start: wp.array(dtype=wp.int32) | None = None
+        """Start vertex for each reduced elastic render mesh, shape [elastic_shape_count], int."""
+        self.elastic_shape_vertex_count: wp.array(dtype=wp.int32) | None = None
+        """Vertex count for each reduced elastic render mesh, shape [elastic_shape_count], int."""
+        self.elastic_shape_index_start: wp.array(dtype=wp.int32) | None = None
+        """Start triangle index for each reduced elastic render mesh, shape [elastic_shape_count], int."""
+        self.elastic_shape_index_count: wp.array(dtype=wp.int32) | None = None
+        """Triangle index count for each reduced elastic render mesh, shape [elastic_shape_count], int."""
+        self.elastic_shape_vertex_local: wp.array(dtype=wp.vec3) | None = None
+        """Body-local rest vertices for reduced elastic render meshes [m], shape [elastic_shape_vertex_total_count, 3]."""
+        self.elastic_shape_vertex_phi: wp.array(dtype=wp.vec3) | None = None
+        """Flattened mode samples for reduced elastic render mesh vertices [m per mode], shape [elastic_shape_vertex_total_count * elastic_max_mode_count, 3]."""
+        self.elastic_shape_indices: wp.array(dtype=wp.int32) | None = None
+        """Flattened local triangle indices for reduced elastic render meshes, shape [elastic_shape_index_total_count], int."""
+        self.elastic_shape_count: int = 0
+        """Total number of reduced elastic render meshes."""
+        self.elastic_shape_vertex_total_count: int = 0
+        """Total number of reduced elastic render mesh vertices."""
+        self.elastic_shape_index_total_count: int = 0
+        """Total number of reduced elastic render mesh triangle indices."""
         self.elastic_max_mode_count: int = 0
         """Maximum reduced elastic mode count across all elastic bodies."""
         self.elastic_body_count: int = 0

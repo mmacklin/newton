@@ -309,7 +309,9 @@ Reduced elastic links can be created with :meth:`~newton.ModelBuilder.add_link_e
 or :meth:`~newton.ModelBuilder.add_body_elastic`. The elastic owner joint stores the
 floating frame and modal state; ordinary joints such as
 :meth:`~newton.ModelBuilder.add_joint_revolute` attach to the elastic link through
-their existing parent and child transforms.
+their existing parent and child transforms. When a mode shape callable is supplied,
+Newton samples it at those joint attachment frames for the VBD solve and at visible
+shape vertices for Viewer rendering.
 
 Definition of ``joint_q``
 ^^^^^^^^^^^^^^^^^^^^^^^^^

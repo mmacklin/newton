@@ -80,6 +80,7 @@ class ViewerBase(ABC):
 
         # Shape instance batches (shape hash -> ShapeInstances)
         self._shape_instances = {}
+        self._elastic_shape_set: set[int] = set()
         # Inertia box wireframe line vertices (12 lines per body)
         self._inertia_box_points0 = None
         self._inertia_box_points1 = None
@@ -453,12 +454,97 @@ class ViewerBase(ABC):
             )
 
         self._log_inertia_boxes(state)
+        self._log_elastic_shapes(state)
         self._log_elastic_bodies(state)
 
         self._log_triangles(state)
         self._log_particles(state)
         self._log_joints(state)
         self._log_com(state)
+
+    def _log_elastic_shapes(self, state: newton.State):
+        """Render reduced elastic shape geometry by deforming cached vertices."""
+        if (
+            getattr(self.model, "elastic_shape_count", 0) == 0
+            or getattr(self.model, "elastic_shape_vertex_total_count", 0) == 0
+        ):
+            return
+
+        body_q = state.body_q.numpy()
+        joint_q = state.joint_q.numpy()
+        joint_q_start = self.model.joint_q_start.numpy()
+        body_elastic_index = self.model.body_elastic_index.numpy()
+        elastic_joint = self.model.elastic_joint.numpy()
+        elastic_mode_count = self.model.elastic_mode_count.numpy()
+        shape_body = self.model.shape_body.numpy()
+        shape_flags = self.model.shape_flags.numpy()
+        body_world = self.model.body_world.numpy()
+        shape_world = self.model.shape_world.numpy()
+        shape_ids = self.model.elastic_shape_shape.numpy()
+        shape_bodies = self.model.elastic_shape_body.numpy()
+        vertex_start = self.model.elastic_shape_vertex_start.numpy()
+        vertex_count = self.model.elastic_shape_vertex_count.numpy()
+        index_start = self.model.elastic_shape_index_start.numpy()
+        index_count = self.model.elastic_shape_index_count.numpy()
+        vertex_local = self.model.elastic_shape_vertex_local.numpy()
+        vertex_phi = self.model.elastic_shape_vertex_phi.numpy()
+        indices = self.model.elastic_shape_indices.numpy()
+        max_modes = int(self.model.elastic_max_mode_count)
+        offsets = self.world_offsets.numpy() if self.world_offsets is not None else None
+
+        def rotate(q: np.ndarray, v: np.ndarray) -> np.ndarray:
+            qv = np.array(q[:3], dtype=float)
+            return v + 2.0 * np.cross(qv, np.cross(qv, v) + q[3] * v)
+
+        def transform_point(xform: np.ndarray, point: np.ndarray) -> np.ndarray:
+            return xform[:3] + rotate(xform[3:7], point)
+
+        for elastic_shape in range(int(self.model.elastic_shape_count)):
+            shape = int(shape_ids[elastic_shape])
+            body = int(shape_bodies[elastic_shape])
+            world = int(body_world[body]) if body >= 0 else int(shape_world[shape])
+            visible = self._should_render_world(world) and self._should_show_shape(
+                int(shape_flags[shape]), bool(shape_body[shape] == -1)
+            )
+
+            start = int(vertex_start[elastic_shape])
+            count = int(vertex_count[elastic_shape])
+            i_start = int(index_start[elastic_shape])
+            i_count = int(index_count[elastic_shape])
+            name = f"/model/elastic_shapes/shape_{shape}"
+
+            if count == 0 or i_count == 0:
+                continue
+            visible = visible and self.show_elastic_bodies
+
+            local_vertices = np.array(vertex_local[start : start + count], dtype=float)
+            if visible:
+                elastic_index = int(body_elastic_index[body])
+                mode_count = int(elastic_mode_count[elastic_index])
+                q_start = int(joint_q_start[int(elastic_joint[elastic_index])]) + 7
+                for local_idx in range(count):
+                    vertex_index = start + local_idx
+                    for mode in range(mode_count):
+                        if mode < max_modes:
+                            local_vertices[local_idx] += (
+                                vertex_phi[vertex_index * max_modes + mode] * joint_q[q_start + mode]
+                            )
+
+            world_vertices = np.empty_like(local_vertices, dtype=np.float32)
+            world_offset = np.zeros(3, dtype=float)
+            if offsets is not None and world >= 0:
+                world_offset = np.array(offsets[world], dtype=float)
+            for local_idx, local in enumerate(local_vertices):
+                if body >= 0:
+                    world_vertices[local_idx] = transform_point(body_q[body], local) + world_offset
+                else:
+                    world_vertices[local_idx] = local + world_offset
+
+            points_wp = wp.array(world_vertices, dtype=wp.vec3, device=self.device)
+            indices_wp = wp.array(
+                indices[i_start : i_start + i_count].astype(np.int32), dtype=wp.int32, device=self.device
+            )
+            self.log_mesh(name, points_wp, indices_wp, hidden=not visible, backface_culling=True)
 
     def _log_elastic_bodies(self, state: newton.State):
         """Render reduced elastic body centerlines from sampled modal shape data."""
@@ -1360,9 +1446,17 @@ class ViewerBase(ABC):
         shape_world = self.model.shape_world.numpy()
         shape_sdf_index = self._shape_sdf_index_host
         shape_count = len(shape_body)
+        self._elastic_shape_set = (
+            {int(s) for s in self.model.elastic_shape_shape.numpy()}
+            if getattr(self.model, "elastic_shape_count", 0) > 0
+            else set()
+        )
 
         # loop over shapes
         for s in range(shape_count):
+            if s in self._elastic_shape_set:
+                continue
+
             # skip shapes from worlds beyond max_worlds limit
             if not self._should_render_world(shape_world[s]):
                 continue

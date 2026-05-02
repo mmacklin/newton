@@ -9,7 +9,7 @@
 - Interactive example browser in the GL viewer with tree-view navigation and switch/reset support
 - Add `TetMesh` class and USD loading API for tetrahedral mesh geometry
 - Support kinematic bodies in VBD solver
-- Add reduced elastic body links with floating-frame modal coordinates and VBD support for revolute-joint attachments
+- Add reduced elastic body links with floating-frame modal coordinates, VBD support for revolute-joint attachments, and deformed Viewer mesh rendering
 - Add brick stacking example
 - Add box pyramid example and ASV benchmark for dense convex-on-convex contacts
 
