@@ -206,6 +206,13 @@ enforce joints as pairwise body constraints but do not use the articulation kine
      - |no|
      - |yes|
      - |no|
+   * - ELASTIC
+     - |no|
+     - |no|
+     - |no|
+     - |no|
+     - |yes| :sup:`5`
+     - |no|
 
 | :sup:`1` DISTANCE joints are treated as FREE (no distance constraint enforcement).
 
@@ -342,6 +349,7 @@ enforce joints as pairwise body constraints but do not use the articulation kine
 
 | :sup:`3` Mimic constraints in MuJoCo are supported for REVOLUTE and PRISMATIC joints only.
 | :sup:`4` VBD interprets ``joint_target_kd`` and ``joint_limit_kd`` as dimensionless Rayleigh damping coefficients (``D = kd * ke``), not absolute units.
+| :sup:`5` ELASTIC joints own a floating frame plus reduced modal coordinates. VBD integrates the modal coordinates; ordinary joints provide attachments.
 
 
 

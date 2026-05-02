@@ -940,6 +940,48 @@ def apply_linear_drive_limit_force(
 
 
 @wp.func
+def eval_elastic_endpoint_xform(
+    joint_index: int,
+    body_index: int,
+    is_parent_side: bool,
+    xform_rest: wp.transform,
+    body_elastic_index: wp.array(dtype=wp.int32),
+    elastic_joint: wp.array(dtype=wp.int32),
+    elastic_mode_count: wp.array(dtype=wp.int32),
+    joint_q: wp.array(dtype=float),
+    joint_q_start: wp.array(dtype=int),
+    joint_parent_elastic_endpoint: wp.array(dtype=wp.int32),
+    joint_child_elastic_endpoint: wp.array(dtype=wp.int32),
+    elastic_endpoint_phi: wp.array(dtype=wp.vec3),
+    elastic_max_mode_count: int,
+):
+    if body_index < 0:
+        return xform_rest
+
+    elastic_index = body_elastic_index[body_index]
+    if elastic_index < 0:
+        return xform_rest
+
+    endpoint = joint_child_elastic_endpoint[joint_index]
+    if is_parent_side:
+        endpoint = joint_parent_elastic_endpoint[joint_index]
+    if endpoint < 0:
+        return xform_rest
+
+    p = wp.transform_get_translation(xform_rest)
+    q = wp.transform_get_rotation(xform_rest)
+    owner_joint = elastic_joint[elastic_index]
+    q_start = joint_q_start[owner_joint] + 7
+    mode_count = elastic_mode_count[elastic_index]
+
+    for i in range(elastic_max_mode_count):
+        if i < mode_count:
+            p = p + elastic_endpoint_phi[endpoint * elastic_max_mode_count + i] * joint_q[q_start + i]
+
+    return wp.transform(p, q)
+
+
+@wp.func
 def evaluate_joint_force_hessian(
     body_index: int,
     joint_index: int,
@@ -953,6 +995,15 @@ def evaluate_joint_force_hessian(
     joint_child: wp.array(dtype=int),
     joint_X_p: wp.array(dtype=wp.transform),
     joint_X_c: wp.array(dtype=wp.transform),
+    body_elastic_index: wp.array(dtype=wp.int32),
+    elastic_joint: wp.array(dtype=wp.int32),
+    elastic_mode_count: wp.array(dtype=wp.int32),
+    joint_q: wp.array(dtype=float),
+    joint_q_start: wp.array(dtype=int),
+    joint_parent_elastic_endpoint: wp.array(dtype=wp.int32),
+    joint_child_elastic_endpoint: wp.array(dtype=wp.int32),
+    elastic_endpoint_phi: wp.array(dtype=wp.vec3),
+    elastic_max_mode_count: int,
     joint_axis: wp.array(dtype=wp.vec3),
     joint_qd_start: wp.array(dtype=int),
     joint_constraint_start: wp.array(dtype=int),
@@ -1011,8 +1062,36 @@ def evaluate_joint_force_hessian(
 
     is_parent_body = parent_index >= 0 and body_index == parent_index
 
-    X_pj = joint_X_p[joint_index]
-    X_cj = joint_X_c[joint_index]
+    X_pj = eval_elastic_endpoint_xform(
+        joint_index,
+        parent_index,
+        True,
+        joint_X_p[joint_index],
+        body_elastic_index,
+        elastic_joint,
+        elastic_mode_count,
+        joint_q,
+        joint_q_start,
+        joint_parent_elastic_endpoint,
+        joint_child_elastic_endpoint,
+        elastic_endpoint_phi,
+        elastic_max_mode_count,
+    )
+    X_cj = eval_elastic_endpoint_xform(
+        joint_index,
+        child_index,
+        False,
+        joint_X_c[joint_index],
+        body_elastic_index,
+        elastic_joint,
+        elastic_mode_count,
+        joint_q,
+        joint_q_start,
+        joint_parent_elastic_endpoint,
+        joint_child_elastic_endpoint,
+        elastic_endpoint_phi,
+        elastic_max_mode_count,
+    )
 
     if parent_index >= 0:
         parent_pose = body_q[parent_index]
@@ -2522,6 +2601,15 @@ def solve_rigid_body(
     joint_child: wp.array(dtype=int),
     joint_X_p: wp.array(dtype=wp.transform),
     joint_X_c: wp.array(dtype=wp.transform),
+    body_elastic_index: wp.array(dtype=wp.int32),
+    elastic_joint: wp.array(dtype=wp.int32),
+    elastic_mode_count: wp.array(dtype=wp.int32),
+    joint_q: wp.array(dtype=float),
+    joint_q_start: wp.array(dtype=int),
+    joint_parent_elastic_endpoint: wp.array(dtype=wp.int32),
+    joint_child_elastic_endpoint: wp.array(dtype=wp.int32),
+    elastic_endpoint_phi: wp.array(dtype=wp.vec3),
+    elastic_max_mode_count: int,
     joint_axis: wp.array(dtype=wp.vec3),
     joint_qd_start: wp.array(dtype=int),
     joint_constraint_start: wp.array(dtype=int),
@@ -2693,6 +2781,15 @@ def solve_rigid_body(
             joint_child,
             joint_X_p,
             joint_X_c,
+            body_elastic_index,
+            elastic_joint,
+            elastic_mode_count,
+            joint_q,
+            joint_q_start,
+            joint_parent_elastic_endpoint,
+            joint_child_elastic_endpoint,
+            elastic_endpoint_phi,
+            elastic_max_mode_count,
             joint_axis,
             joint_qd_start,
             joint_constraint_start,
@@ -2816,6 +2913,15 @@ def update_duals_joint(
     joint_child: wp.array(dtype=int),
     joint_X_p: wp.array(dtype=wp.transform),
     joint_X_c: wp.array(dtype=wp.transform),
+    body_elastic_index: wp.array(dtype=wp.int32),
+    elastic_joint: wp.array(dtype=wp.int32),
+    elastic_mode_count: wp.array(dtype=wp.int32),
+    joint_q: wp.array(dtype=float),
+    joint_q_start: wp.array(dtype=int),
+    joint_parent_elastic_endpoint: wp.array(dtype=wp.int32),
+    joint_child_elastic_endpoint: wp.array(dtype=wp.int32),
+    elastic_endpoint_phi: wp.array(dtype=wp.vec3),
+    elastic_max_mode_count: int,
     joint_axis: wp.array(dtype=wp.vec3),
     joint_qd_start: wp.array(dtype=int),
     joint_constraint_start: wp.array(dtype=int),
@@ -2901,14 +3007,45 @@ def update_duals_joint(
     # Read solver constraint start index
     c_start = joint_constraint_start[j]
 
+    X_pj = eval_elastic_endpoint_xform(
+        j,
+        parent,
+        True,
+        joint_X_p[j],
+        body_elastic_index,
+        elastic_joint,
+        elastic_mode_count,
+        joint_q,
+        joint_q_start,
+        joint_parent_elastic_endpoint,
+        joint_child_elastic_endpoint,
+        elastic_endpoint_phi,
+        elastic_max_mode_count,
+    )
+    X_cj = eval_elastic_endpoint_xform(
+        j,
+        child,
+        False,
+        joint_X_c[j],
+        body_elastic_index,
+        elastic_joint,
+        elastic_mode_count,
+        joint_q,
+        joint_q_start,
+        joint_parent_elastic_endpoint,
+        joint_child_elastic_endpoint,
+        elastic_endpoint_phi,
+        elastic_max_mode_count,
+    )
+
     # Compute joint frames in world space
     if parent >= 0:
-        X_wp = body_q[parent] * joint_X_p[j]
+        X_wp = body_q[parent] * X_pj
         X_wp_rest = body_q_rest[parent] * joint_X_p[j]
     else:
-        X_wp = joint_X_p[j]
+        X_wp = X_pj
         X_wp_rest = joint_X_p[j]
-    X_wc = body_q[child] * joint_X_c[j]
+    X_wc = body_q[child] * X_cj
     X_wc_rest = body_q_rest[child] * joint_X_c[j]
 
     # Cable joint: adaptive penalty for stretch and bend constraints

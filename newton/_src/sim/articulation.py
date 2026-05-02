@@ -262,7 +262,7 @@ def eval_single_articulation_fk(
             X_j = wp.transform(wp.vec3(), r)
             v_j = wp.spatial_vector(wp.vec3(), w)
 
-        if type == JointType.FREE or type == JointType.DISTANCE:
+        if type == JointType.FREE or type == JointType.DISTANCE or type == JointType.ELASTIC:
             t = wp.transform(
                 wp.vec3(joint_q[q_start + 0], joint_q[q_start + 1], joint_q[q_start + 2]),
                 wp.quat(joint_q[q_start + 3], joint_q[q_start + 4], joint_q[q_start + 5], joint_q[q_start + 6]),
@@ -692,7 +692,7 @@ def eval_articulation_ik(
     if type == JointType.FIXED:
         return
 
-    if type == JointType.FREE or type == JointType.DISTANCE:
+    if type == JointType.FREE or type == JointType.DISTANCE or type == JointType.ELASTIC:
         q_pc = wp.quat_inverse(q_p) * q_c
 
         x_err_c = wp.quat_rotate_inv(q_p, x_err)
@@ -899,7 +899,7 @@ def jcalc_motion_subspace(
         joint_S_s[qd_start + 1] = S_1
         joint_S_s[qd_start + 2] = S_2
 
-    elif type == JointType.FREE or type == JointType.DISTANCE:
+    elif type == JointType.FREE or type == JointType.DISTANCE or type == JointType.ELASTIC:
         joint_S_s[qd_start + 0] = transform_twist(X_sc, wp.spatial_vector(1.0, 0.0, 0.0, 0.0, 0.0, 0.0))
         joint_S_s[qd_start + 1] = transform_twist(X_sc, wp.spatial_vector(0.0, 1.0, 0.0, 0.0, 0.0, 0.0))
         joint_S_s[qd_start + 2] = transform_twist(X_sc, wp.spatial_vector(0.0, 0.0, 1.0, 0.0, 0.0, 0.0))

@@ -298,9 +298,18 @@ Joint types
      - Cable joint with 1 linear (stretch/shear) and 1 angular (bend/twist) degree of freedom
      - 2
      - 2
+   * - ``JointType.ELASTIC``
+     - Reduced elastic owner joint with a floating frame and modal deformation coordinates
+     - 7 + mode count (3D position + 4D quaternion + modal amplitudes)
+     - 6 + mode count (twist + modal velocities)
 
 D6 joints are the most general joint type in Newton and can be used to represent any combination of translational and rotational degrees of freedom.
 Prismatic, revolute, planar, and universal joints can be seen as special cases of the D6 joint.
+Reduced elastic links can be created with :meth:`~newton.ModelBuilder.add_link_elastic`
+or :meth:`~newton.ModelBuilder.add_body_elastic`. The elastic owner joint stores the
+floating frame and modal state; ordinary joints such as
+:meth:`~newton.ModelBuilder.add_joint_revolute` attach to the elastic link through
+their existing parent and child transforms.
 
 Definition of ``joint_q``
 ^^^^^^^^^^^^^^^^^^^^^^^^^
