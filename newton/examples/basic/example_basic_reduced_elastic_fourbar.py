@@ -73,7 +73,7 @@ class Example:
         self.d = 0.75
         self.z = 0.12
         self.theta2_0 = 0.75
-        self.mode_q0 = np.array([0.08, 0.08, 0.0], dtype=np.float32)
+        self.mode_q0 = np.array([0.08, 0.05, 0.0], dtype=np.float32)
 
         theta3, theta4 = _solve_fourbar(self.theta2_0, self.a, self.b_rest + float(self.mode_q0[0]), self.c, self.d)
         A = np.array([0.0, 0.0, self.z])
@@ -101,9 +101,9 @@ class Example:
             mass=1.0,
             inertia=inertia,
             mode_count=3,
-            mode_mass=[0.04, 0.025, 0.025],
-            mode_stiffness=[10.0, 7.0, 9.0],
-            mode_damping=[0.3, 0.18, 0.18],
+            mode_mass=[0.04, 0.035, 0.035],
+            mode_stiffness=[10.0, 22.0, 352.0],
+            mode_damping=[0.3, 0.35, 0.7],
             mode_q=self.mode_q0,
             mode_shape_fn=self._mode_shape,
             label="elastic_coupler",
@@ -188,14 +188,19 @@ class Example:
         self.viewer.set_camera(wp.vec3(0.38, -1.45, 0.85), -26.0, 90.0)
 
     def _mode_shape(self, x: np.ndarray) -> np.ndarray:
-        xi = float(x[0] / self.b_rest)
-        quadratic = 1.0 - 4.0 * xi * xi
-        sinusoidal = math.sin(2.0 * math.pi * (xi + 0.5))
+        s = float(x[0] + 0.5 * self.b_rest)
+        xi = s / self.b_rest
+        axial = float(x[0] / self.b_rest)
+
+        first = math.sin(math.pi * xi)
+        first_slope = (math.pi / self.b_rest) * math.cos(math.pi * xi)
+        second = math.sin(2.0 * math.pi * xi)
+        second_slope = (2.0 * math.pi / self.b_rest) * math.cos(2.0 * math.pi * xi)
         return np.array(
             [
-                [xi, 0.0, 0.0],
-                [0.0, quadratic, 0.0],
-                [0.0, sinusoidal, 0.0],
+                [axial, 0.0, 0.0],
+                [-float(x[1]) * first_slope, first, 0.0],
+                [-float(x[1]) * second_slope, second, 0.0],
             ],
             dtype=np.float32,
         )
@@ -237,8 +242,8 @@ class Example:
 
         self._joint_f[:] = 0.0
         self._joint_f[self.elastic_qd_start + 6] = 1.1 * math.sin(4.2 * t)
-        self._joint_f[self.elastic_qd_start + 7] = 0.9 * math.sin(3.0 * t)
-        self._joint_f[self.elastic_qd_start + 8] = 0.8 * math.cos(2.4 * t)
+        self._joint_f[self.elastic_qd_start + 7] = 0.8 * math.sin(3.0 * t)
+        self._joint_f[self.elastic_qd_start + 8] = 4.0 * math.cos(2.4 * t)
         self.control.joint_f.assign(self._joint_f)
 
     def simulate(self):

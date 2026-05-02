@@ -111,11 +111,11 @@ def integrate_elastic_modes_implicit(
         stiffness = elastic_mode_stiffness[mode]
         damping = elastic_mode_damping[mode]
 
-        if mass <= 0.0:
+        denom = mass + dt * damping + dt * dt * stiffness
+        if denom <= 0.0:
             joint_q_out[q_idx] = q
             joint_qd_out[qd_idx] = 0.0
         else:
-            denom = mass + dt * damping + dt * dt * stiffness
             v_new = (mass * v + dt * (force - stiffness * q)) / denom
             q_new = q + dt * v_new
             joint_q_out[q_idx] = q_new

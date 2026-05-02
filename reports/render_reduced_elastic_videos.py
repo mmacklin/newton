@@ -12,6 +12,7 @@ import warp as wp
 
 import newton
 import newton.viewer
+from newton.examples.basic.example_basic_reduced_elastic_beam import Example as BeamExample
 from newton.examples.basic.example_basic_reduced_elastic_fourbar import Example as FourbarExample
 
 WIDTH = 960
@@ -53,36 +54,35 @@ class RevoluteEndpointFixture:
         self.sim_dt = self.frame_dt / self.sim_substeps
         self.sim_time = 0.0
         self.length = 1.0
-        self.rest_anchor = -0.5
-        self.z = 0.14
-        self.mode_q0 = 0.12
+        self.z = 0.18
+        self.mode_q0 = 1.0
 
         builder = newton.ModelBuilder(gravity=0.0)
         builder.add_ground_plane()
 
         inertia = wp.mat33(0.01, 0.0, 0.0, 0.0, 0.01, 0.0, 0.0, 0.0, 0.01)
         self.body = builder.add_body_elastic(
-            xform=wp.transform(wp.vec3(abs(self.rest_anchor) + self.mode_q0, 0.0, self.z), wp.quat_identity()),
+            xform=wp.transform(wp.vec3(0.5 * self.length, 0.0, self.z), wp.quat_identity()),
             mass=1.0,
             inertia=inertia,
             mode_count=1,
-            mode_mass=[0.04],
-            mode_stiffness=[12.0],
-            mode_damping=[0.25],
+            mode_mass=[0.03],
+            mode_stiffness=[3.0],
+            mode_damping=[0.08],
             mode_q=[self.mode_q0],
             mode_shape_fn=self._mode_shape,
-            label="elastic_endpoint_fixture",
+            label="elastic_torsion_fixture",
         )
 
         shape_cfg = newton.ModelBuilder.ShapeConfig()
         shape_cfg.density = 0.0
-        builder.add_shape_box(self.body, hx=self.length / 2.0, hy=0.035, hz=0.025, cfg=shape_cfg)
+        builder.add_shape_box(self.body, hx=self.length / 2.0, hy=0.065, hz=0.035, cfg=shape_cfg)
         self.joint = builder.add_joint_revolute(
             parent=-1,
             child=self.body,
-            axis=(0.0, 0.0, 1.0),
+            axis=(1.0, 0.0, 0.0),
             parent_xform=wp.transform(wp.vec3(0.0, 0.0, self.z), wp.quat_identity()),
-            child_xform=wp.transform(wp.vec3(self.rest_anchor, 0.0, 0.0), wp.quat_identity()),
+            child_xform=wp.transform(wp.vec3(-0.5 * self.length, 0.0, 0.0), wp.quat_identity()),
             label="world_revolute_to_elastic_endpoint",
         )
         builder.color()
@@ -107,10 +107,12 @@ class RevoluteEndpointFixture:
         )
 
         self.viewer.set_model(self.model)
-        self.viewer.set_camera(wp.vec3(0.58, -1.15, 0.65), -28.0, 90.0)
+        self.viewer.set_camera(wp.vec3(0.52, -1.25, 0.66), -27.0, 90.0)
 
     def _mode_shape(self, x: np.ndarray) -> np.ndarray:
-        return np.array([[x[0] / abs(self.rest_anchor), 0.0, 0.0]], dtype=np.float32)
+        s = float(x[0] + 0.5 * self.length)
+        twist = s / self.length
+        return np.array([[0.0, -float(x[2]) * twist, float(x[1]) * twist]], dtype=np.float32)
 
     def _mode_value(self) -> float:
         return float(self.state_0.joint_q.numpy()[self.elastic_q_start + 7])
@@ -120,7 +122,7 @@ class RevoluteEndpointFixture:
             t = self.sim_time + substep * self.sim_dt
             self.state_0.clear_forces()
             self._joint_f[:] = 0.0
-            self._joint_f[self.elastic_qd_start + 6] = 1.4 * math.sin(5.0 * t)
+            self._joint_f[self.elastic_qd_start + 6] = 3.0 * math.sin(4.0 * t)
             self.control.joint_f.assign(self._joint_f)
             self.solver.step(self.state_0, self.state_1, self.control, None, self.sim_dt)
             self.state_0, self.state_1 = self.state_1, self.state_0
@@ -150,10 +152,21 @@ def main():
     fixture = RevoluteEndpointFixture(viewer)
     frames = _capture(fixture, viewer, frame_count=150)
     _write_video(assets / "elastic_revolute_endpoint_fixture.mp4", frames)
+
+    viewer.clear_model()
+    beam = BeamExample(viewer, None)
+    frames = _capture(
+        beam,
+        viewer,
+        frame_count=150,
+        screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_beam.jpg"),
+    )
+    _write_video(assets / "reduced_elastic_cantilever_beam.mp4", frames)
     viewer.close()
 
     print(f"Wrote {assets / 'reduced_elastic_fourbar.mp4'}")
     print(f"Wrote {assets / 'elastic_revolute_endpoint_fixture.mp4'}")
+    print(f"Wrote {assets / 'reduced_elastic_cantilever_beam.mp4'}")
 
 
 if __name__ == "__main__":

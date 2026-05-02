@@ -1115,6 +1115,24 @@ class ModelBuilder:
         """Local render polyline sample points for reduced elastic bodies."""
         self.elastic_render_point_phi: list[wp.vec3] = []
         """Flattened translational mode samples for reduced elastic render points."""
+        self.elastic_shape_shape: list[int] = []
+        """Original shape index for each reduced elastic render mesh."""
+        self.elastic_shape_body: list[int] = []
+        """Body index for each reduced elastic render mesh."""
+        self.elastic_shape_vertex_start: list[int] = []
+        """Start vertex for each reduced elastic render mesh."""
+        self.elastic_shape_vertex_count: list[int] = []
+        """Vertex count for each reduced elastic render mesh."""
+        self.elastic_shape_index_start: list[int] = []
+        """Start triangle index for each reduced elastic render mesh."""
+        self.elastic_shape_index_count: list[int] = []
+        """Triangle index count for each reduced elastic render mesh."""
+        self.elastic_shape_vertex_local: list[wp.vec3] = []
+        """Body-local rest vertices for reduced elastic render meshes."""
+        self.elastic_shape_vertex_phi: list[wp.vec3] = []
+        """Flattened mode samples for reduced elastic render mesh vertices."""
+        self.elastic_shape_indices: list[int] = []
+        """Flattened local triangle indices for reduced elastic render meshes."""
         self.elastic_max_mode_count: int = 0
         """Maximum reduced elastic mode count."""
 
@@ -9535,6 +9553,131 @@ class ModelBuilder:
                     else:
                         self.elastic_render_point_phi.append(wp.vec3(0.0))
 
+    @staticmethod
+    def _quat_rotate_np(q: np.ndarray, v: np.ndarray) -> np.ndarray:
+        qv = np.array(q[:3], dtype=np.float32)
+        return v + 2.0 * np.cross(qv, np.cross(qv, v) + float(q[3]) * v)
+
+    @staticmethod
+    def _transform_point_np(xform: Transform, point: np.ndarray) -> np.ndarray:
+        p = np.array(wp.transform_get_translation(xform), dtype=np.float32)
+        q = np.array(wp.transform_get_rotation(xform), dtype=np.float32)
+        return p + ModelBuilder._quat_rotate_np(q, point)
+
+    @staticmethod
+    def _create_subdivided_box_render_mesh(
+        hx: float,
+        hy: float,
+        hz: float,
+        segments: int = 32,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Create an x-subdivided box surface for elastic render deformation."""
+        segments = max(1, int(segments))
+        vertices: list[tuple[float, float, float]] = []
+        indices: list[int] = []
+
+        for i in range(segments + 1):
+            x = -hx + 2.0 * hx * (float(i) / float(segments))
+            vertices.extend(
+                [
+                    (x, -hy, -hz),
+                    (x, hy, -hz),
+                    (x, hy, hz),
+                    (x, -hy, hz),
+                ]
+            )
+
+        def add_quad(a: int, b: int, c: int, d: int) -> None:
+            indices.extend([a, b, c, a, c, d])
+
+        for i in range(segments):
+            base = 4 * i
+            nxt = base + 4
+            add_quad(base + 0, nxt + 0, nxt + 1, base + 1)
+            add_quad(base + 1, nxt + 1, nxt + 2, base + 2)
+            add_quad(base + 2, nxt + 2, nxt + 3, base + 3)
+            add_quad(base + 3, nxt + 3, nxt + 0, base + 0)
+
+        add_quad(0, 3, 2, 1)
+        end = 4 * segments
+        add_quad(end + 0, end + 1, end + 2, end + 3)
+        return np.asarray(vertices, dtype=np.float32), np.asarray(indices, dtype=np.int32)
+
+    def _elastic_shape_render_mesh(self, shape_index: int) -> tuple[np.ndarray, np.ndarray] | None:
+        """Return shape-local render vertices and indices for an elastic shape."""
+        shape_type = self.shape_type[shape_index]
+        scale = np.asarray(self.shape_scale[shape_index], dtype=np.float32)
+        source = self.shape_source[shape_index]
+
+        if shape_type == GeoType.BOX:
+            hx, hy, hz = (float(scale[0]), float(scale[1]), float(scale[2]))
+            return self._create_subdivided_box_render_mesh(hx, hy, hz)
+
+        if shape_type in (GeoType.MESH, GeoType.CONVEX_MESH):
+            if not isinstance(source, Mesh):
+                return None
+            vertices = np.asarray(source.vertices, dtype=np.float32) * scale.reshape((1, 3))
+            indices = np.asarray(source.indices, dtype=np.int32)
+            return vertices, indices
+
+        return None
+
+    def _build_elastic_shape_render_cache(self) -> None:
+        """Sample reduced elastic mode shapes on visible shape render vertices."""
+        self.elastic_shape_shape.clear()
+        self.elastic_shape_body.clear()
+        self.elastic_shape_vertex_start.clear()
+        self.elastic_shape_vertex_count.clear()
+        self.elastic_shape_index_start.clear()
+        self.elastic_shape_index_count.clear()
+        self.elastic_shape_vertex_local.clear()
+        self.elastic_shape_vertex_phi.clear()
+        self.elastic_shape_indices.clear()
+
+        if self.elastic_max_mode_count == 0:
+            return
+
+        for shape_index, body in enumerate(self.shape_body):
+            if body < 0:
+                continue
+            elastic_index = self.body_elastic_index[body]
+            if elastic_index < 0:
+                continue
+            if not (self.shape_flags[shape_index] & (ShapeFlags.VISIBLE | ShapeFlags.COLLIDE_SHAPES)):
+                continue
+
+            mesh = self._elastic_shape_render_mesh(shape_index)
+            if mesh is None:
+                continue
+            vertices, indices = mesh
+            if vertices.size == 0 or indices.size == 0:
+                continue
+
+            vertex_start = len(self.elastic_shape_vertex_local)
+            index_start = len(self.elastic_shape_indices)
+            self.elastic_shape_shape.append(shape_index)
+            self.elastic_shape_body.append(body)
+            self.elastic_shape_vertex_start.append(vertex_start)
+            self.elastic_shape_vertex_count.append(int(vertices.shape[0]))
+            self.elastic_shape_index_start.append(index_start)
+            self.elastic_shape_index_count.append(int(indices.size))
+            self.elastic_shape_indices.extend(int(i) for i in indices)
+
+            shape_xform = self.shape_transform[shape_index]
+            for vertex in vertices:
+                local_pos = self._transform_point_np(shape_xform, vertex)
+                self.elastic_shape_vertex_local.append(
+                    wp.vec3(float(local_pos[0]), float(local_pos[1]), float(local_pos[2]))
+                )
+                phi = self._sample_elastic_mode_shape(elastic_index, local_pos)
+                for mode in range(self.elastic_max_mode_count):
+                    if mode < phi.shape[0]:
+                        self.elastic_shape_vertex_phi.append(
+                            wp.vec3(float(phi[mode, 0]), float(phi[mode, 1]), float(phi[mode, 2]))
+                        )
+                    else:
+                        self.elastic_shape_vertex_phi.append(wp.vec3(0.0))
+
     def _build_world_starts(self):
         """
         Constructs the per-world entity start indices.
@@ -9803,6 +9946,7 @@ class ModelBuilder:
         # sample reduced elastic mode shapes at ordinary joint endpoints
         self._build_elastic_endpoint_cache()
         self._build_elastic_render_cache()
+        self._build_elastic_shape_render_cache()
 
         # construct world starts by ensuring they are cumulative and appending
         # tail-end global counts and sum total counts over the entire model.
@@ -10600,6 +10744,22 @@ class ModelBuilder:
             m.elastic_render_point_phi = wp.array(
                 self.elastic_render_point_phi, dtype=wp.vec3, requires_grad=requires_grad
             )
+            m.elastic_shape_count = len(self.elastic_shape_shape)
+            m.elastic_shape_vertex_total_count = len(self.elastic_shape_vertex_local)
+            m.elastic_shape_index_total_count = len(self.elastic_shape_indices)
+            m.elastic_shape_shape = wp.array(self.elastic_shape_shape, dtype=wp.int32)
+            m.elastic_shape_body = wp.array(self.elastic_shape_body, dtype=wp.int32)
+            m.elastic_shape_vertex_start = wp.array(self.elastic_shape_vertex_start, dtype=wp.int32)
+            m.elastic_shape_vertex_count = wp.array(self.elastic_shape_vertex_count, dtype=wp.int32)
+            m.elastic_shape_index_start = wp.array(self.elastic_shape_index_start, dtype=wp.int32)
+            m.elastic_shape_index_count = wp.array(self.elastic_shape_index_count, dtype=wp.int32)
+            m.elastic_shape_vertex_local = wp.array(
+                self.elastic_shape_vertex_local, dtype=wp.vec3, requires_grad=requires_grad
+            )
+            m.elastic_shape_vertex_phi = wp.array(
+                self.elastic_shape_vertex_phi, dtype=wp.vec3, requires_grad=requires_grad
+            )
+            m.elastic_shape_indices = wp.array(self.elastic_shape_indices, dtype=wp.int32)
 
             self.find_shape_contact_pairs(m)
 

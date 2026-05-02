@@ -140,17 +140,17 @@
         <span class="tag">FFRF layout</span>
         <span class="tag">VBD modal solve</span>
         <span class="tag">Revolute attachments</span>
-        <span class="tag">Viewer elastic rendering</span>
-        <span class="tag">Quadratic/sinusoidal modes</span>
-        <span class="tag">4-bar example</span>
+        <span class="tag">Deformed mesh rendering</span>
+        <span class="tag">Euler-Bernoulli modes</span>
+        <span class="tag">Analytic beam test</span>
       </div>
     </section>
 
     <section class="summary">
       <div class="metric"><strong>3</strong><span>new builder entry points</span></div>
-      <div class="metric"><strong>14</strong><span>focused CPU/CUDA unit cases</span></div>
-      <div class="metric"><strong>2</strong><span>headless ViewerGL MP4s</span></div>
-      <div class="metric"><strong>1</strong><span>elastic 4-bar example</span></div>
+      <div class="metric"><strong>22</strong><span>focused CPU/CUDA unit cases</span></div>
+      <div class="metric"><strong>3</strong><span>headless ViewerGL MP4s</span></div>
+      <div class="metric"><strong>2</strong><span>public reduced-elastic examples</span></div>
     </section>
 
     <h2>What Changed</h2>
@@ -162,7 +162,7 @@
           <li><code>ModelBuilder.add_link_elastic()</code> creates an elastic link for articulated mechanisms.</li>
           <li><code>ModelBuilder.add_body_elastic()</code> mirrors <code>add_body()</code> for stand-alone floating elastic bodies.</li>
           <li><code>ModelBuilder.add_joint_elastic()</code> is the state-owner joint used by those helpers.</li>
-          <li>The viewer now renders reduced elastic body centerlines from sampled modal shape data during <code>log_state()</code>.</li>
+          <li>The viewer now deforms elastic shape meshes from sampled modal basis values during <code>log_state()</code>.</li>
         </ul>
       </section>
       <section class="section">
@@ -207,22 +207,33 @@
         </tr>
         <tr>
           <td>Viewer draw</td>
-          <td>Builder finalization samples each elastic body's mode shapes along a local render polyline. ViewerGL draws the deformed centerline and endpoint markers automatically.</td>
+          <td>Builder finalization samples elastic shape vertices and a diagnostic centerline. ViewerGL hides the rigid instance for those shapes and uploads deformed mesh vertices each frame.</td>
         </tr>
       </tbody>
     </table>
+
+    <h2>Mode Basis</h2>
+    <div class="section">
+      <p>The demo modes are now standard small-deflection beam fields rather than arbitrary visual curves. The four-bar coupler uses one axial extension mode and the first two pinned-pinned Euler-Bernoulli bending modes. The bending displacement includes the plane-section axial term <code>u_x = -y dw/dx</code>, so the rendered beam cross-section rotates consistently with the neutral-axis deflection.</p>
+      <p>The revolute endpoint fixture uses a Saint-Venant-style uniform twist field about the link axis, <code>u = theta(x) cross r</code>. The centerline intentionally stays fixed; the rectangular mesh twist is the visible signal. The cantilever example uses the exact Euler-Bernoulli tip-load shape with analytic static tip displacement <code>delta = P L^3 / (3 E I)</code>.</p>
+    </div>
 
     <h2>Videos</h2>
     <div class="grid">
       <section class="section">
         <h3>Elastic 4-Bar Linkage</h3>
-        <p>The coupler is an elastic link in a revolute-jointed four-bar. The cyan centerline is now rendered by the viewer from axial, quadratic bending, and sinusoidal bending modes.</p>
+        <p>The coupler is an elastic link in a revolute-jointed four-bar. The orange coupler mesh is deformed directly from axial and Euler-Bernoulli bending modes; the cyan centerline is only a diagnostic overlay.</p>
         <video controls preload="metadata" src="assets/reduced_elastic_fourbar.mp4"></video>
       </section>
       <section class="section">
-        <h3>Revolute Endpoint Fixture</h3>
-        <p>A focused fixture matching the unit-test path: a revolute joint attaches to a deformable endpoint, and the modal coordinate solves the anchor residual.</p>
+        <h3>Revolute Torsion Fixture</h3>
+        <p>A revolute endpoint aligned with the beam axis leaves the centerline unchanged. The mesh deformation shows the torsional mode that the old centerline-only rendering could not show.</p>
         <video controls preload="metadata" src="assets/elastic_revolute_endpoint_fixture.mp4"></video>
+      </section>
+      <section class="section">
+        <h3>Cantilever Tip Load</h3>
+        <p>A single elastic link uses the exact Euler-Bernoulli cantilever tip-load shape. The modal coordinate tracks the analytic static solution as the load varies.</p>
+        <video controls preload="metadata" src="assets/reduced_elastic_cantilever_beam.mp4"></video>
       </section>
     </div>
 
@@ -239,6 +250,9 @@
         <tr><td><code>test_elastic_fk_sync</code></td><td>FFRF pose/twist transfer through <code>eval_fk</code>.</td></tr>
         <tr><td><code>test_elastic_endpoint_shape_sampling</code></td><td>Sampling mode shapes at ordinary joint child transforms.</td></tr>
         <tr><td><code>test_elastic_render_shape_sampling</code></td><td>Render polyline sampling and quadratic basis sampling for visible elastic body drawing.</td></tr>
+        <tr><td><code>test_elastic_shape_mesh_sampling</code></td><td>Actual elastic render mesh vertex sampling for Euler-Bernoulli bending modes.</td></tr>
+        <tr><td><code>test_torsion_render_shape_sampling</code></td><td>Saint-Venant torsion leaves the centerline fixed while rotating surface vertices.</td></tr>
+        <tr><td><code>test_cantilever_tip_load_solution</code></td><td>Analytic Euler-Bernoulli cantilever tip-load displacement <code>P L^3 / (3 E I)</code>.</td></tr>
         <tr><td><code>test_elastic_modal_implicit_solution_vbd</code></td><td>Analytic implicit Euler solution for a forced damped modal oscillator.</td></tr>
         <tr><td><code>test_vbd_revolute_uses_elastic_endpoint</code></td><td>VBD revolute residuals use deformed endpoint positions.</td></tr>
         <tr><td><code>test_vbd_revolute_constraint_solves_elastic_mode</code></td><td>Analytic modal solve for a displaced revolute anchor.</td></tr>
@@ -249,9 +263,10 @@
     <h2>Current Scope</h2>
     <div class="section">
       <ul>
-        <li>Endpoint and viewer modes are translational samples. The example uses one axial mode plus quadratic and sinusoidal bending modes with zero endpoint displacement.</li>
+        <li>Endpoint, solver, and viewer modes are translational FFRF samples. Mesh rendering now evaluates the same basis at each render vertex.</li>
         <li>The modal constraint solve is diagonal per mode. This keeps the implementation small and robust for few-mode links, but dense modal coupling is still future work.</li>
         <li>Physical modal solving is implemented for VBD. Other solvers can carry the state layout but do not yet provide the same elastic-mode constraint solve.</li>
+        <li>Shape deformation is currently a viewer path; collision shapes are still handled by the rigid-body collision pipeline.</li>
         <li>Existing <code>parent_xform</code> and <code>child_xform</code> arguments remain the attachment API for now.</li>
       </ul>
       <p class="note">Generated in headless Newton ViewerGL. CUDA/OpenGL interop was unavailable on this host, so ViewerGL used its built-in CPU-copy fallback for frame capture.</p>
