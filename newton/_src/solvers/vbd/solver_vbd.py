@@ -61,6 +61,12 @@ from .particle_vbd_kernels import (
     solve_elasticity_tile,
     update_velocity,
 )
+from .reduced_elastic_kernels import (
+    copy_body_frame_to_elastic_joint,
+    copy_elastic_joint_frame_to_body,
+    integrate_elastic_modes_implicit,
+    solve_elastic_modes_from_joint_constraints,
+)
 from .rigid_vbd_kernels import (
     _NUM_CONTACT_THREADS_PER_BODY,
     RigidForceElementAdjacencyInfo,
@@ -109,7 +115,7 @@ class SolverVBD(SolverBase):
     for joints and contacts. Hard constraints are not currently enforced.
 
     Joint limitations:
-        - Supported joint types: BALL, FIXED, FREE, REVOLUTE, PRISMATIC, D6, CABLE.
+        - Supported joint types: BALL, FIXED, FREE, REVOLUTE, PRISMATIC, D6, CABLE, ELASTIC.
           DISTANCE joints are not supported.
         - :attr:`~newton.Model.joint_enabled` is supported for all joint types.
         - :attr:`~newton.Model.joint_target_ke`/:attr:`~newton.Model.joint_target_kd` are supported
@@ -622,6 +628,7 @@ class SolverVBD(SolverBase):
           - ``JointType.PRISMATIC``: 3 scalars (2-DOF perpendicular linear + isotropic angular + linear drive/limit)
           - ``JointType.D6``: 2 + lin_count + ang_count scalars (projected linear + projected angular + per-DOF drive/limit)
           - ``JointType.FREE``: 0 scalars (not a constraint)
+          - ``JointType.ELASTIC``: 0 scalars (state owner, not a constraint)
 
         Ordering (must match kernel indexing via ``joint_constraint_start``):
           - ``JointType.CABLE``: [stretch (linear), bend (angular)]
@@ -657,7 +664,7 @@ class SolverVBD(SolverBase):
                 elif jt[j] == JointType.D6:
                     dim_np[j] = 2 + int(jdof_dim[j, 0]) + int(jdof_dim[j, 1])  # [linear, angular, per-DOF drive/limit]
                 else:
-                    if jt[j] != JointType.FREE:
+                    if jt[j] != JointType.FREE and jt[j] != JointType.ELASTIC:
                         raise NotImplementedError(
                             f"SolverVBD rigid joints: JointType.{JointType(jt[j]).name} is not implemented yet "
                             "(only CABLE, BALL, FIXED, REVOLUTE, PRISMATIC, and D6 are supported)."
@@ -1382,15 +1389,141 @@ class SolverVBD(SolverBase):
         if control is None:
             control = self.model.control(clone_variables=False)
 
+        self._initialize_elastic_bodies(state_in, state_out, control, dt)
         self._initialize_rigid_bodies(state_in, control, contacts, dt, update_rigid_history)
         self._initialize_particles(state_in, state_out, dt)
 
         for iter_num in range(self.iterations):
             self._solve_rigid_body_iteration(state_in, state_out, control, contacts, dt)
+            self._solve_elastic_body_iteration(state_in, state_out, control, dt)
             self._solve_particle_iteration(state_in, state_out, contacts, dt, iter_num)
 
         self._finalize_rigid_bodies(state_out, dt)
+        self._finalize_elastic_bodies(state_out)
         self._finalize_particles(state_out, dt)
+
+    def _initialize_elastic_bodies(self, state_in: State, state_out: State, control: Control, dt: float):
+        """Synchronize reduced elastic owner joints and integrate modal coordinates."""
+        model = self.model
+        if getattr(model, "elastic_body_count", 0) == 0:
+            return
+
+        wp.copy(state_out.joint_q, state_in.joint_q)
+        wp.copy(state_out.joint_qd, state_in.joint_qd)
+
+        wp.launch(
+            kernel=copy_elastic_joint_frame_to_body,
+            dim=model.elastic_body_count,
+            inputs=[
+                model.elastic_body,
+                model.elastic_joint,
+                model.joint_q_start,
+                model.joint_qd_start,
+                state_in.joint_q,
+                state_in.joint_qd,
+            ],
+            outputs=[
+                state_in.body_q,
+                state_in.body_qd,
+            ],
+            device=self.device,
+        )
+
+        wp.launch(
+            kernel=integrate_elastic_modes_implicit,
+            dim=model.elastic_body_count,
+            inputs=[
+                dt,
+                model.elastic_joint,
+                model.elastic_mode_start,
+                model.elastic_mode_count,
+                model.elastic_mode_mass,
+                model.elastic_mode_stiffness,
+                model.elastic_mode_damping,
+                model.joint_q_start,
+                model.joint_qd_start,
+                control.joint_f,
+                state_in.joint_q,
+                state_in.joint_qd,
+            ],
+            outputs=[
+                state_out.joint_q,
+                state_out.joint_qd,
+            ],
+            device=self.device,
+        )
+
+    def _finalize_elastic_bodies(self, state_out: State):
+        """Write solved floating-frame body poses back to reduced elastic owner joints."""
+        model = self.model
+        if getattr(model, "elastic_body_count", 0) == 0:
+            return
+
+        wp.launch(
+            kernel=copy_body_frame_to_elastic_joint,
+            dim=model.elastic_body_count,
+            inputs=[
+                model.elastic_body,
+                model.elastic_joint,
+                model.joint_q_start,
+                model.joint_qd_start,
+                state_out.body_q,
+                state_out.body_qd,
+            ],
+            outputs=[
+                state_out.joint_q,
+                state_out.joint_qd,
+            ],
+            device=self.device,
+        )
+
+    def _solve_elastic_body_iteration(self, state_in: State, state_out: State, control: Control, dt: float):
+        """Update reduced elastic modes from ordinary joint attachment residuals."""
+        model = self.model
+        if getattr(model, "elastic_body_count", 0) == 0 or getattr(model, "elastic_endpoint_count", 0) == 0:
+            return
+
+        wp.launch(
+            kernel=solve_elastic_modes_from_joint_constraints,
+            dim=model.elastic_body_count,
+            inputs=[
+                dt,
+                model.elastic_body,
+                model.elastic_joint,
+                model.elastic_mode_start,
+                model.elastic_mode_count,
+                model.elastic_mode_mass,
+                model.elastic_mode_stiffness,
+                model.elastic_mode_damping,
+                model.elastic_endpoint_count,
+                model.elastic_endpoint_joint,
+                model.elastic_endpoint_side,
+                model.elastic_endpoint_body,
+                model.elastic_endpoint_phi,
+                model.elastic_max_mode_count,
+                model.body_elastic_index,
+                state_out.body_q,
+                model.joint_type,
+                model.joint_enabled,
+                model.joint_parent,
+                model.joint_child,
+                model.joint_X_p,
+                model.joint_X_c,
+                model.joint_axis,
+                model.joint_q_start,
+                model.joint_qd_start,
+                self.joint_constraint_start,
+                self.joint_penalty_k,
+                model.joint_parent_elastic_endpoint,
+                model.joint_child_elastic_endpoint,
+                control.joint_f,
+                state_in.joint_q,
+                state_in.joint_qd,
+                state_out.joint_q,
+                state_out.joint_qd,
+            ],
+            device=self.device,
+        )
 
     def _penetration_free_truncation(self, particle_q_out=None):
         """
@@ -2072,6 +2205,15 @@ class SolverVBD(SolverBase):
                     model.joint_child,
                     model.joint_X_p,
                     model.joint_X_c,
+                    model.body_elastic_index,
+                    model.elastic_joint,
+                    model.elastic_mode_count,
+                    state_out.joint_q,
+                    model.joint_q_start,
+                    model.joint_parent_elastic_endpoint,
+                    model.joint_child_elastic_endpoint,
+                    model.elastic_endpoint_phi,
+                    model.elastic_max_mode_count,
                     model.joint_axis,
                     model.joint_qd_start,
                     self.joint_constraint_start,
@@ -2174,6 +2316,15 @@ class SolverVBD(SolverBase):
                     model.joint_child,
                     model.joint_X_p,
                     model.joint_X_c,
+                    model.body_elastic_index,
+                    model.elastic_joint,
+                    model.elastic_mode_count,
+                    state_out.joint_q,
+                    model.joint_q_start,
+                    model.joint_parent_elastic_endpoint,
+                    model.joint_child_elastic_endpoint,
+                    model.elastic_endpoint_phi,
+                    model.elastic_max_mode_count,
                     model.joint_axis,
                     model.joint_qd_start,
                     self.joint_constraint_start,
