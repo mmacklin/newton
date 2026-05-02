@@ -182,6 +182,109 @@ def test_elastic_render_shape_sampling(test, device):
     np.testing.assert_allclose(phi[-1], [0.0, 0.0, 0.0], atol=1.0e-6)
 
 
+def test_elastic_shape_mesh_sampling(test, device):
+    length = 1.0
+    hy = 0.05
+    hz = 0.03
+
+    def shape_fn(x):
+        s = float(x[0] + 0.5 * length)
+        xi = s / length
+        phi = math.sin(math.pi * xi)
+        slope = (math.pi / length) * math.cos(math.pi * xi)
+        return np.array([[-float(x[1]) * slope, phi, 0.0]], dtype=np.float32)
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    body = builder.add_body_elastic(mass=1.0, inertia=_identity_inertia(), mode_count=1, mode_shape_fn=shape_fn)
+    builder.add_shape_box(body, hx=0.5 * length, hy=hy, hz=hz)
+    builder.color()
+    model = builder.finalize(device=device)
+
+    test.assertEqual(model.elastic_shape_count, 1)
+    test.assertGreater(model.elastic_shape_vertex_total_count, 8)
+    test.assertGreater(model.elastic_shape_index_total_count, 36)
+    test.assertEqual(int(model.elastic_shape_shape.numpy()[0]), 0)
+
+    local = model.elastic_shape_vertex_local.numpy()
+    phi = model.elastic_shape_vertex_phi.numpy().reshape((-1, 3))
+    mid = int(np.argmin(np.abs(local[:, 0]) + np.abs(local[:, 1] - hy) + np.abs(local[:, 2] - hz)))
+    np.testing.assert_allclose(phi[mid], [0.0, 1.0, 0.0], atol=1.0e-6)
+
+    left = np.where(np.isclose(local[:, 0], -0.5 * length))[0]
+    right = np.where(np.isclose(local[:, 0], 0.5 * length))[0]
+    np.testing.assert_allclose(phi[left, 1], 0.0, atol=1.0e-6)
+    np.testing.assert_allclose(phi[right, 1], 0.0, atol=1.0e-6)
+
+
+def test_torsion_render_shape_sampling(test, device):
+    length = 1.0
+    hy = 0.06
+    hz = 0.025
+
+    def torsion_shape_fn(x):
+        s = float(x[0] + 0.5 * length)
+        twist = s / length
+        return np.array([[0.0, -float(x[2]) * twist, float(x[1]) * twist]], dtype=np.float32)
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    body = builder.add_body_elastic(mass=1.0, inertia=_identity_inertia(), mode_count=1, mode_shape_fn=torsion_shape_fn)
+    builder.add_shape_box(body, hx=0.5 * length, hy=hy, hz=hz)
+    builder.color()
+    model = builder.finalize(device=device)
+
+    np.testing.assert_allclose(torsion_shape_fn(np.array([0.0, 0.0, 0.0], dtype=np.float32))[0], 0.0, atol=1.0e-7)
+
+    local = model.elastic_shape_vertex_local.numpy()
+    phi = model.elastic_shape_vertex_phi.numpy().reshape((-1, 3))
+    tip = int(np.argmin(np.abs(local[:, 0] - 0.5 * length) + np.abs(local[:, 1] - hy) + np.abs(local[:, 2] - hz)))
+    np.testing.assert_allclose(phi[tip], [0.0, -hz, hy], atol=1.0e-6)
+
+
+def test_cantilever_tip_load_solution(test, device):
+    length = 0.8
+    ei = 0.32
+    tip_load = 0.2
+    stiffness = 3.0 * ei / (length**3)
+
+    def cantilever_shape_fn(x):
+        s = float(x[0] + 0.5 * length)
+        s = min(max(s, 0.0), length)
+        phi = (s * s * (3.0 * length - s)) / (2.0 * length**3)
+        slope = (3.0 * s * (2.0 * length - s)) / (2.0 * length**3)
+        return np.array([[-float(x[2]) * slope, 0.0, phi]], dtype=np.float32)
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    builder.add_body_elastic(
+        mass=1.0,
+        inertia=_identity_inertia(),
+        mode_count=1,
+        mode_mass=[0.0],
+        mode_stiffness=[stiffness],
+        mode_damping=[0.0],
+        mode_shape_fn=cantilever_shape_fn,
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+
+    state_0 = model.state()
+    state_1 = model.state()
+    control = model.control()
+    owner_joint = int(model.elastic_joint.numpy()[0])
+    q_start = int(model.joint_q_start.numpy()[owner_joint])
+    qd_start = int(model.joint_qd_start.numpy()[owner_joint])
+    jf = control.joint_f.numpy()
+    jf[qd_start + 6] = tip_load
+    control.joint_f.assign(jf)
+
+    solver = newton.solvers.SolverVBD(model, iterations=0)
+    solver.step(state_0, state_1, control, None, 0.01)
+
+    expected_tip_deflection = tip_load * length**3 / (3.0 * ei)
+    np.testing.assert_allclose(state_1.joint_q.numpy()[q_start + 7], expected_tip_deflection, atol=1.0e-7)
+    tip_phi = cantilever_shape_fn(np.array([0.5 * length, 0.0, 0.0], dtype=np.float32))[0]
+    np.testing.assert_allclose(tip_phi, [0.0, 0.0, 1.0], atol=1.0e-7)
+
+
 def test_elastic_modal_implicit_solution_vbd(test, device):
     mode_mass = 2.0
     stiffness = 18.0
@@ -397,6 +500,24 @@ for device in devices:
         TestReducedElasticBody,
         "test_elastic_render_shape_sampling",
         test_elastic_render_shape_sampling,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_shape_mesh_sampling",
+        test_elastic_shape_mesh_sampling,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_torsion_render_shape_sampling",
+        test_torsion_render_shape_sampling,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_cantilever_tip_load_solution",
+        test_cantilever_tip_load_solution,
         devices=[device],
     )
     add_function_test(
