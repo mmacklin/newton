@@ -221,7 +221,7 @@
     <div class="section">
       <p>The demo modes are now generated through <code>ModalBasis</code> rather than per-body Python callables. <code>ModalBasis</code> stores GPU-friendly samples <code>phi[sample, mode]</code>; builders add attachment and surface sample points locally to that basis, then flatten the values into the current VBD arrays.</p>
       <p>The beam generator produces standard small-deflection fields. The four-bar coupler uses one axial extension mode and the first two pinned-pinned Euler-Bernoulli bending modes. The bending displacement includes the plane-section axial term <code>u_x = -y dw/dx</code>, so the rendered beam cross-section rotates consistently with the neutral-axis deflection. The elastic box render cache now subdivides the visible surface in <code>x</code>, <code>y</code>, and <code>z</code> at roughly 1 cm spacing, and the beam examples seed each modal basis with those exact render-surface vertices, diagnostic line points, and attachment points.</p>
-      <p>The revolute endpoint fixture now uses sampled finite-rotation torsion fields for the visible 90 degree twist. These are still stored as linear <code>ModalBasis</code> modes: one circumferential twist field and one radial correction field. The radial field includes the terms missing from the small-angle <code>u = theta(x) cross r</code> field, so the held twist is nearly volume preserving, and it relaxes faster during release to reduce mid-release volume drift. The example test tracks deformed mesh volume and fails if the visible shaft gains or loses too much volume.</p>
+      <p>The revolute endpoint fixture now uses sampled finite-rotation torsion fields for the visible 90 degree twist. These are still stored as linear <code>ModalBasis</code> modes: one circumferential twist field and one radial correction field. The radial field includes the terms missing from the small-angle <code>u = theta(x) cross r</code> field, so the held twist is nearly volume preserving. During the example release, the radial coordinate follows <code>q_twist^2</code>, which keeps the finite-rotation correction in phase while allowing low damping and visible torsional oscillation. The example test tracks deformed mesh volume and fails if the visible shaft gains or loses too much volume.</p>
       <p>The static cantilever example uses the exact Euler-Bernoulli tip-load shape with analytic static tip displacement <code>delta = P L^3 / (3 E I)</code>. The vibration example uses a stiffer, lightly damped finite-mass mode and releases the beam from an initial deflection, producing a quick underdamped ring-down. <code>ModalGeneratorPOD</code> starts the exemplar-deformation path by extracting linear modes from sampled displacement snapshots.</p>
     </div>
 
@@ -230,22 +230,22 @@
       <section class="section">
         <h3>Elastic 4-Bar Linkage</h3>
         <p>The coupler is an elastic link in a revolute-jointed four-bar. The orange coupler mesh is deformed directly from axial and Euler-Bernoulli bending modes; the cyan centerline is only a diagnostic overlay.</p>
-        <video controls preload="metadata" data-video-src="assets/reduced_elastic_fourbar.mp4?datetime=20260503T091648Z"></video>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_fourbar.mp4?datetime=20260503T092508Z"></video>
       </section>
       <section class="section">
         <h3>Revolute Torsion Fixture</h3>
-        <p>A revolute endpoint aligned with the shaft axis leaves the centerline unchanged. The rectangular shaft starts from held 90 degree finite-rotation torsion fields, then releases with modal damping while tracking mesh volume drift.</p>
-        <video controls preload="metadata" data-video-src="assets/elastic_revolute_endpoint_fixture.mp4?datetime=20260503T091648Z"></video>
+        <p>A revolute endpoint aligned with the shaft axis leaves the centerline unchanged. The rectangular shaft starts from held 90 degree finite-rotation torsion fields, then releases with low modal damping while tracking mesh volume drift.</p>
+        <video controls preload="metadata" data-video-src="assets/elastic_revolute_endpoint_fixture.mp4?datetime=20260503T092508Z"></video>
       </section>
       <section class="section">
         <h3>Cantilever Tip Load</h3>
         <p>A single elastic link uses the exact Euler-Bernoulli cantilever tip-load shape. The modal coordinate tracks the analytic static solution as the load varies.</p>
-        <video controls preload="metadata" data-video-src="assets/reduced_elastic_cantilever_beam.mp4?datetime=20260503T091648Z"></video>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_cantilever_beam.mp4?datetime=20260503T092508Z"></video>
       </section>
       <section class="section">
         <h3>Cantilever Vibration</h3>
         <p>The same reduced beam formulation is given finite modal mass and released from an initial deflection, so the visible motion comes from modal dynamics rather than a prescribed load.</p>
-        <video controls preload="metadata" data-video-src="assets/reduced_elastic_cantilever_vibration.mp4?datetime=20260503T091648Z"></video>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_cantilever_vibration.mp4?datetime=20260503T092508Z"></video>
       </section>
     </div>
 

@@ -92,7 +92,7 @@ class Example:
         base_stiffness = float(linear_basis.mode_stiffness[0] * tip_twist_scale)
         mode_mass = np.array([base_mass, base_mass], dtype=np.float32)
         mode_stiffness = np.array([base_stiffness, 4.0 * base_stiffness], dtype=np.float32)
-        damping_ratio = 0.75
+        damping_ratio = 0.05
         mode_damping = np.array(
             [2.0 * damping_ratio * math.sqrt(float(mode_mass[i]) * float(mode_stiffness[i])) for i in range(2)],
             dtype=np.float32,
@@ -151,6 +151,7 @@ class Example:
         self.elastic_q_start = int(self.model.joint_q_start.numpy()[self.elastic_joint])
         self.elastic_qd_start = int(self.model.joint_qd_start.numpy()[self.elastic_joint])
         self._joint_f = self.control.joint_f.numpy()
+        self._sync_radial_mode()
         self.initial_volume_ratio = elastic_shape_volume_ratio(self.model, self.state_0)
         self.max_volume_ratio_error = abs(self.initial_volume_ratio - 1.0)
 
@@ -169,6 +170,16 @@ class Example:
     def _mode_value(self) -> float:
         return float(self.state_0.joint_q.numpy()[self.elastic_q_start + 7])
 
+    def _sync_radial_mode(self):
+        joint_q = self.state_0.joint_q.numpy()
+        joint_qd = self.state_0.joint_qd.numpy()
+        twist = float(joint_q[self.elastic_q_start + 7])
+        twist_rate = float(joint_qd[self.elastic_qd_start + 6])
+        joint_q[self.elastic_q_start + 8] = twist * twist
+        joint_qd[self.elastic_qd_start + 7] = 2.0 * twist * twist_rate
+        self.state_0.joint_q.assign(joint_q)
+        self.state_0.joint_qd.assign(joint_qd)
+
     def _update_volume_metric(self):
         ratio = elastic_shape_volume_ratio(self.model, self.state_0)
         self.max_volume_ratio_error = max(self.max_volume_ratio_error, abs(ratio - 1.0))
@@ -182,6 +193,7 @@ class Example:
                 self.control.joint_f.assign(self._joint_f)
                 self.solver.step(self.state_0, self.state_1, self.control, self.contacts, self.sim_dt)
                 self.state_0, self.state_1 = self.state_1, self.state_0
+                self._sync_radial_mode()
 
         self.sim_time += self.frame_dt
         self.step_count += 1
