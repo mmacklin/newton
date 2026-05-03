@@ -368,6 +368,12 @@ def test_elastic_shape_box_exact_modal_samples(test, device):
     hy = 0.04
     hz = 0.03
     surface_points, _ = box_surface_mesh(length, hy, hz)
+    for axis in range(3):
+        axis_values = np.unique(np.round(surface_points[:, axis], decimals=8))
+        test.assertLessEqual(float(np.max(np.diff(axis_values))), 0.010001)
+    test.assertGreater(np.unique(surface_points[:, 1]).size, 2)
+    test.assertGreater(np.unique(surface_points[:, 2]).size, 2)
+
     basis = newton.ModalGeneratorBeam(
         length=length,
         half_width_y=hy,
