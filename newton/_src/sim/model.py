@@ -711,6 +711,8 @@ class Model:
         """Body index for each reduced elastic body, shape [elastic_body_count], int."""
         self.elastic_joint: wp.array(dtype=wp.int32) | None = None
         """State-owner joint index for each reduced elastic body, shape [elastic_body_count], int."""
+        self.elastic_basis: wp.array(dtype=wp.int32) | None = None
+        """Shared modal basis index for each reduced elastic body, shape [elastic_body_count], int."""
         self.elastic_mode_start: wp.array(dtype=wp.int32) | None = None
         """Start index of each reduced elastic body's modal data, shape [elastic_body_count], int."""
         self.elastic_mode_count: wp.array(dtype=wp.int32) | None = None
@@ -727,6 +729,8 @@ class Model:
         """Endpoint side for each internal reduced elastic endpoint: 0 parent, 1 child, shape [elastic_endpoint_count], int."""
         self.elastic_endpoint_body: wp.array(dtype=wp.int32) | None = None
         """Body index for each internal reduced elastic endpoint, shape [elastic_endpoint_count], int."""
+        self.elastic_endpoint_sample: wp.array(dtype=wp.int32) | None = None
+        """ModalBasis-local sample index for each internal reduced elastic endpoint, shape [elastic_endpoint_count], int."""
         self.elastic_endpoint_phi: wp.array(dtype=wp.vec3) | None = None
         """Flattened translational mode samples for reduced elastic endpoints [m per mode], shape [elastic_endpoint_count * elastic_max_mode_count, 3]."""
         self.elastic_render_point_start: wp.array(dtype=wp.int32) | None = None
@@ -735,6 +739,8 @@ class Model:
         """Render point count for each reduced elastic body, shape [elastic_body_count], int."""
         self.elastic_render_point_local: wp.array(dtype=wp.vec3) | None = None
         """Local render polyline sample points for reduced elastic bodies [m], shape [elastic_render_point_count, 3]."""
+        self.elastic_render_point_sample: wp.array(dtype=wp.int32) | None = None
+        """ModalBasis-local sample index for each reduced elastic render point, shape [elastic_render_point_count], int."""
         self.elastic_render_point_phi: wp.array(dtype=wp.vec3) | None = None
         """Flattened translational mode samples for reduced elastic render points [m per mode], shape [elastic_render_point_count * elastic_max_mode_count, 3]."""
         self.elastic_render_point_total_count: int = 0
@@ -753,6 +759,8 @@ class Model:
         """Triangle index count for each reduced elastic render mesh, shape [elastic_shape_count], int."""
         self.elastic_shape_vertex_local: wp.array(dtype=wp.vec3) | None = None
         """Body-local rest vertices for reduced elastic render meshes [m], shape [elastic_shape_vertex_total_count, 3]."""
+        self.elastic_shape_vertex_sample: wp.array(dtype=wp.int32) | None = None
+        """ModalBasis-local sample index for each reduced elastic render mesh vertex, shape [elastic_shape_vertex_total_count], int."""
         self.elastic_shape_vertex_phi: wp.array(dtype=wp.vec3) | None = None
         """Flattened mode samples for reduced elastic render mesh vertices [m per mode], shape [elastic_shape_vertex_total_count * elastic_max_mode_count, 3]."""
         self.elastic_shape_indices: wp.array(dtype=wp.int32) | None = None
@@ -769,6 +777,10 @@ class Model:
         """Total number of reduced elastic bodies."""
         self.elastic_endpoint_count: int = 0
         """Total number of internal reduced elastic joint endpoints."""
+        self.modal_bases: tuple[object, ...] = ()
+        """Shared Python modal bases retained for inspection after finalization."""
+        self.modal_basis_count: int = 0
+        """Total number of shared reduced modal bases."""
 
         # indices of particles sharing the same color
         self.particle_color_groups: list[wp.array(dtype=wp.int32)] = []

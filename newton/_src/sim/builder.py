@@ -75,6 +75,7 @@ from .graph_coloring import (
     combine_independent_particle_coloring,
     construct_particle_graph,
 )
+from .modal import ModalBasis
 from .model import Model
 
 if TYPE_CHECKING:
@@ -1099,12 +1100,20 @@ class ModelBuilder:
         """Reduced elastic modal damping values."""
         self.elastic_mode_shape_fn: list[Callable[[np.ndarray], Any] | None] = []
         """Builder-only mode-shape sampling callables for reduced elastic bodies."""
+        self.modal_bases: list[ModalBasis] = []
+        """Shared sampled modal bases for reduced elastic bodies."""
+        self._modal_basis_ids: dict[int, int] = {}
+        """Identity map from Python ModalBasis objects to builder-local basis indices."""
+        self.elastic_basis: list[int] = []
+        """Shared modal basis index for each reduced elastic body, or -1."""
         self.elastic_endpoint_joint: list[int] = []
         """Joint index for each internal reduced elastic endpoint."""
         self.elastic_endpoint_side: list[int] = []
         """Endpoint side for each internal reduced elastic endpoint: 0 parent, 1 child."""
         self.elastic_endpoint_body: list[int] = []
         """Body index for each internal reduced elastic endpoint."""
+        self.elastic_endpoint_sample: list[int] = []
+        """ModalBasis-local sample index for each internal reduced elastic endpoint."""
         self.elastic_endpoint_phi: list[wp.vec3] = []
         """Flattened translational mode samples for internal reduced elastic endpoints."""
         self.elastic_render_point_start: list[int] = []
@@ -1113,6 +1122,8 @@ class ModelBuilder:
         """Number of render polyline sample points for each reduced elastic body."""
         self.elastic_render_point_local: list[wp.vec3] = []
         """Local render polyline sample points for reduced elastic bodies."""
+        self.elastic_render_point_sample: list[int] = []
+        """ModalBasis-local sample index for each reduced elastic render point."""
         self.elastic_render_point_phi: list[wp.vec3] = []
         """Flattened translational mode samples for reduced elastic render points."""
         self.elastic_shape_shape: list[int] = []
@@ -1129,6 +1140,8 @@ class ModelBuilder:
         """Triangle index count for each reduced elastic render mesh."""
         self.elastic_shape_vertex_local: list[wp.vec3] = []
         """Body-local rest vertices for reduced elastic render meshes."""
+        self.elastic_shape_vertex_sample: list[int] = []
+        """ModalBasis-local sample index for each reduced elastic render mesh vertex."""
         self.elastic_shape_vertex_phi: list[wp.vec3] = []
         """Flattened mode samples for reduced elastic render mesh vertices."""
         self.elastic_shape_indices: list[int] = []
@@ -2997,6 +3010,13 @@ class ModelBuilder:
             )
             self.body_elastic_joint.extend([j + start_joint_idx if j >= 0 else -1 for j in builder.body_elastic_joint])
 
+        if builder.modal_bases:
+            modal_basis_map = {
+                basis_index: self._register_modal_basis(basis) for basis_index, basis in enumerate(builder.modal_bases)
+            }
+        else:
+            modal_basis_map = {}
+
         if builder.elastic_body:
             mode_offset = len(self.elastic_mode_mass)
             self.elastic_body.extend([b + start_body_idx for b in builder.elastic_body])
@@ -3007,6 +3027,8 @@ class ModelBuilder:
             self.elastic_mode_stiffness.extend(builder.elastic_mode_stiffness)
             self.elastic_mode_damping.extend(builder.elastic_mode_damping)
             self.elastic_mode_shape_fn.extend(builder.elastic_mode_shape_fn)
+            builder_elastic_basis = getattr(builder, "elastic_basis", [-1] * len(builder.elastic_body))
+            self.elastic_basis.extend([modal_basis_map[idx] if idx >= 0 else -1 for idx in builder_elastic_basis])
             self.elastic_max_mode_count = max(self.elastic_max_mode_count, builder.elastic_max_mode_count)
 
         # For shapes
@@ -3513,6 +3535,17 @@ class ModelBuilder:
             raise ValueError(f"{name} must have length {mode_count}, got {len(result)}")
         return result
 
+    def _register_modal_basis(self, basis: ModalBasis) -> int:
+        basis_id = id(basis)
+        basis_index = self._modal_basis_ids.get(basis_id)
+        if basis_index is not None:
+            return basis_index
+
+        basis_index = len(self.modal_bases)
+        self.modal_bases.append(basis)
+        self._modal_basis_ids[basis_id] = basis_index
+        return basis_index
+
     def add_joint_elastic(
         self,
         child: int,
@@ -3668,6 +3701,7 @@ class ModelBuilder:
         mode_q: Sequence[float] | None = None,
         mode_qd: Sequence[float] | None = None,
         mode_shape_fn: Callable[[np.ndarray], Any] | None = None,
+        modal_basis: ModalBasis | None = None,
         lock_inertia: bool = False,
         is_kinematic: bool = False,
         custom_attributes: dict[str, Any] | None = None,
@@ -3694,6 +3728,8 @@ class ModelBuilder:
             mode_qd: Initial modal velocities.
             mode_shape_fn: Callable receiving a local endpoint position ``np.ndarray(3,)``
                 and returning translational mode samples with shape ``(mode_count, 3)``.
+            modal_basis: Sampled linear modal basis used to evaluate attachment and
+                surface deformation samples.
             lock_inertia: If True, prevents later shape additions from modifying mass properties.
             is_kinematic: If True, the floating frame is kinematic.
             custom_attributes: Body custom attributes.
@@ -3701,6 +3737,25 @@ class ModelBuilder:
         Returns:
             The body index.
         """
+        if modal_basis is not None and mode_shape_fn is not None:
+            raise ValueError("modal_basis and mode_shape_fn are mutually exclusive")
+
+        basis_index = -1
+        if modal_basis is not None:
+            if mode_count == 0:
+                mode_count = modal_basis.mode_count
+            elif mode_count != modal_basis.mode_count:
+                raise ValueError(
+                    f"mode_count ({mode_count}) must match modal_basis.mode_count ({modal_basis.mode_count})"
+                )
+            basis_index = self._register_modal_basis(modal_basis)
+            if mode_mass is None:
+                mode_mass = modal_basis.mode_mass
+            if mode_stiffness is None:
+                mode_stiffness = modal_basis.mode_stiffness
+            if mode_damping is None:
+                mode_damping = modal_basis.mode_damping
+
         body_id = self.add_link(
             xform=xform,
             armature=armature,
@@ -3732,6 +3787,7 @@ class ModelBuilder:
         self.elastic_mode_stiffness.extend(self._coerce_mode_values(mode_stiffness, mode_count, 0.0, "mode_stiffness"))
         self.elastic_mode_damping.extend(self._coerce_mode_values(mode_damping, mode_count, 0.0, "mode_damping"))
         self.elastic_mode_shape_fn.append(mode_shape_fn)
+        self.elastic_basis.append(basis_index)
         self.elastic_max_mode_count = max(self.elastic_max_mode_count, mode_count)
 
         return body_id
@@ -3751,6 +3807,7 @@ class ModelBuilder:
         mode_q: Sequence[float] | None = None,
         mode_qd: Sequence[float] | None = None,
         mode_shape_fn: Callable[[np.ndarray], Any] | None = None,
+        modal_basis: ModalBasis | None = None,
         lock_inertia: bool = False,
         is_kinematic: bool = False,
         custom_attributes: dict[str, Any] | None = None,
@@ -3776,6 +3833,8 @@ class ModelBuilder:
             mode_qd: Initial modal velocities.
             mode_shape_fn: Callable receiving a local endpoint position ``np.ndarray(3,)``
                 and returning translational mode samples with shape ``(mode_count, 3)``.
+            modal_basis: Sampled linear modal basis used to evaluate attachment and
+                surface deformation samples.
             lock_inertia: If True, prevents later shape additions from modifying mass properties.
             is_kinematic: If True, the floating frame is kinematic.
             custom_attributes: Body custom attributes.
@@ -3797,6 +3856,7 @@ class ModelBuilder:
             mode_q=mode_q,
             mode_qd=mode_qd,
             mode_shape_fn=mode_shape_fn,
+            modal_basis=modal_basis,
             lock_inertia=lock_inertia,
             is_kinematic=is_kinematic,
             custom_attributes=custom_attributes,
@@ -9296,6 +9356,21 @@ class ModelBuilder:
                         f"Array length mismatch: {name} has length {len(arr)}, but expected {body_count} (body_count)."
                     )
 
+        if self.elastic_body:
+            elastic_arrays = [
+                ("elastic_joint", self.elastic_joint),
+                ("elastic_mode_start", self.elastic_mode_start),
+                ("elastic_mode_count", self.elastic_mode_count),
+                ("elastic_mode_shape_fn", self.elastic_mode_shape_fn),
+                ("elastic_basis", self.elastic_basis),
+            ]
+            for name, arr in elastic_arrays:
+                if len(arr) != len(self.elastic_body):
+                    raise ValueError(
+                        f"Array length mismatch: {name} has length {len(arr)}, "
+                        f"but expected {len(self.elastic_body)} (elastic_body_count)."
+                    )
+
         if joint_count > 0:
             # Per-DOF arrays should have length == joint_dof_count
             dof_arrays = [
@@ -9420,13 +9495,29 @@ class ModelBuilder:
         return all_ordered
 
     def _sample_elastic_mode_shape(self, elastic_index: int, local_pos: np.ndarray) -> np.ndarray:
+        phi, _ = self._add_elastic_modal_sample(elastic_index, local_pos)
+        return phi
+
+    def _add_elastic_modal_sample(self, elastic_index: int, local_pos: np.ndarray) -> tuple[np.ndarray, int]:
         mode_count = self.elastic_mode_count[elastic_index]
         if mode_count == 0:
-            return np.zeros((0, 3), dtype=np.float32)
+            return np.zeros((0, 3), dtype=np.float32), -1
+
+        basis_index = self.elastic_basis[elastic_index] if elastic_index < len(self.elastic_basis) else -1
+        if basis_index >= 0:
+            basis = self.modal_bases[basis_index]
+            sample_index = basis.add_sample(local_pos)
+            values = basis.sample_value(sample_index)
+            if values.shape != (mode_count, 3):
+                raise ValueError(
+                    f"modal_basis for elastic body {self.elastic_body[elastic_index]} must provide "
+                    f"shape ({mode_count}, 3), got {values.shape}"
+                )
+            return values, sample_index
 
         shape_fn = self.elastic_mode_shape_fn[elastic_index]
         if shape_fn is None:
-            return np.zeros((mode_count, 3), dtype=np.float32)
+            return np.zeros((mode_count, 3), dtype=np.float32), -1
 
         values = np.asarray(shape_fn(local_pos), dtype=np.float32)
         if values.shape != (mode_count, 3):
@@ -9434,13 +9525,14 @@ class ModelBuilder:
                 f"mode_shape_fn for elastic body {self.elastic_body[elastic_index]} must return "
                 f"shape ({mode_count}, 3), got {values.shape}"
             )
-        return values
+        return values, -1
 
     def _build_elastic_endpoint_cache(self) -> None:
         """Sample reduced elastic mode shapes at ordinary joint endpoint transforms."""
         self.elastic_endpoint_joint.clear()
         self.elastic_endpoint_side.clear()
         self.elastic_endpoint_body.clear()
+        self.elastic_endpoint_sample.clear()
         self.elastic_endpoint_phi.clear()
 
         if len(self.joint_parent_elastic_endpoint) != self.joint_count:
@@ -9462,11 +9554,12 @@ class ModelBuilder:
                 return
 
             local_pos = np.array(wp.transform_get_translation(xform), dtype=np.float32)
-            phi = self._sample_elastic_mode_shape(elastic_index, local_pos)
+            phi, sample_index = self._add_elastic_modal_sample(elastic_index, local_pos)
             endpoint_index = len(self.elastic_endpoint_joint)
             self.elastic_endpoint_joint.append(joint_index)
             self.elastic_endpoint_side.append(side)
             self.elastic_endpoint_body.append(body)
+            self.elastic_endpoint_sample.append(sample_index)
             for i in range(self.elastic_max_mode_count):
                 if i < phi.shape[0]:
                     self.elastic_endpoint_phi.append(wp.vec3(float(phi[i, 0]), float(phi[i, 1]), float(phi[i, 2])))
@@ -9530,6 +9623,7 @@ class ModelBuilder:
         self.elastic_render_point_start.clear()
         self.elastic_render_point_count.clear()
         self.elastic_render_point_local.clear()
+        self.elastic_render_point_sample.clear()
         self.elastic_render_point_phi.clear()
 
         sample_count = 33
@@ -9544,7 +9638,8 @@ class ModelBuilder:
                 self.elastic_render_point_local.append(
                     wp.vec3(float(local_pos[0]), float(local_pos[1]), float(local_pos[2]))
                 )
-                phi = self._sample_elastic_mode_shape(elastic_index, local_pos)
+                phi, sample_index = self._add_elastic_modal_sample(elastic_index, local_pos)
+                self.elastic_render_point_sample.append(sample_index)
                 for mode in range(self.elastic_max_mode_count):
                     if mode < phi.shape[0]:
                         self.elastic_render_point_phi.append(
@@ -9631,6 +9726,7 @@ class ModelBuilder:
         self.elastic_shape_index_start.clear()
         self.elastic_shape_index_count.clear()
         self.elastic_shape_vertex_local.clear()
+        self.elastic_shape_vertex_sample.clear()
         self.elastic_shape_vertex_phi.clear()
         self.elastic_shape_indices.clear()
 
@@ -9669,7 +9765,8 @@ class ModelBuilder:
                 self.elastic_shape_vertex_local.append(
                     wp.vec3(float(local_pos[0]), float(local_pos[1]), float(local_pos[2]))
                 )
-                phi = self._sample_elastic_mode_shape(elastic_index, local_pos)
+                phi, sample_index = self._add_elastic_modal_sample(elastic_index, local_pos)
+                self.elastic_shape_vertex_sample.append(sample_index)
                 for mode in range(self.elastic_max_mode_count):
                     if mode < phi.shape[0]:
                         self.elastic_shape_vertex_phi.append(
@@ -10722,8 +10819,11 @@ class ModelBuilder:
             m.elastic_body_count = len(self.elastic_body)
             m.elastic_endpoint_count = len(self.elastic_endpoint_joint)
             m.elastic_max_mode_count = self.elastic_max_mode_count
+            m.modal_basis_count = len(self.modal_bases)
+            m.modal_bases = tuple(self.modal_bases)
             m.elastic_body = wp.array(self.elastic_body, dtype=wp.int32)
             m.elastic_joint = wp.array(self.elastic_joint, dtype=wp.int32)
+            m.elastic_basis = wp.array(self.elastic_basis, dtype=wp.int32)
             m.elastic_mode_start = wp.array(self.elastic_mode_start, dtype=wp.int32)
             m.elastic_mode_count = wp.array(self.elastic_mode_count, dtype=wp.int32)
             m.elastic_mode_mass = wp.array(self.elastic_mode_mass, dtype=wp.float32, requires_grad=requires_grad)
@@ -10734,6 +10834,7 @@ class ModelBuilder:
             m.elastic_endpoint_joint = wp.array(self.elastic_endpoint_joint, dtype=wp.int32)
             m.elastic_endpoint_side = wp.array(self.elastic_endpoint_side, dtype=wp.int32)
             m.elastic_endpoint_body = wp.array(self.elastic_endpoint_body, dtype=wp.int32)
+            m.elastic_endpoint_sample = wp.array(self.elastic_endpoint_sample, dtype=wp.int32)
             m.elastic_endpoint_phi = wp.array(self.elastic_endpoint_phi, dtype=wp.vec3, requires_grad=requires_grad)
             m.elastic_render_point_total_count = len(self.elastic_render_point_local)
             m.elastic_render_point_start = wp.array(self.elastic_render_point_start, dtype=wp.int32)
@@ -10741,6 +10842,7 @@ class ModelBuilder:
             m.elastic_render_point_local = wp.array(
                 self.elastic_render_point_local, dtype=wp.vec3, requires_grad=requires_grad
             )
+            m.elastic_render_point_sample = wp.array(self.elastic_render_point_sample, dtype=wp.int32)
             m.elastic_render_point_phi = wp.array(
                 self.elastic_render_point_phi, dtype=wp.vec3, requires_grad=requires_grad
             )
@@ -10756,6 +10858,7 @@ class ModelBuilder:
             m.elastic_shape_vertex_local = wp.array(
                 self.elastic_shape_vertex_local, dtype=wp.vec3, requires_grad=requires_grad
             )
+            m.elastic_shape_vertex_sample = wp.array(self.elastic_shape_vertex_sample, dtype=wp.int32)
             m.elastic_shape_vertex_phi = wp.array(
                 self.elastic_shape_vertex_phi, dtype=wp.vec3, requires_grad=requires_grad
             )

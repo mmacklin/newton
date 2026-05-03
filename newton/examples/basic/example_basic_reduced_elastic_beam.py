@@ -52,6 +52,20 @@ class Example:
         self.mode_stiffness = 3.0 * self.ei / (self.length**3)
         self._last_tip_load = self.tip_load_mean
 
+        beam_basis = newton.ModalGeneratorBeam(
+            length=self.length,
+            half_width_y=0.045,
+            half_width_z=0.035,
+            mode_specs=[
+                {
+                    "type": newton.ModalGeneratorBeam.Mode.BENDING_Z,
+                    "boundary": newton.ModalGeneratorBeam.Boundary.CANTILEVER_TIP,
+                }
+            ],
+            sample_count=33,
+            label="cantilever_basis",
+        ).build()
+
         builder = newton.ModelBuilder(gravity=0.0)
         builder.add_ground_plane()
 
@@ -65,7 +79,7 @@ class Example:
             mode_stiffness=[self.mode_stiffness],
             mode_damping=[0.0],
             mode_q=[self.tip_load_mean / self.mode_stiffness],
-            mode_shape_fn=self._mode_shape,
+            modal_basis=beam_basis,
             label="elastic_cantilever",
         )
 

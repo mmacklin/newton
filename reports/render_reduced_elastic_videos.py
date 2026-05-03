@@ -55,7 +55,27 @@ class RevoluteEndpointFixture:
         self.sim_time = 0.0
         self.length = 1.0
         self.z = 0.18
-        self.mode_q0 = 1.35
+        self.mode_q0 = np.array([0.95, 0.38], dtype=np.float32)
+
+        torsion_basis = newton.ModalGeneratorBeam(
+            length=self.length,
+            half_width_y=0.085,
+            half_width_z=0.05,
+            mode_specs=[
+                {
+                    "type": newton.ModalGeneratorBeam.Mode.TORSION,
+                    "boundary": newton.ModalGeneratorBeam.Boundary.LINEAR,
+                    "order": 1,
+                },
+                {
+                    "type": newton.ModalGeneratorBeam.Mode.TORSION,
+                    "boundary": newton.ModalGeneratorBeam.Boundary.FIXED_FREE,
+                    "order": 2,
+                },
+            ],
+            sample_count=33,
+            label="torsion_fixture_basis",
+        ).build()
 
         builder = newton.ModelBuilder(gravity=0.0)
         builder.add_ground_plane()
@@ -65,12 +85,12 @@ class RevoluteEndpointFixture:
             xform=wp.transform(wp.vec3(0.5 * self.length, 0.0, self.z), wp.quat_identity()),
             mass=1.0,
             inertia=inertia,
-            mode_count=1,
-            mode_mass=[0.03],
-            mode_stiffness=[2.6],
-            mode_damping=[0.06],
-            mode_q=[self.mode_q0],
-            mode_shape_fn=self._mode_shape,
+            mode_count=2,
+            mode_mass=[0.03, 0.02],
+            mode_stiffness=[2.6, 5.5],
+            mode_damping=[0.06, 0.08],
+            mode_q=self.mode_q0,
+            modal_basis=torsion_basis,
             label="elastic_torsion_fixture",
         )
 
@@ -109,11 +129,6 @@ class RevoluteEndpointFixture:
         self.viewer.set_model(self.model)
         self.viewer.set_camera(wp.vec3(0.55, -1.65, 0.8), -25.0, 90.0)
 
-    def _mode_shape(self, x: np.ndarray) -> np.ndarray:
-        s = float(x[0] + 0.5 * self.length)
-        twist = s / self.length
-        return np.array([[0.0, -float(x[2]) * twist, float(x[1]) * twist]], dtype=np.float32)
-
     def _mode_value(self) -> float:
         return float(self.state_0.joint_q.numpy()[self.elastic_q_start + 7])
 
@@ -123,6 +138,7 @@ class RevoluteEndpointFixture:
             self.state_0.clear_forces()
             self._joint_f[:] = 0.0
             self._joint_f[self.elastic_qd_start + 6] = 3.4 * math.sin(4.0 * t)
+            self._joint_f[self.elastic_qd_start + 7] = 1.2 * math.cos(3.1 * t)
             self.control.joint_f.assign(self._joint_f)
             self.solver.step(self.state_0, self.state_1, self.control, None, self.sim_dt)
             self.state_0, self.state_1 = self.state_1, self.state_0
