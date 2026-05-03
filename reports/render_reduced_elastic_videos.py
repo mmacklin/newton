@@ -27,6 +27,13 @@ VIDEO_ASSETS = (
     "reduced_elastic_cantilever_beam.mp4",
     "reduced_elastic_cantilever_vibration.mp4",
 )
+TORSION_MODE_COUNT = 5
+
+
+def _linear_torsion_release_coordinates(tip_twist: float) -> np.ndarray:
+    q = np.zeros(TORSION_MODE_COUNT, dtype=np.float32)
+    q[0] = tip_twist
+    return q
 
 
 def _write_video(path: Path, frames):
@@ -78,42 +85,47 @@ class RevoluteEndpointFixture:
         self.sim_time = 0.0
         self.length = 1.0
         self.z = 0.18
-        self.mode_q0 = np.array([0.68, -0.10, 0.035, -0.014, 0.006], dtype=np.float32)
+        self.hold_time = 0.45
+        self.target_tip_twist = math.radians(90.0)
+        self.mode_q0 = _linear_torsion_release_coordinates(self.target_tip_twist)
+        self.hy = 0.085
+        self.hz = 0.05
 
         torsion_basis = newton.ModalGeneratorBeam(
             length=self.length,
-            half_width_y=0.085,
-            half_width_z=0.05,
+            half_width_y=self.hy,
+            half_width_z=self.hz,
             mode_specs=[
                 {
                     "type": newton.ModalGeneratorBeam.Mode.TORSION,
-                    "boundary": newton.ModalGeneratorBeam.Boundary.FIXED_FREE,
+                    "boundary": newton.ModalGeneratorBeam.Boundary.LINEAR,
                     "order": 1,
                 },
                 {
                     "type": newton.ModalGeneratorBeam.Mode.TORSION,
-                    "boundary": newton.ModalGeneratorBeam.Boundary.FIXED_FREE,
+                    "boundary": newton.ModalGeneratorBeam.Boundary.LINEAR,
                     "order": 2,
                 },
                 {
                     "type": newton.ModalGeneratorBeam.Mode.TORSION,
-                    "boundary": newton.ModalGeneratorBeam.Boundary.FIXED_FREE,
+                    "boundary": newton.ModalGeneratorBeam.Boundary.LINEAR,
                     "order": 3,
                 },
                 {
                     "type": newton.ModalGeneratorBeam.Mode.TORSION,
-                    "boundary": newton.ModalGeneratorBeam.Boundary.FIXED_FREE,
+                    "boundary": newton.ModalGeneratorBeam.Boundary.LINEAR,
                     "order": 4,
                 },
                 {
                     "type": newton.ModalGeneratorBeam.Mode.TORSION,
-                    "boundary": newton.ModalGeneratorBeam.Boundary.FIXED_FREE,
+                    "boundary": newton.ModalGeneratorBeam.Boundary.LINEAR,
                     "order": 5,
                 },
             ],
             sample_count=49,
             density=500.0,
             shear_modulus=4.0e4,
+            damping_ratio=0.02,
             label="torsion_fixture_basis",
         ).build()
 
@@ -132,7 +144,7 @@ class RevoluteEndpointFixture:
 
         shape_cfg = newton.ModelBuilder.ShapeConfig()
         shape_cfg.density = 0.0
-        builder.add_shape_box(self.body, hx=self.length / 2.0, hy=0.085, hz=0.05, cfg=shape_cfg)
+        builder.add_shape_box(self.body, hx=self.length / 2.0, hy=self.hy, hz=self.hz, cfg=shape_cfg)
         self.joint = builder.add_joint_revolute(
             parent=-1,
             child=self.body,
@@ -169,15 +181,13 @@ class RevoluteEndpointFixture:
         return float(self.state_0.joint_q.numpy()[self.elastic_q_start + 7])
 
     def step(self):
-        for substep in range(self.sim_substeps):
-            t = self.sim_time + substep * self.sim_dt
+        if self.sim_time < self.hold_time:
+            self.sim_time += self.frame_dt
+            return
+
+        for _ in range(self.sim_substeps):
             self.state_0.clear_forces()
             self._joint_f[:] = 0.0
-            self._joint_f[self.elastic_qd_start + 6] = 0.7 * math.sin(4.0 * t)
-            self._joint_f[self.elastic_qd_start + 7] = 0.08 * math.cos(3.1 * t)
-            self._joint_f[self.elastic_qd_start + 8] = 0.025 * math.sin(5.2 * t + 0.4)
-            self._joint_f[self.elastic_qd_start + 9] = 0.01 * math.cos(6.1 * t)
-            self._joint_f[self.elastic_qd_start + 10] = 0.004 * math.sin(7.0 * t)
             self.control.joint_f.assign(self._joint_f)
             self.solver.step(self.state_0, self.state_1, self.control, None, self.sim_dt)
             self.state_0, self.state_1 = self.state_1, self.state_0
