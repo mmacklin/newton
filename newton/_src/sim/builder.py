@@ -9664,7 +9664,7 @@ class ModelBuilder:
         hx: float,
         hy: float,
         hz: float,
-        segments: int = 32,
+        segments: int = 128,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Create an x-subdivided box surface for elastic render deformation."""
         segments = max(1, int(segments))
