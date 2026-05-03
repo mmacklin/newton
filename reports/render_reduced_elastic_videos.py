@@ -13,6 +13,7 @@ import warp as wp
 import newton
 import newton.viewer
 from newton.examples.basic.example_basic_reduced_elastic_beam import Example as BeamExample
+from newton.examples.basic.example_basic_reduced_elastic_beam_vibration import Example as BeamVibrationExample
 from newton.examples.basic.example_basic_reduced_elastic_fourbar import Example as FourbarExample
 
 WIDTH = 960
@@ -27,9 +28,12 @@ def _write_video(path: Path, frames):
             writer.append_data(frame)
 
 
-def _capture(example, viewer, frame_count: int, screenshot_path: Path | None = None):
+def _capture(
+    example, viewer, frame_count: int, screenshot_path: Path | None = None, screenshot_frame: int | None = None
+):
     frames = []
-    screenshot_frame = frame_count // 2
+    if screenshot_frame is None:
+        screenshot_frame = frame_count // 2
     for i in range(frame_count):
         example.step()
         example.render()
@@ -55,7 +59,7 @@ class RevoluteEndpointFixture:
         self.sim_time = 0.0
         self.length = 1.0
         self.z = 0.18
-        self.mode_q0 = np.array([0.95, 0.38], dtype=np.float32)
+        self.mode_q0 = np.array([0.65, -0.32, 0.22, -0.14, 0.08], dtype=np.float32)
 
         torsion_basis = newton.ModalGeneratorBeam(
             length=self.length,
@@ -64,7 +68,7 @@ class RevoluteEndpointFixture:
             mode_specs=[
                 {
                     "type": newton.ModalGeneratorBeam.Mode.TORSION,
-                    "boundary": newton.ModalGeneratorBeam.Boundary.LINEAR,
+                    "boundary": newton.ModalGeneratorBeam.Boundary.FIXED_FREE,
                     "order": 1,
                 },
                 {
@@ -72,8 +76,25 @@ class RevoluteEndpointFixture:
                     "boundary": newton.ModalGeneratorBeam.Boundary.FIXED_FREE,
                     "order": 2,
                 },
+                {
+                    "type": newton.ModalGeneratorBeam.Mode.TORSION,
+                    "boundary": newton.ModalGeneratorBeam.Boundary.FIXED_FREE,
+                    "order": 3,
+                },
+                {
+                    "type": newton.ModalGeneratorBeam.Mode.TORSION,
+                    "boundary": newton.ModalGeneratorBeam.Boundary.FIXED_FREE,
+                    "order": 4,
+                },
+                {
+                    "type": newton.ModalGeneratorBeam.Mode.TORSION,
+                    "boundary": newton.ModalGeneratorBeam.Boundary.FIXED_FREE,
+                    "order": 5,
+                },
             ],
-            sample_count=33,
+            sample_count=49,
+            density=500.0,
+            shear_modulus=4.0e4,
             label="torsion_fixture_basis",
         ).build()
 
@@ -85,10 +106,6 @@ class RevoluteEndpointFixture:
             xform=wp.transform(wp.vec3(0.5 * self.length, 0.0, self.z), wp.quat_identity()),
             mass=1.0,
             inertia=inertia,
-            mode_count=2,
-            mode_mass=[0.03, 0.02],
-            mode_stiffness=[2.6, 5.5],
-            mode_damping=[0.06, 0.08],
             mode_q=self.mode_q0,
             modal_basis=torsion_basis,
             label="elastic_torsion_fixture",
@@ -127,7 +144,7 @@ class RevoluteEndpointFixture:
         )
 
         self.viewer.set_model(self.model)
-        self.viewer.set_camera(wp.vec3(0.55, -1.65, 0.8), -25.0, 90.0)
+        self.viewer.set_camera(wp.vec3(0.52, -1.35, 0.72), -24.0, 84.0)
 
     def _mode_value(self) -> float:
         return float(self.state_0.joint_q.numpy()[self.elastic_q_start + 7])
@@ -137,8 +154,11 @@ class RevoluteEndpointFixture:
             t = self.sim_time + substep * self.sim_dt
             self.state_0.clear_forces()
             self._joint_f[:] = 0.0
-            self._joint_f[self.elastic_qd_start + 6] = 3.4 * math.sin(4.0 * t)
-            self._joint_f[self.elastic_qd_start + 7] = 1.2 * math.cos(3.1 * t)
+            self._joint_f[self.elastic_qd_start + 6] = 0.8 * math.sin(4.0 * t)
+            self._joint_f[self.elastic_qd_start + 7] = 0.45 * math.cos(3.1 * t)
+            self._joint_f[self.elastic_qd_start + 8] = 0.25 * math.sin(5.2 * t + 0.4)
+            self._joint_f[self.elastic_qd_start + 9] = 0.15 * math.cos(6.1 * t)
+            self._joint_f[self.elastic_qd_start + 10] = 0.08 * math.sin(7.0 * t)
             self.control.joint_f.assign(self._joint_f)
             self.solver.step(self.state_0, self.state_1, self.control, None, self.sim_dt)
             self.state_0, self.state_1 = self.state_1, self.state_0
@@ -178,11 +198,23 @@ def main():
         screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_beam.jpg"),
     )
     _write_video(assets / "reduced_elastic_cantilever_beam.mp4", frames)
+
+    viewer.clear_model()
+    vibration = BeamVibrationExample(viewer, None)
+    frames = _capture(
+        vibration,
+        viewer,
+        frame_count=180,
+        screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_beam_vibration.jpg"),
+        screenshot_frame=8,
+    )
+    _write_video(assets / "reduced_elastic_cantilever_vibration.mp4", frames)
     viewer.close()
 
     print(f"Wrote {assets / 'reduced_elastic_fourbar.mp4'}")
     print(f"Wrote {assets / 'elastic_revolute_endpoint_fixture.mp4'}")
     print(f"Wrote {assets / 'reduced_elastic_cantilever_beam.mp4'}")
+    print(f"Wrote {assets / 'reduced_elastic_cantilever_vibration.mp4'}")
 
 
 if __name__ == "__main__":

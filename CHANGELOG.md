@@ -11,6 +11,7 @@
 - Support kinematic bodies in VBD solver
 - Add reduced elastic body links with floating-frame modal coordinates, VBD support for revolute-joint attachments, and deformed Viewer mesh rendering
 - Add sampled `ModalBasis` and modal generators for reusable reduced elastic mode construction
+- Add a reduced elastic cantilever vibration example with finite modal mass dynamics
 - Add brick stacking example
 - Add box pyramid example and ASV benchmark for dense convex-on-convex contacts
 

@@ -431,6 +431,62 @@ def test_cantilever_tip_load_solution(test, device):
     np.testing.assert_allclose(tip_phi, [0.0, 0.0, 1.0], atol=1.0e-7)
 
 
+def test_cantilever_modal_vibration_solution(test, device):
+    length = 0.9
+    basis = newton.ModalGeneratorBeam(
+        length=length,
+        half_width_y=0.045,
+        half_width_z=0.035,
+        mode_specs=[
+            {
+                "type": newton.ModalGeneratorBeam.Mode.BENDING_Z,
+                "boundary": newton.ModalGeneratorBeam.Boundary.CANTILEVER_TIP,
+            }
+        ],
+        density=350.0,
+        young_modulus=4.0e5,
+        damping_ratio=0.018,
+    ).build()
+
+    mode_mass = float(basis.mode_mass[0])
+    stiffness = float(basis.mode_stiffness[0])
+    damping = float(basis.mode_damping[0])
+    q_expected = 0.085
+    qd_expected = 0.0
+    dt = 0.01
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    body = builder.add_body_elastic(
+        mass=1.0,
+        inertia=_identity_inertia(),
+        mode_q=[q_expected],
+        mode_qd=[qd_expected],
+        modal_basis=basis,
+    )
+    builder.add_shape_box(body, hx=0.5 * length, hy=0.045, hz=0.035)
+    builder.color()
+    model = builder.finalize(device=device)
+
+    state_0 = model.state()
+    state_1 = model.state()
+    control = model.control()
+    owner_joint = int(model.elastic_joint.numpy()[0])
+    q_start = int(model.joint_q_start.numpy()[owner_joint])
+    qd_start = int(model.joint_qd_start.numpy()[owner_joint])
+
+    solver = newton.solvers.SolverVBD(model, iterations=0)
+    for _ in range(30):
+        solver.step(state_0, state_1, control, None, dt)
+        denom = mode_mass + dt * damping + dt * dt * stiffness
+        qd_expected = (mode_mass * qd_expected - dt * stiffness * q_expected) / denom
+        q_expected = q_expected + dt * qd_expected
+        state_0, state_1 = state_1, state_0
+
+    np.testing.assert_allclose(state_0.joint_q.numpy()[q_start + 7], q_expected, rtol=1.0e-6, atol=1.0e-7)
+    np.testing.assert_allclose(state_0.joint_qd.numpy()[qd_start + 6], qd_expected, rtol=1.0e-6, atol=1.0e-7)
+    test.assertLess(float(state_0.joint_q.numpy()[q_start + 7]), 0.085)
+
+
 def test_elastic_modal_implicit_solution_vbd(test, device):
     mode_mass = 2.0
     stiffness = 18.0
@@ -697,6 +753,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_cantilever_tip_load_solution",
         test_cantilever_tip_load_solution,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_cantilever_modal_vibration_solution",
+        test_cantilever_modal_vibration_solution,
         devices=[device],
     )
     add_function_test(
