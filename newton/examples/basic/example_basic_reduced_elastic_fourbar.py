@@ -83,6 +83,27 @@ class Example:
         e4 = np.array([math.cos(theta4), math.sin(theta4), 0.0])
         B = A + self.a * e2
 
+        coupler_basis = newton.ModalGeneratorBeam(
+            length=self.b_rest,
+            half_width_y=0.05,
+            half_width_z=0.03,
+            mode_specs=[
+                {"type": newton.ModalGeneratorBeam.Mode.AXIAL},
+                {
+                    "type": newton.ModalGeneratorBeam.Mode.BENDING_Y,
+                    "boundary": newton.ModalGeneratorBeam.Boundary.PINNED_PINNED,
+                    "order": 1,
+                },
+                {
+                    "type": newton.ModalGeneratorBeam.Mode.BENDING_Y,
+                    "boundary": newton.ModalGeneratorBeam.Boundary.PINNED_PINNED,
+                    "order": 2,
+                },
+            ],
+            sample_count=33,
+            label="coupler_basis",
+        ).build()
+
         builder = newton.ModelBuilder(gravity=0.0)
         builder.add_ground_plane()
 
@@ -105,7 +126,7 @@ class Example:
             mode_stiffness=[10.0, 18.0, 288.0],
             mode_damping=[0.3, 0.3, 0.65],
             mode_q=self.mode_q0,
-            mode_shape_fn=self._mode_shape,
+            modal_basis=coupler_basis,
             label="elastic_coupler",
         )
         self.rocker = builder.add_link(
