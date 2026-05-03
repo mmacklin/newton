@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import math
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import imageio.v2 as imageio
@@ -19,6 +21,12 @@ from newton.examples.basic.example_basic_reduced_elastic_fourbar import Example 
 WIDTH = 960
 HEIGHT = 540
 FPS = 60
+VIDEO_ASSETS = (
+    "reduced_elastic_fourbar.mp4",
+    "elastic_revolute_endpoint_fixture.mp4",
+    "reduced_elastic_cantilever_beam.mp4",
+    "reduced_elastic_cantilever_vibration.mp4",
+)
 
 
 def _write_video(path: Path, frames):
@@ -26,6 +34,17 @@ def _write_video(path: Path, frames):
     with imageio.get_writer(path, fps=FPS, codec="libx264", quality=8, macro_block_size=1) as writer:
         for frame in frames:
             writer.append_data(frame)
+
+
+def _update_report_video_cache_busters(report_path: Path, cache_key: str):
+    text = report_path.read_text()
+    for video_name in VIDEO_ASSETS:
+        text = re.sub(
+            rf'src="assets/{re.escape(video_name)}(?:\?[^"]*)?"',
+            f'src="assets/{video_name}?{cache_key}"',
+            text,
+        )
+    report_path.write_text(text)
 
 
 def _capture(
@@ -173,6 +192,7 @@ class RevoluteEndpointFixture:
 def main():
     root = Path(__file__).resolve().parent
     assets = root / "assets"
+    cache_key = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
     viewer = newton.viewer.ViewerGL(width=WIDTH, height=HEIGHT, headless=True)
     fourbar = FourbarExample(viewer, None)
@@ -210,11 +230,13 @@ def main():
     )
     _write_video(assets / "reduced_elastic_cantilever_vibration.mp4", frames)
     viewer.close()
+    _update_report_video_cache_busters(root / "reduced_elastic_links_implementation.html", cache_key)
 
     print(f"Wrote {assets / 'reduced_elastic_fourbar.mp4'}")
     print(f"Wrote {assets / 'elastic_revolute_endpoint_fixture.mp4'}")
     print(f"Wrote {assets / 'reduced_elastic_cantilever_beam.mp4'}")
     print(f"Wrote {assets / 'reduced_elastic_cantilever_vibration.mp4'}")
+    print(f"Updated report video cache key: {cache_key}")
 
 
 if __name__ == "__main__":
