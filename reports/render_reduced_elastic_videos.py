@@ -59,7 +59,7 @@ class RevoluteEndpointFixture:
         self.sim_time = 0.0
         self.length = 1.0
         self.z = 0.18
-        self.mode_q0 = np.array([0.65, -0.32, 0.22, -0.14, 0.08], dtype=np.float32)
+        self.mode_q0 = np.array([0.68, -0.10, 0.035, -0.014, 0.006], dtype=np.float32)
 
         torsion_basis = newton.ModalGeneratorBeam(
             length=self.length,
@@ -154,11 +154,11 @@ class RevoluteEndpointFixture:
             t = self.sim_time + substep * self.sim_dt
             self.state_0.clear_forces()
             self._joint_f[:] = 0.0
-            self._joint_f[self.elastic_qd_start + 6] = 0.8 * math.sin(4.0 * t)
-            self._joint_f[self.elastic_qd_start + 7] = 0.45 * math.cos(3.1 * t)
-            self._joint_f[self.elastic_qd_start + 8] = 0.25 * math.sin(5.2 * t + 0.4)
-            self._joint_f[self.elastic_qd_start + 9] = 0.15 * math.cos(6.1 * t)
-            self._joint_f[self.elastic_qd_start + 10] = 0.08 * math.sin(7.0 * t)
+            self._joint_f[self.elastic_qd_start + 6] = 0.7 * math.sin(4.0 * t)
+            self._joint_f[self.elastic_qd_start + 7] = 0.08 * math.cos(3.1 * t)
+            self._joint_f[self.elastic_qd_start + 8] = 0.025 * math.sin(5.2 * t + 0.4)
+            self._joint_f[self.elastic_qd_start + 9] = 0.01 * math.cos(6.1 * t)
+            self._joint_f[self.elastic_qd_start + 10] = 0.004 * math.sin(7.0 * t)
             self.control.joint_f.assign(self._joint_f)
             self.solver.step(self.state_0, self.state_1, self.control, None, self.sim_dt)
             self.state_0, self.state_1 = self.state_1, self.state_0

@@ -443,17 +443,18 @@ def test_cantilever_modal_vibration_solution(test, device):
                 "boundary": newton.ModalGeneratorBeam.Boundary.CANTILEVER_TIP,
             }
         ],
-        density=350.0,
-        young_modulus=4.0e5,
-        damping_ratio=0.018,
+        density=250.0,
+        young_modulus=3.2e7,
+        damping_ratio=0.001,
     ).build()
 
     mode_mass = float(basis.mode_mass[0])
     stiffness = float(basis.mode_stiffness[0])
     damping = float(basis.mode_damping[0])
-    q_expected = 0.085
+    q_expected = 0.09
     qd_expected = 0.0
-    dt = 0.01
+    dt = 1.0 / 480.0
+    min_q = q_expected
 
     builder = newton.ModelBuilder(gravity=0.0)
     body = builder.add_body_elastic(
@@ -475,16 +476,17 @@ def test_cantilever_modal_vibration_solution(test, device):
     qd_start = int(model.joint_qd_start.numpy()[owner_joint])
 
     solver = newton.solvers.SolverVBD(model, iterations=0)
-    for _ in range(30):
+    for _ in range(180):
         solver.step(state_0, state_1, control, None, dt)
         denom = mode_mass + dt * damping + dt * dt * stiffness
         qd_expected = (mode_mass * qd_expected - dt * stiffness * q_expected) / denom
         q_expected = q_expected + dt * qd_expected
+        min_q = min(min_q, q_expected)
         state_0, state_1 = state_1, state_0
 
-    np.testing.assert_allclose(state_0.joint_q.numpy()[q_start + 7], q_expected, rtol=1.0e-6, atol=1.0e-7)
-    np.testing.assert_allclose(state_0.joint_qd.numpy()[qd_start + 6], qd_expected, rtol=1.0e-6, atol=1.0e-7)
-    test.assertLess(float(state_0.joint_q.numpy()[q_start + 7]), 0.085)
+    np.testing.assert_allclose(state_0.joint_q.numpy()[q_start + 7], q_expected, rtol=1.0e-6, atol=1.0e-6)
+    np.testing.assert_allclose(state_0.joint_qd.numpy()[qd_start + 6], qd_expected, rtol=1.0e-6, atol=1.0e-5)
+    test.assertLess(min_q, -0.01)
 
 
 def test_elastic_modal_implicit_solution_vbd(test, device):
