@@ -9664,38 +9664,75 @@ class ModelBuilder:
         hx: float,
         hy: float,
         hz: float,
-        segments: int = 128,
+        max_edge_length: float = 0.01,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Create an x-subdivided box surface for elastic render deformation."""
-        segments = max(1, int(segments))
+        """Create a uniformly subdivided box surface for elastic render deformation."""
+        edge = max(float(max_edge_length), 1.0e-6)
+        nx = max(1, int(np.ceil((2.0 * hx) / edge - 1.0e-5)))
+        ny = max(1, int(np.ceil((2.0 * hy) / edge - 1.0e-5)))
+        nz = max(1, int(np.ceil((2.0 * hz) / edge - 1.0e-5)))
         vertices: list[tuple[float, float, float]] = []
         indices: list[int] = []
+        grid: dict[tuple[int, int, int], int] = {}
 
-        for i in range(segments + 1):
-            x = -hx + 2.0 * hx * (float(i) / float(segments))
-            vertices.extend(
-                [
-                    (x, -hy, -hz),
-                    (x, hy, -hz),
-                    (x, hy, hz),
-                    (x, -hy, hz),
-                ]
-            )
+        for i in range(nx + 1):
+            x = -hx + 2.0 * hx * (float(i) / float(nx))
+            for j in range(ny + 1):
+                y = -hy + 2.0 * hy * (float(j) / float(ny))
+                for k in range(nz + 1):
+                    if i not in (0, nx) and j not in (0, ny) and k not in (0, nz):
+                        continue
+                    z = -hz + 2.0 * hz * (float(k) / float(nz))
+                    grid[(i, j, k)] = len(vertices)
+                    vertices.append((x, y, z))
 
         def add_quad(a: int, b: int, c: int, d: int) -> None:
             indices.extend([a, b, c, a, c, d])
 
-        for i in range(segments):
-            base = 4 * i
-            nxt = base + 4
-            add_quad(base + 0, base + 1, nxt + 1, nxt + 0)
-            add_quad(base + 1, base + 2, nxt + 2, nxt + 1)
-            add_quad(base + 2, base + 3, nxt + 3, nxt + 2)
-            add_quad(base + 3, base + 0, nxt + 0, nxt + 3)
+        for j in range(ny):
+            for k in range(nz):
+                add_quad(
+                    grid[(0, j, k)],
+                    grid[(0, j, k + 1)],
+                    grid[(0, j + 1, k + 1)],
+                    grid[(0, j + 1, k)],
+                )
+                add_quad(
+                    grid[(nx, j, k)],
+                    grid[(nx, j + 1, k)],
+                    grid[(nx, j + 1, k + 1)],
+                    grid[(nx, j, k + 1)],
+                )
 
-        add_quad(0, 3, 2, 1)
-        end = 4 * segments
-        add_quad(end + 0, end + 1, end + 2, end + 3)
+        for i in range(nx):
+            for k in range(nz):
+                add_quad(
+                    grid[(i, 0, k)],
+                    grid[(i + 1, 0, k)],
+                    grid[(i + 1, 0, k + 1)],
+                    grid[(i, 0, k + 1)],
+                )
+                add_quad(
+                    grid[(i, ny, k)],
+                    grid[(i, ny, k + 1)],
+                    grid[(i + 1, ny, k + 1)],
+                    grid[(i + 1, ny, k)],
+                )
+
+        for i in range(nx):
+            for j in range(ny):
+                add_quad(
+                    grid[(i, j, 0)],
+                    grid[(i, j + 1, 0)],
+                    grid[(i + 1, j + 1, 0)],
+                    grid[(i + 1, j, 0)],
+                )
+                add_quad(
+                    grid[(i, j, nz)],
+                    grid[(i + 1, j, nz)],
+                    grid[(i + 1, j + 1, nz)],
+                    grid[(i, j + 1, nz)],
+                )
         return np.asarray(vertices, dtype=np.float32), np.asarray(indices, dtype=np.int32)
 
     def _elastic_shape_render_mesh(self, shape_index: int) -> tuple[np.ndarray, np.ndarray] | None:
