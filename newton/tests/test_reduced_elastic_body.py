@@ -8,7 +8,12 @@ import numpy as np
 import warp as wp
 
 import newton
-from newton.examples.basic._reduced_elastic import beam_render_sample_points, box_surface_mesh
+from newton.examples.basic._reduced_elastic import (
+    beam_render_sample_points,
+    box_surface_mesh,
+    finite_torsion_displacement,
+    mesh_volume,
+)
 from newton.tests.unittest_utils import add_function_test, get_test_devices
 
 devices = get_test_devices()
@@ -432,6 +437,27 @@ def test_torsion_render_shape_sampling(test, device):
     np.testing.assert_allclose(phi[tip], [0.0, -hz, hy], atol=1.0e-6)
 
 
+def test_finite_torsion_exemplar_preserves_volume(test, device):
+    length = 1.0
+    hy = 0.085
+    hz = 0.05
+    tip_twist = math.pi / 2.0
+    vertices, indices = box_surface_mesh(length, hy, hz)
+    rest_volume = mesh_volume(vertices, indices)
+
+    finite_vertices = vertices + finite_torsion_displacement(vertices, length, tip_twist)
+    finite_ratio = mesh_volume(finite_vertices, indices) / rest_volume
+    np.testing.assert_allclose(finite_ratio, 1.0, atol=2.0e-3)
+
+    s = np.clip(vertices[:, 0] + 0.5 * length, 0.0, length)
+    theta = tip_twist * s / length
+    linear_vertices = vertices.copy()
+    linear_vertices[:, 1] -= vertices[:, 2] * theta
+    linear_vertices[:, 2] += vertices[:, 1] * theta
+    linear_ratio = mesh_volume(linear_vertices, indices) / rest_volume
+    test.assertGreater(linear_ratio, 1.5)
+
+
 def test_cantilever_tip_load_solution(test, device):
     length = 0.8
     ei = 0.32
@@ -801,6 +827,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_torsion_render_shape_sampling",
         test_torsion_render_shape_sampling,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_finite_torsion_exemplar_preserves_volume",
+        test_finite_torsion_exemplar_preserves_volume,
         devices=[device],
     )
     add_function_test(

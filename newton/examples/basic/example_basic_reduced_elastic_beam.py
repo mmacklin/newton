@@ -31,7 +31,7 @@ import warp as wp
 
 import newton
 import newton.examples
-from newton.examples.basic._reduced_elastic import beam_render_sample_points
+from newton.examples.basic._reduced_elastic import beam_render_sample_points, elastic_shape_volume_ratio
 
 
 class Example:
@@ -116,6 +116,8 @@ class Example:
         self.elastic_q_start = int(self.model.joint_q_start.numpy()[self.elastic_joint])
         self.elastic_qd_start = int(self.model.joint_qd_start.numpy()[self.elastic_joint])
         self._joint_f = self.control.joint_f.numpy()
+        self.initial_volume_ratio = elastic_shape_volume_ratio(self.model, self.state_0)
+        self.max_volume_ratio_error = abs(self.initial_volume_ratio - 1.0)
 
         self.solver = newton.solvers.SolverVBD(
             self.model,
@@ -139,6 +141,10 @@ class Example:
     def _mode_value(self) -> float:
         return float(self.state_0.joint_q.numpy()[self.elastic_q_start + 7])
 
+    def _update_volume_metric(self):
+        ratio = elastic_shape_volume_ratio(self.model, self.state_0)
+        self.max_volume_ratio_error = max(self.max_volume_ratio_error, abs(ratio - 1.0))
+
     def _set_controls(self, t: float):
         self._last_tip_load = self.tip_load_mean + self.tip_load_amp * math.sin(2.0 * math.pi * 0.6 * t)
         self._joint_f[:] = 0.0
@@ -156,6 +162,7 @@ class Example:
     def step(self):
         self.simulate()
         self.sim_time += self.frame_dt
+        self._update_volume_metric()
 
     def render(self):
         self.viewer.begin_frame(self.sim_time)
@@ -168,6 +175,8 @@ class Example:
         expected = self._last_tip_load / self.mode_stiffness
         if abs(self._mode_value() - expected) > 2.0e-4:
             raise AssertionError(f"cantilever tip deflection {self._mode_value()} differs from analytic {expected}")
+        if self.max_volume_ratio_error > 0.06:
+            raise AssertionError(f"cantilever volume changed by {self.max_volume_ratio_error:.3f}")
 
 
 if __name__ == "__main__":
