@@ -24,6 +24,7 @@ from .enums import (
     JointTargetMode,
     JointType,
 )
+from .modal import ModalBasis, ModalGeneratorBeam, ModalGeneratorPOD, ModalGeneratorSampled
 from .model import Model
 from .state import State
 
@@ -35,6 +36,10 @@ __all__ = [
     "EqType",
     "JointTargetMode",
     "JointType",
+    "ModalBasis",
+    "ModalGeneratorBeam",
+    "ModalGeneratorPOD",
+    "ModalGeneratorSampled",
     "Model",
     "ModelBuilder",
     "State",

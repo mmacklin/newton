@@ -31,6 +31,69 @@ def _transform_point_np(xform: np.ndarray, point: np.ndarray) -> np.ndarray:
     return xform[:3] + _quat_rotate_np(xform[3:7], point)
 
 
+def test_modal_basis_add_sample(test, device):
+    basis = newton.ModalBasis(
+        sample_points=[[0.0, 0.0, 0.0]],
+        sample_phi=[[[1.0, 2.0, 3.0], [0.0, 1.0, 0.0]]],
+        mode_mass=[2.0, 3.0],
+        mode_stiffness=[4.0, 5.0],
+        mode_damping=[0.1, 0.2],
+    )
+
+    test.assertEqual(basis.mode_count, 2)
+    test.assertEqual(basis.sample_count, 1)
+    test.assertEqual(basis.add_sample([0.0, 0.0, 0.0]), 0)
+    sample = basis.add_sample([1.0, 0.0, 0.0], phi=[[0.5, 0.0, 0.0], [0.0, 0.0, 0.25]])
+    test.assertEqual(sample, 1)
+    np.testing.assert_allclose(basis.sample_value(sample), [[0.5, 0.0, 0.0], [0.0, 0.0, 0.25]], atol=1.0e-7)
+
+
+def test_modal_generator_beam_samples(test, device):
+    length = 1.0
+    basis = newton.ModalGeneratorBeam(
+        length=length,
+        half_width_y=0.1,
+        half_width_z=0.05,
+        mode_specs=[
+            {"type": newton.ModalGeneratorBeam.Mode.AXIAL},
+            {
+                "type": newton.ModalGeneratorBeam.Mode.BENDING_Y,
+                "boundary": newton.ModalGeneratorBeam.Boundary.PINNED_PINNED,
+            },
+            {
+                "type": newton.ModalGeneratorBeam.Mode.TORSION,
+                "boundary": newton.ModalGeneratorBeam.Boundary.LINEAR,
+            },
+        ],
+        sample_count=3,
+    ).build()
+
+    sample = basis.add_sample([0.0, 0.1, 0.05])
+    phi = basis.sample_value(sample)
+    np.testing.assert_allclose(phi[0], [0.0, 0.0, 0.0], atol=1.0e-7)
+    np.testing.assert_allclose(phi[1], [0.0, 1.0, 0.0], atol=1.0e-7)
+    np.testing.assert_allclose(phi[2], [0.0, -0.025, 0.05], atol=1.0e-7)
+    test.assertGreater(float(basis.mode_stiffness[0]), 0.0)
+
+
+def test_modal_generator_pod_rank_one(test, device):
+    points = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=np.float32)
+    displacements = np.array([[[0.0, 0.0, 0.0], [0.0, 2.0, 0.0]]], dtype=np.float32)
+
+    basis = newton.ModalGeneratorPOD(
+        sample_points=points,
+        displacements=displacements,
+        mode_count=1,
+        total_mass=2.0,
+        stiffness_scale=3.0,
+    ).build()
+
+    test.assertEqual(basis.mode_count, 1)
+    np.testing.assert_allclose(np.abs(basis.sample_value(1)[0]), [0.0, 1.0, 0.0], atol=1.0e-7)
+    np.testing.assert_allclose(basis.mode_mass, [1.0], atol=1.0e-7)
+    np.testing.assert_allclose(basis.mode_stiffness, [3.0], atol=1.0e-7)
+
+
 def _deformed_endpoint_world(model, state, joint: int, side: str) -> np.ndarray:
     body = int(model.joint_parent.numpy()[joint]) if side == "parent" else int(model.joint_child.numpy()[joint])
     xforms = model.joint_X_p.numpy() if side == "parent" else model.joint_X_c.numpy()
@@ -149,6 +212,65 @@ def test_elastic_endpoint_shape_sampling(test, device):
     test.assertGreaterEqual(endpoint, 0)
     phi = model.elastic_endpoint_phi.numpy().reshape((-1, 3))
     np.testing.assert_allclose(phi[endpoint], [1.0, 0.25, 0.5], atol=1.0e-7)
+
+
+def test_elastic_endpoint_modal_basis_sampling(test, device):
+    basis = newton.ModalBasis(
+        sample_points=[[0.5, -0.25, 0.0]],
+        sample_phi=[[[1.0, 0.25, 0.5]]],
+        mode_mass=[1.0],
+    )
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    parent = builder.add_body(mass=1.0, inertia=_identity_inertia())
+    child = builder.add_body_elastic(mass=1.0, inertia=_identity_inertia(), modal_basis=basis)
+    joint = builder.add_joint_revolute(
+        parent=parent,
+        child=child,
+        axis=(0.0, 0.0, 1.0),
+        parent_xform=wp.transform(wp.vec3(0.25, 0.0, 0.0), wp.quat_identity()),
+        child_xform=wp.transform(wp.vec3(0.5, -0.25, 0.0), wp.quat_identity()),
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+
+    endpoint = int(model.joint_child_elastic_endpoint.numpy()[joint])
+    test.assertGreaterEqual(endpoint, 0)
+    test.assertEqual(int(model.elastic_endpoint_sample.numpy()[endpoint]), 0)
+    test.assertEqual(model.modal_basis_count, 1)
+    np.testing.assert_allclose(model.elastic_basis.numpy(), [0], atol=0)
+    phi = model.elastic_endpoint_phi.numpy().reshape((-1, 3))
+    np.testing.assert_allclose(phi[endpoint], [1.0, 0.25, 0.5], atol=1.0e-7)
+
+
+def test_modal_basis_shared_by_elastic_bodies(test, device):
+    basis = newton.ModalGeneratorBeam(
+        length=1.0,
+        half_width_y=0.05,
+        half_width_z=0.03,
+        mode_specs=[{"type": newton.ModalGeneratorBeam.Mode.AXIAL}],
+        sample_count=3,
+    ).build()
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    builder.add_body_elastic(
+        xform=wp.transform(wp.vec3(0.0, 0.0, 0.0), wp.quat_identity()),
+        mass=1.0,
+        inertia=_identity_inertia(),
+        modal_basis=basis,
+    )
+    builder.add_body_elastic(
+        xform=wp.transform(wp.vec3(0.0, 0.4, 0.0), wp.quat_identity()),
+        mass=1.0,
+        inertia=_identity_inertia(),
+        modal_basis=basis,
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+
+    test.assertEqual(model.elastic_body_count, 2)
+    test.assertEqual(model.modal_basis_count, 1)
+    np.testing.assert_allclose(model.elastic_basis.numpy(), [0, 0], atol=0)
 
 
 def test_elastic_render_shape_sampling(test, device):
@@ -512,12 +634,39 @@ class TestReducedElasticBody(unittest.TestCase):
 
 
 for device in devices:
+    add_function_test(
+        TestReducedElasticBody, "test_modal_basis_add_sample", test_modal_basis_add_sample, devices=[device]
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_modal_generator_beam_samples",
+        test_modal_generator_beam_samples,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_modal_generator_pod_rank_one",
+        test_modal_generator_pod_rank_one,
+        devices=[device],
+    )
     add_function_test(TestReducedElasticBody, "test_elastic_link_layout", test_elastic_link_layout, devices=[device])
     add_function_test(TestReducedElasticBody, "test_elastic_fk_sync", test_elastic_fk_sync, devices=[device])
     add_function_test(
         TestReducedElasticBody,
         "test_elastic_endpoint_shape_sampling",
         test_elastic_endpoint_shape_sampling,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_endpoint_modal_basis_sampling",
+        test_elastic_endpoint_modal_basis_sampling,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_modal_basis_shared_by_elastic_bodies",
+        test_modal_basis_shared_by_elastic_bodies,
         devices=[device],
     )
     add_function_test(

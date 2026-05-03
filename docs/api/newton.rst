@@ -49,6 +49,10 @@ newton
    JointTargetMode
    JointType
    Mesh
+   ModalBasis
+   ModalGeneratorBeam
+   ModalGeneratorPOD
+   ModalGeneratorSampled
    Model
    ModelBuilder
    ParticleFlags
