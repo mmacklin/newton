@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Reduced Elastic Links - Implementation Report</title>
   <style>
     :root {
@@ -227,22 +230,22 @@
       <section class="section">
         <h3>Elastic 4-Bar Linkage</h3>
         <p>The coupler is an elastic link in a revolute-jointed four-bar. The orange coupler mesh is deformed directly from axial and Euler-Bernoulli bending modes; the cyan centerline is only a diagnostic overlay.</p>
-        <video controls preload="metadata" src="assets/reduced_elastic_fourbar.mp4?20260503T081536Z"></video>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_fourbar.mp4?datetime=20260503T081815Z"></video>
       </section>
       <section class="section">
         <h3>Revolute Torsion Fixture</h3>
         <p>A revolute endpoint aligned with the beam axis leaves the centerline unchanged. The mesh deformation uses five torsion modes with rapidly decaying high-mode amplitudes, reducing the linearized radial stretch without introducing visible ripples near the tip.</p>
-        <video controls preload="metadata" src="assets/elastic_revolute_endpoint_fixture.mp4?20260503T081536Z"></video>
+        <video controls preload="metadata" data-video-src="assets/elastic_revolute_endpoint_fixture.mp4?datetime=20260503T081815Z"></video>
       </section>
       <section class="section">
         <h3>Cantilever Tip Load</h3>
         <p>A single elastic link uses the exact Euler-Bernoulli cantilever tip-load shape. The modal coordinate tracks the analytic static solution as the load varies.</p>
-        <video controls preload="metadata" src="assets/reduced_elastic_cantilever_beam.mp4?20260503T081536Z"></video>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_cantilever_beam.mp4?datetime=20260503T081815Z"></video>
       </section>
       <section class="section">
         <h3>Cantilever Vibration</h3>
         <p>The same reduced beam formulation is given finite modal mass and released from an initial deflection, so the visible motion comes from modal dynamics rather than a prescribed load.</p>
-        <video controls preload="metadata" src="assets/reduced_elastic_cantilever_vibration.mp4?20260503T081536Z"></video>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_cantilever_vibration.mp4?datetime=20260503T081815Z"></video>
       </section>
     </div>
 
@@ -288,5 +291,16 @@
       <p class="note">Generated in headless Newton ViewerGL. CUDA/OpenGL interop was unavailable on this host, so ViewerGL used its built-in CPU-copy fallback for frame capture.</p>
     </div>
   </main>
+  <script>
+    (() => {
+      const pageLoadKey = new Date().toISOString().replace(/[-:.]/g, "");
+      for (const video of document.querySelectorAll("video[data-video-src]")) {
+        const src = video.dataset.videoSrc;
+        const url = new URL(src, window.location.href);
+        url.searchParams.set("reload", pageLoadKey);
+        video.src = url.href;
+      }
+    })();
+  </script>
 </body>
 </html>

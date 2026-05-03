@@ -40,8 +40,8 @@ def _update_report_video_cache_busters(report_path: Path, cache_key: str):
     text = report_path.read_text()
     for video_name in VIDEO_ASSETS:
         text = re.sub(
-            rf'src="assets/{re.escape(video_name)}(?:\?[^"]*)?"',
-            f'src="assets/{video_name}?{cache_key}"',
+            rf'(data-video-src|src)="assets/{re.escape(video_name)}(?:\?[^"]*)?"',
+            rf'\1="assets/{video_name}?datetime={cache_key}"',
             text,
         )
     report_path.write_text(text)
