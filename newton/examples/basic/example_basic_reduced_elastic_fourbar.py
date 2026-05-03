@@ -29,7 +29,7 @@ import warp as wp
 
 import newton
 import newton.examples
-from newton.examples.basic._reduced_elastic import beam_render_sample_points
+from newton.examples.basic._reduced_elastic import beam_render_sample_points, elastic_shape_volume_ratio
 
 
 def _quat_from_angle_z(theta: float):
@@ -205,6 +205,8 @@ class Example:
         self.drive_qd_start = int(self.model.joint_qd_start.numpy()[self.j_drive])
         self._target_pos = self.control.joint_target_pos.numpy()
         self._joint_f = self.control.joint_f.numpy()
+        self.initial_volume_ratio = elastic_shape_volume_ratio(self.model, self.state_0)
+        self.max_volume_ratio_error = abs(self.initial_volume_ratio - 1.0)
 
         self.solver = newton.solvers.SolverVBD(
             self.model,
@@ -238,6 +240,10 @@ class Example:
 
     def _mode_values(self) -> np.ndarray:
         return self.state_0.joint_q.numpy()[self.elastic_q_start + 7 : self.elastic_q_start + 10]
+
+    def _update_volume_metric(self):
+        ratio = elastic_shape_volume_ratio(self.model, self.state_0)
+        self.max_volume_ratio_error = max(self.max_volume_ratio_error, abs(ratio - 1.0))
 
     def _endpoint_world(self, joint: int, child_side: bool) -> np.ndarray:
         body_ids = self.model.joint_child.numpy() if child_side else self.model.joint_parent.numpy()
@@ -288,6 +294,7 @@ class Example:
     def step(self):
         self.simulate()
         self.sim_time += self.frame_dt
+        self._update_volume_metric()
 
     def render(self):
         self.viewer.begin_frame(self.sim_time)
@@ -306,6 +313,8 @@ class Example:
 
         if np.max(np.abs(self._mode_values())) > 0.5:
             raise AssertionError(f"elastic mode amplitude is out of expected range: {self._mode_values()}")
+        if self.max_volume_ratio_error > 0.25:
+            raise AssertionError(f"elastic coupler volume changed by {self.max_volume_ratio_error:.3f}")
 
 
 if __name__ == "__main__":
