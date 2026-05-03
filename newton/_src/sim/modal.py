@@ -123,7 +123,7 @@ class ModalBasis:
             raise ValueError(f"{name} must have length {mode_count}, got {array.shape[0]}")
         return np.array(array, dtype=np.float32, copy=True)
 
-    def copy(self) -> "ModalBasis":
+    def copy(self) -> ModalBasis:
         """Return a deep copy of this basis."""
         return ModalBasis(
             self.sample_points,
@@ -310,8 +310,7 @@ class ModalGeneratorPOD:
         self.displacements = np.asarray(displacements, dtype=np.float32)
         if self.displacements.ndim != 3 or self.displacements.shape[1:] != self.sample_points.shape:
             raise ValueError(
-                "displacements must have shape [snapshot_count, sample_count, 3], "
-                f"got {self.displacements.shape}"
+                f"displacements must have shape [snapshot_count, sample_count, 3], got {self.displacements.shape}"
             )
 
         self.mode_count = mode_count
@@ -349,8 +348,10 @@ class ModalGeneratorPOD:
         mode_damping = np.zeros(mode_count, dtype=np.float32)
         if self.damping_ratio > 0.0:
             for i in range(mode_count):
-                mode_damping[i] = 2.0 * self.damping_ratio * math.sqrt(
-                    max(float(mode_mass[i]), 0.0) * max(float(mode_stiffness[i]), 0.0)
+                mode_damping[i] = (
+                    2.0
+                    * self.damping_ratio
+                    * math.sqrt(max(float(mode_mass[i]), 0.0) * max(float(mode_stiffness[i]), 0.0))
                 )
 
         return ModalBasis(
@@ -510,8 +511,10 @@ class ModalGeneratorBeam:
         for i, spec in enumerate(self.mode_specs):
             mode_mass[i], mode_stiffness[i] = self._mode_properties(spec)
             if self.damping_ratio > 0.0:
-                mode_damping[i] = 2.0 * self.damping_ratio * math.sqrt(
-                    max(float(mode_mass[i]), 0.0) * max(float(mode_stiffness[i]), 0.0)
+                mode_damping[i] = (
+                    2.0
+                    * self.damping_ratio
+                    * math.sqrt(max(float(mode_mass[i]), 0.0) * max(float(mode_stiffness[i]), 0.0))
                 )
 
         return ModalBasis(points, sample_phi, mode_mass, mode_stiffness, mode_damping, label=self.label)
