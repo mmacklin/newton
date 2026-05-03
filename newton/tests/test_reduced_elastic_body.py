@@ -8,6 +8,7 @@ import numpy as np
 import warp as wp
 
 import newton
+from newton.examples.basic._reduced_elastic import beam_render_sample_points, box_surface_mesh
 from newton.tests.unittest_utils import add_function_test, get_test_devices
 
 devices = get_test_devices()
@@ -360,6 +361,45 @@ def test_elastic_shape_box_winding(test, device):
         axis = int(np.argmax(np.abs(center / np.array([hx, hy, hz], dtype=np.float32))))
         expected_sign = 1.0 if center[axis] > 0.0 else -1.0
         test.assertGreater(float(normal[axis] * expected_sign), 0.0)
+
+
+def test_elastic_shape_box_exact_modal_samples(test, device):
+    length = 0.8
+    hy = 0.04
+    hz = 0.03
+    surface_points, _ = box_surface_mesh(length, hy, hz)
+    basis = newton.ModalGeneratorBeam(
+        length=length,
+        half_width_y=hy,
+        half_width_z=hz,
+        mode_specs=[
+            {
+                "type": newton.ModalGeneratorBeam.Mode.BENDING_Z,
+                "boundary": newton.ModalGeneratorBeam.Boundary.CANTILEVER_TIP,
+            }
+        ],
+    ).build(
+        sample_points=beam_render_sample_points(
+            length,
+            hy,
+            hz,
+            extra_points=((-0.5 * length, 0.0, 0.0), (0.5 * length, 0.0, 0.0)),
+        )
+    )
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    body = builder.add_body_elastic(mass=1.0, inertia=_identity_inertia(), modal_basis=basis)
+    builder.add_shape_box(body, hx=0.5 * length, hy=hy, hz=hz)
+    builder.color()
+    model = builder.finalize(device=device)
+
+    samples = model.elastic_shape_vertex_sample.numpy()
+    np.testing.assert_array_equal(samples, np.arange(surface_points.shape[0], dtype=np.int32))
+    np.testing.assert_allclose(model.elastic_shape_vertex_local.numpy(), surface_points, atol=1.0e-7)
+
+    phi = model.elastic_shape_vertex_phi.numpy().reshape((-1, model.elastic_max_mode_count, 3))[:, 0]
+    expected_phi = np.asarray([basis.sample_value(i)[0] for i in range(surface_points.shape[0])], dtype=np.float32)
+    np.testing.assert_allclose(phi, expected_phi, atol=1.0e-7)
 
 
 def test_torsion_render_shape_sampling(test, device):
@@ -743,6 +783,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_elastic_shape_box_winding",
         test_elastic_shape_box_winding,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_shape_box_exact_modal_samples",
+        test_elastic_shape_box_exact_modal_samples,
         devices=[device],
     )
     add_function_test(
