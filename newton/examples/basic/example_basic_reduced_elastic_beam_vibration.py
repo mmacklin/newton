@@ -46,10 +46,12 @@ class Example:
         self.args = args
 
         self.length = 0.9
+        self.sim_substeps = 8
+        self.sim_dt = self.frame_dt / self.sim_substeps
         self.hy = 0.045
         self.hz = 0.035
         self.z = 0.24
-        self.mode_q0 = 0.085
+        self.mode_q0 = 0.09
         self.mode_qd0 = 0.0
 
         beam_basis = newton.ModalGeneratorBeam(
@@ -63,9 +65,9 @@ class Example:
                 }
             ],
             sample_count=41,
-            density=350.0,
-            young_modulus=4.0e5,
-            damping_ratio=0.018,
+            density=250.0,
+            young_modulus=3.2e7,
+            damping_ratio=0.001,
             label="cantilever_vibration_basis",
         ).build()
         self.mode_mass = float(beam_basis.mode_mass[0])
