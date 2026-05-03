@@ -31,7 +31,7 @@ import warp as wp
 
 import newton
 import newton.examples
-from newton.examples.basic._reduced_elastic import beam_render_sample_points
+from newton.examples.basic._reduced_elastic import beam_render_sample_points, elastic_shape_volume_ratio
 
 
 class Example:
@@ -121,6 +121,8 @@ class Example:
         self.elastic_qd_start = int(self.model.joint_qd_start.numpy()[self.elastic_joint])
         self._expected_q = self.mode_q0
         self._expected_qd = self.mode_qd0
+        self.initial_volume_ratio = elastic_shape_volume_ratio(self.model, self.state_0)
+        self.max_volume_ratio_error = abs(self.initial_volume_ratio - 1.0)
 
         self.solver = newton.solvers.SolverVBD(
             self.model,
@@ -139,6 +141,10 @@ class Example:
 
     def _mode_velocity(self) -> float:
         return float(self.state_0.joint_qd.numpy()[self.elastic_qd_start + 6])
+
+    def _update_volume_metric(self):
+        ratio = elastic_shape_volume_ratio(self.model, self.state_0)
+        self.max_volume_ratio_error = max(self.max_volume_ratio_error, abs(ratio - 1.0))
 
     def _advance_expected(self):
         denom = self.mode_mass + self.sim_dt * self.mode_damping + self.sim_dt * self.sim_dt * self.mode_stiffness
@@ -159,6 +165,7 @@ class Example:
         self.simulate()
         self.sim_time += self.frame_dt
         self.step_count += 1
+        self._update_volume_metric()
 
     def render(self):
         self.viewer.begin_frame(self.sim_time)
@@ -174,6 +181,8 @@ class Example:
             raise AssertionError(f"modal velocity {self._mode_velocity()} differs from expected {self._expected_qd}")
         if self.step_count > 40 and abs(self._mode_value() - self.mode_q0) < 1.0e-3:
             raise AssertionError("cantilever vibration did not evolve from the initial displacement")
+        if self.max_volume_ratio_error > 0.03:
+            raise AssertionError(f"cantilever vibration volume changed by {self.max_volume_ratio_error:.3f}")
 
 
 if __name__ == "__main__":
