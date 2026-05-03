@@ -14,6 +14,7 @@ import warp as wp
 
 import newton
 import newton.viewer
+from newton.examples.basic._reduced_elastic import beam_render_sample_points, box_surface_mesh
 from newton.examples.basic.example_basic_reduced_elastic_beam import Example as BeamExample
 from newton.examples.basic.example_basic_reduced_elastic_beam_vibration import Example as BeamVibrationExample
 from newton.examples.basic.example_basic_reduced_elastic_fourbar import Example as FourbarExample
@@ -34,40 +35,6 @@ def _linear_torsion_release_coordinates(tip_twist: float) -> np.ndarray:
     q = np.zeros(TORSION_MODE_COUNT, dtype=np.float32)
     q[0] = tip_twist
     return q
-
-
-def _create_torsion_box_mesh(length: float, half_width_y: float, half_width_z: float, segments: int = 128):
-    vertices: list[tuple[float, float, float]] = []
-    indices: list[int] = []
-    half_length = 0.5 * length
-
-    for i in range(segments + 1):
-        x = -half_length + length * float(i) / float(segments)
-        vertices.extend(
-            [
-                (x, -half_width_y, -half_width_z),
-                (x, half_width_y, -half_width_z),
-                (x, half_width_y, half_width_z),
-                (x, -half_width_y, half_width_z),
-            ]
-        )
-
-    def add_quad(a: int, b: int, c: int, d: int) -> None:
-        indices.extend([a, b, c, a, c, d])
-
-    for i in range(segments):
-        base = 4 * i
-        nxt = base + 4
-        add_quad(base + 0, base + 1, nxt + 1, nxt + 0)
-        add_quad(base + 1, base + 2, nxt + 2, nxt + 1)
-        add_quad(base + 2, base + 3, nxt + 3, nxt + 2)
-        add_quad(base + 3, base + 0, nxt + 0, nxt + 3)
-
-    add_quad(0, 3, 2, 1)
-    end = 4 * segments
-    add_quad(end + 0, end + 1, end + 2, end + 3)
-
-    return np.asarray(vertices, dtype=np.float32), np.asarray(indices, dtype=np.int32)
 
 
 def _write_video(path: Path, frames):
@@ -124,20 +91,15 @@ class RevoluteEndpointFixture:
         self.mode_q0 = _linear_torsion_release_coordinates(self.target_tip_twist)
         self.hy = 0.085
         self.hz = 0.05
-        shaft_vertices, shaft_indices = _create_torsion_box_mesh(self.length, self.hy, self.hz)
-        diagnostic_points = np.column_stack(
-            (
-                np.linspace(-0.5 * self.length, 0.5 * self.length, 33, dtype=np.float32),
-                np.zeros(33, dtype=np.float32),
-                np.full(33, self.hz + 0.045, dtype=np.float32),
-            )
-        )
-        sample_points = np.vstack(
-            (
-                shaft_vertices,
-                diagnostic_points,
-                np.array([[-0.5 * self.length, 0.0, 0.0], [0.5 * self.length, 0.0, 0.0]], dtype=np.float32),
-            )
+        shaft_vertices, shaft_indices = box_surface_mesh(self.length, self.hy, self.hz)
+        sample_points = beam_render_sample_points(
+            self.length,
+            self.hy,
+            self.hz,
+            extra_points=(
+                (-0.5 * self.length, 0.0, 0.0),
+                (0.5 * self.length, 0.0, 0.0),
+            ),
         )
 
         torsion_basis = newton.ModalGeneratorBeam(

@@ -31,6 +31,7 @@ import warp as wp
 
 import newton
 import newton.examples
+from newton.examples.basic._reduced_elastic import beam_render_sample_points
 
 
 class Example:
@@ -69,7 +70,14 @@ class Example:
             young_modulus=3.2e7,
             damping_ratio=0.001,
             label="cantilever_vibration_basis",
-        ).build()
+        ).build(
+            sample_points=beam_render_sample_points(
+                self.length,
+                self.hy,
+                self.hz,
+                extra_points=((-0.5 * self.length, 0.0, 0.0), (0.5 * self.length, 0.0, 0.0)),
+            )
+        )
         self.mode_mass = float(beam_basis.mode_mass[0])
         self.mode_stiffness = float(beam_basis.mode_stiffness[0])
         self.mode_damping = float(beam_basis.mode_damping[0])

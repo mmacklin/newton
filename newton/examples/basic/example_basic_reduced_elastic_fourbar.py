@@ -29,6 +29,7 @@ import warp as wp
 
 import newton
 import newton.examples
+from newton.examples.basic._reduced_elastic import beam_render_sample_points
 
 
 def _quat_from_angle_z(theta: float):
@@ -72,6 +73,8 @@ class Example:
         self.c = 0.55
         self.d = 0.75
         self.z = 0.12
+        self.coupler_hy = 0.05
+        self.coupler_hz = 0.03
         self.theta2_0 = 0.75
         self.mode_q0 = np.array([0.08, 0.08, 0.0], dtype=np.float32)
 
@@ -85,8 +88,8 @@ class Example:
 
         coupler_basis = newton.ModalGeneratorBeam(
             length=self.b_rest,
-            half_width_y=0.05,
-            half_width_z=0.03,
+            half_width_y=self.coupler_hy,
+            half_width_z=self.coupler_hz,
             mode_specs=[
                 {"type": newton.ModalGeneratorBeam.Mode.AXIAL},
                 {
@@ -102,7 +105,14 @@ class Example:
             ],
             sample_count=33,
             label="coupler_basis",
-        ).build()
+        ).build(
+            sample_points=beam_render_sample_points(
+                self.b_rest,
+                self.coupler_hy,
+                self.coupler_hz,
+                extra_points=((-0.5 * self.b_rest, 0.0, 0.0), (0.5 * self.b_rest, 0.0, 0.0)),
+            )
+        )
 
         builder = newton.ModelBuilder(gravity=0.0)
         builder.add_ground_plane()
@@ -139,7 +149,7 @@ class Example:
         shape_cfg = newton.ModelBuilder.ShapeConfig()
         shape_cfg.density = 0.0
         builder.add_shape_box(self.crank, hx=self.a / 2.0, hy=0.035, hz=0.025, cfg=shape_cfg)
-        builder.add_shape_box(self.coupler, hx=self.b_rest / 2.0, hy=0.05, hz=0.03, cfg=shape_cfg)
+        builder.add_shape_box(self.coupler, hx=self.b_rest / 2.0, hy=self.coupler_hy, hz=self.coupler_hz, cfg=shape_cfg)
         builder.add_shape_box(self.rocker, hx=self.c / 2.0, hy=0.035, hz=0.025, cfg=shape_cfg)
 
         self.j_drive = builder.add_joint_revolute(

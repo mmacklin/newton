@@ -31,6 +31,7 @@ import warp as wp
 
 import newton
 import newton.examples
+from newton.examples.basic._reduced_elastic import beam_render_sample_points
 
 
 class Example:
@@ -45,6 +46,8 @@ class Example:
         self.args = args
 
         self.length = 0.9
+        self.hy = 0.045
+        self.hz = 0.035
         self.z = 0.22
         self.ei = 0.24
         self.tip_load_mean = 0.12
@@ -54,8 +57,8 @@ class Example:
 
         beam_basis = newton.ModalGeneratorBeam(
             length=self.length,
-            half_width_y=0.045,
-            half_width_z=0.035,
+            half_width_y=self.hy,
+            half_width_z=self.hz,
             mode_specs=[
                 {
                     "type": newton.ModalGeneratorBeam.Mode.BENDING_Z,
@@ -64,7 +67,14 @@ class Example:
             ],
             sample_count=33,
             label="cantilever_basis",
-        ).build()
+        ).build(
+            sample_points=beam_render_sample_points(
+                self.length,
+                self.hy,
+                self.hz,
+                extra_points=((-0.5 * self.length, 0.0, 0.0), (0.5 * self.length, 0.0, 0.0)),
+            )
+        )
 
         builder = newton.ModelBuilder(gravity=0.0)
         builder.add_ground_plane()
@@ -85,7 +95,7 @@ class Example:
 
         shape_cfg = newton.ModelBuilder.ShapeConfig()
         shape_cfg.density = 0.0
-        builder.add_shape_box(self.beam, hx=0.5 * self.length, hy=0.045, hz=0.035, cfg=shape_cfg)
+        builder.add_shape_box(self.beam, hx=0.5 * self.length, hy=self.hy, hz=self.hz, cfg=shape_cfg)
         self.fixed_joint = builder.add_joint_fixed(
             parent=-1,
             child=self.beam,
