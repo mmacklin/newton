@@ -36,6 +36,40 @@ def _linear_torsion_release_coordinates(tip_twist: float) -> np.ndarray:
     return q
 
 
+def _create_torsion_box_mesh(length: float, half_width_y: float, half_width_z: float, segments: int = 128):
+    vertices: list[tuple[float, float, float]] = []
+    indices: list[int] = []
+    half_length = 0.5 * length
+
+    for i in range(segments + 1):
+        x = -half_length + length * float(i) / float(segments)
+        vertices.extend(
+            [
+                (x, -half_width_y, -half_width_z),
+                (x, half_width_y, -half_width_z),
+                (x, half_width_y, half_width_z),
+                (x, -half_width_y, half_width_z),
+            ]
+        )
+
+    def add_quad(a: int, b: int, c: int, d: int) -> None:
+        indices.extend([a, b, c, a, c, d])
+
+    for i in range(segments):
+        base = 4 * i
+        nxt = base + 4
+        add_quad(base + 0, base + 1, nxt + 1, nxt + 0)
+        add_quad(base + 1, base + 2, nxt + 2, nxt + 1)
+        add_quad(base + 2, base + 3, nxt + 3, nxt + 2)
+        add_quad(base + 3, base + 0, nxt + 0, nxt + 3)
+
+    add_quad(0, 3, 2, 1)
+    end = 4 * segments
+    add_quad(end + 0, end + 1, end + 2, end + 3)
+
+    return np.asarray(vertices, dtype=np.float32), np.asarray(indices, dtype=np.int32)
+
+
 def _write_video(path: Path, frames):
     path.parent.mkdir(parents=True, exist_ok=True)
     with imageio.get_writer(path, fps=FPS, codec="libx264", quality=8, macro_block_size=1) as writer:
@@ -90,6 +124,21 @@ class RevoluteEndpointFixture:
         self.mode_q0 = _linear_torsion_release_coordinates(self.target_tip_twist)
         self.hy = 0.085
         self.hz = 0.05
+        shaft_vertices, shaft_indices = _create_torsion_box_mesh(self.length, self.hy, self.hz)
+        diagnostic_points = np.column_stack(
+            (
+                np.linspace(-0.5 * self.length, 0.5 * self.length, 33, dtype=np.float32),
+                np.zeros(33, dtype=np.float32),
+                np.full(33, self.hz + 0.045, dtype=np.float32),
+            )
+        )
+        sample_points = np.vstack(
+            (
+                shaft_vertices,
+                diagnostic_points,
+                np.array([[-0.5 * self.length, 0.0, 0.0], [0.5 * self.length, 0.0, 0.0]], dtype=np.float32),
+            )
+        )
 
         torsion_basis = newton.ModalGeneratorBeam(
             length=self.length,
@@ -127,7 +176,7 @@ class RevoluteEndpointFixture:
             shear_modulus=4.0e4,
             damping_ratio=0.02,
             label="torsion_fixture_basis",
-        ).build()
+        ).build(sample_points=sample_points)
 
         builder = newton.ModelBuilder(gravity=0.0)
         builder.add_ground_plane()
@@ -144,7 +193,14 @@ class RevoluteEndpointFixture:
 
         shape_cfg = newton.ModelBuilder.ShapeConfig()
         shape_cfg.density = 0.0
-        builder.add_shape_box(self.body, hx=self.length / 2.0, hy=self.hy, hz=self.hz, cfg=shape_cfg)
+        shape_cfg.has_shape_collision = False
+        shape_cfg.has_particle_collision = False
+        builder.add_shape_mesh(
+            self.body,
+            mesh=newton.Mesh(shaft_vertices, shaft_indices, compute_inertia=False),
+            cfg=shape_cfg,
+            label="elastic_torsion_shaft_mesh",
+        )
         self.joint = builder.add_joint_revolute(
             parent=-1,
             child=self.body,
