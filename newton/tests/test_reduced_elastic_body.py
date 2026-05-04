@@ -10,6 +10,7 @@ import warp as wp
 import newton
 from newton.examples.basic._reduced_elastic import (
     beam_render_sample_points,
+    beam_torsion_linear_modal_properties,
     box_surface_mesh,
     finite_torsion_displacement,
     joint_endpoint_world,
@@ -568,6 +569,17 @@ def test_finite_torsion_pod_modes_project_exemplar(test, device):
     target = finite_torsion_displacement(sample_points, length, tip_twist)
     q, *_ = np.linalg.lstsq(projection_matrix, target.reshape(-1), rcond=None)
     projected = np.einsum("smc,m->sc", phi, q)
+
+    polar_moment = (4.0 / 3.0) * hy * hz**3 + (4.0 / 3.0) * hz * hy**3
+    modal_mass, modal_stiffness = beam_torsion_linear_modal_properties(
+        length,
+        hy,
+        hz,
+        density=500.0,
+        shear_modulus=4.0e4,
+    )
+    np.testing.assert_allclose(modal_mass, 500.0 * polar_moment * length / 3.0, rtol=1.0e-6)
+    np.testing.assert_allclose(modal_stiffness, 4.0e4 * polar_moment / length, rtol=1.0e-6)
 
     test.assertEqual(basis.mode_count, mode_count)
     test.assertLess(float(np.max(np.linalg.norm(projected - target, axis=1))), 1.0e-5)

@@ -186,6 +186,26 @@ def finite_torsion_displacement(points: np.ndarray, length: float, tip_twist: fl
     return twist + radial
 
 
+def beam_torsion_linear_modal_properties(
+    length: float,
+    half_width_y: float,
+    half_width_z: float,
+    density: float,
+    shear_modulus: float,
+) -> tuple[float, float]:
+    """Return approximate modal mass and stiffness for a linear rectangular-beam twist."""
+    length = float(length)
+    if length <= 0.0:
+        raise ValueError(f"length must be positive, got {length}")
+
+    hy = float(half_width_y)
+    hz = float(half_width_z)
+    polar_moment = (4.0 / 3.0) * hy * hz**3 + (4.0 / 3.0) * hz * hy**3
+    modal_mass = float(density) * polar_moment * length / 3.0
+    modal_stiffness = float(shear_modulus) * polar_moment / length
+    return modal_mass, modal_stiffness
+
+
 def mesh_volume(vertices: np.ndarray, indices: np.ndarray) -> float:
     """Return the absolute volume enclosed by a closed triangle mesh."""
     vertices = np.asarray(vertices, dtype=np.float64)
