@@ -102,6 +102,64 @@ def beam_render_sample_points(
     return np.vstack(point_sets).astype(np.float32, copy=False)
 
 
+def poisson_axial_mode(
+    points: np.ndarray, length: float, poisson_ratio: float, *, clamped_ends: bool = False
+) -> np.ndarray:
+    """Return axial extension with Poisson lateral strain [m per m]."""
+    points = np.asarray(points, dtype=np.float32)
+    phi = np.zeros_like(points, dtype=np.float32)
+    inv_length = 1.0 / float(length)
+    lateral_profile = 1.0
+    if clamped_ends:
+        xi = np.clip(2.0 * points[:, 0] * inv_length, -1.0, 1.0)
+        lateral_profile = 1.5 * (1.0 - xi * xi)
+    phi[:, 0] = points[:, 0] * inv_length
+    phi[:, 1] = -float(poisson_ratio) * points[:, 1] * inv_length * lateral_profile
+    phi[:, 2] = -float(poisson_ratio) * points[:, 2] * inv_length * lateral_profile
+    return phi
+
+
+def quat_rotate(q: np.ndarray, v: np.ndarray) -> np.ndarray:
+    """Rotate a vector by a quaternion in xyzw order."""
+    qv = np.asarray(q[:3], dtype=float)
+    v = np.asarray(v, dtype=float)
+    return v + 2.0 * np.cross(qv, np.cross(qv, v) + float(q[3]) * v)
+
+
+def transform_point(xform: np.ndarray, point: np.ndarray) -> np.ndarray:
+    """Transform a point by a Newton transform stored as position + xyzw quaternion."""
+    return np.asarray(xform[:3], dtype=float) + quat_rotate(np.asarray(xform[3:7], dtype=float), point)
+
+
+def joint_endpoint_world(model, state, joint: int, side: str) -> np.ndarray:
+    """Return a joint endpoint in world space, including reduced elastic displacement."""
+    if side == "parent":
+        body = int(model.joint_parent.numpy()[joint])
+        xforms = model.joint_X_p.numpy()
+        endpoint = int(model.joint_parent_elastic_endpoint.numpy()[joint])
+    elif side == "child":
+        body = int(model.joint_child.numpy()[joint])
+        xforms = model.joint_X_c.numpy()
+        endpoint = int(model.joint_child_elastic_endpoint.numpy()[joint])
+    else:
+        raise ValueError(f"side must be 'parent' or 'child', got {side!r}")
+
+    local = np.array(xforms[joint, :3], dtype=float)
+    if endpoint >= 0:
+        elastic = int(model.body_elastic_index.numpy()[body])
+        owner_joint = int(model.elastic_joint.numpy()[elastic])
+        q_start = int(model.joint_q_start.numpy()[owner_joint])
+        mode_count = int(model.elastic_mode_count.numpy()[elastic])
+        max_modes = int(model.elastic_max_mode_count)
+        phi = model.elastic_endpoint_phi.numpy().reshape((-1, max_modes, 3))
+        q = state.joint_q.numpy()
+        local += np.einsum("mc,m->c", phi[endpoint, :mode_count], q[q_start + 7 : q_start + 7 + mode_count])
+
+    if body < 0:
+        return local
+    return transform_point(state.body_q.numpy()[body], local)
+
+
 def finite_torsion_mode_fields(points: np.ndarray, length: float, tip_twist: float) -> tuple[np.ndarray, np.ndarray]:
     """Return circumferential and radial finite-twist displacement fields."""
     points = np.asarray(points, dtype=np.float32)

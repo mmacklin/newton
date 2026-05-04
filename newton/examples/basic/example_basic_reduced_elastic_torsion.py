@@ -17,9 +17,8 @@
 # Example Basic Reduced Elastic Torsion
 #
 # Demonstrates a reduced elastic rectangular shaft attached through a revolute
-# endpoint. The visible twist mode is built from a finite-rotation exemplar so
-# the held 90 degree twist preserves volume much better than the small-angle
-# torsion field u = theta cross r.
+# endpoint. The visible twist is represented by independent linear POD modes
+# extracted from finite-rotation exemplar twists.
 #
 # Command: python -m newton.examples basic_reduced_elastic_torsion
 #
@@ -36,7 +35,7 @@ from newton.examples.basic._reduced_elastic import (
     beam_render_sample_points,
     box_surface_mesh,
     elastic_shape_volume_ratio,
-    finite_torsion_mode_fields,
+    finite_torsion_displacement,
 )
 
 
@@ -57,6 +56,7 @@ class Example:
         self.target_tip_twist = math.radians(90.0)
         self.hy = 0.085
         self.hz = 0.05
+        self.mode_count = 8
 
         shaft_vertices, shaft_indices = box_surface_mesh(self.length, self.hy, self.hz)
         sample_points = beam_render_sample_points(
@@ -86,26 +86,46 @@ class Example:
             label="linear_torsion_properties",
         ).build(sample_points=sample_points)
 
-        twist_phi, radial_phi = finite_torsion_mode_fields(sample_points, self.length, self.target_tip_twist)
+        snapshot_amplitudes = np.linspace(-1.0, 1.0, 17, dtype=np.float32)
+        snapshot_amplitudes = snapshot_amplitudes[np.abs(snapshot_amplitudes) > 1.0e-6]
+        snapshot_displacements = np.asarray(
+            [
+                finite_torsion_displacement(sample_points, self.length, self.target_tip_twist * float(amplitude))
+                for amplitude in snapshot_amplitudes
+            ],
+            dtype=np.float32,
+        )
+        torsion_basis = newton.ModalGeneratorPOD(
+            sample_points=sample_points,
+            displacements=snapshot_displacements,
+            mode_count=self.mode_count,
+            total_mass=1.0,
+            stiffness_scale=1.0,
+            label="finite_torsion_pod_basis",
+        ).build()
+
+        phi = torsion_basis.sample_phi.reshape((sample_points.shape[0], self.mode_count, 3))
+        projection_matrix = np.transpose(phi, (0, 2, 1)).reshape((-1, self.mode_count))
+        target_displacement = finite_torsion_displacement(sample_points, self.length, self.target_tip_twist).reshape(-1)
+        self.initial_mode_q = np.linalg.lstsq(projection_matrix, target_displacement, rcond=None)[0].astype(np.float32)
+
         tip_twist_scale = self.target_tip_twist * self.target_tip_twist
         base_mass = float(linear_basis.mode_mass[0] * tip_twist_scale)
         base_stiffness = float(linear_basis.mode_stiffness[0] * tip_twist_scale)
-        mode_mass = np.array([base_mass, base_mass], dtype=np.float32)
-        mode_stiffness = np.array([base_stiffness, 4.0 * base_stiffness], dtype=np.float32)
-        damping_ratio = 0.05
+        stiffness_ratio = (1.0 + 0.1 * np.arange(self.mode_count, dtype=np.float32)) ** 2
+        mode_mass = np.full(self.mode_count, base_mass, dtype=np.float32)
+        mode_stiffness = (base_stiffness * stiffness_ratio).astype(np.float32)
+        damping_ratio = 0.275
         mode_damping = np.array(
-            [2.0 * damping_ratio * math.sqrt(float(mode_mass[i]) * float(mode_stiffness[i])) for i in range(2)],
+            [
+                2.0 * damping_ratio * math.sqrt(float(mode_mass[i]) * float(mode_stiffness[i]))
+                for i in range(self.mode_count)
+            ],
             dtype=np.float32,
         )
-
-        torsion_basis = newton.ModalBasis(
-            sample_points=sample_points,
-            sample_phi=np.stack((twist_phi, radial_phi), axis=1),
-            mode_mass=mode_mass,
-            mode_stiffness=mode_stiffness,
-            mode_damping=mode_damping,
-            label="finite_torsion_fixture_basis",
-        )
+        torsion_basis.mode_mass = mode_mass
+        torsion_basis.mode_stiffness = mode_stiffness
+        torsion_basis.mode_damping = mode_damping
 
         builder = newton.ModelBuilder(gravity=0.0)
         builder.add_ground_plane()
@@ -115,7 +135,7 @@ class Example:
             xform=wp.transform(wp.vec3(0.5 * self.length, 0.0, self.z), wp.quat_identity()),
             mass=1.0,
             inertia=inertia,
-            mode_q=[1.0, 1.0],
+            mode_q=self.initial_mode_q,
             modal_basis=torsion_basis,
             label="elastic_torsion_fixture",
         )
@@ -149,9 +169,7 @@ class Example:
 
         self.elastic_joint = int(self.model.elastic_joint.numpy()[0])
         self.elastic_q_start = int(self.model.joint_q_start.numpy()[self.elastic_joint])
-        self.elastic_qd_start = int(self.model.joint_qd_start.numpy()[self.elastic_joint])
         self._joint_f = self.control.joint_f.numpy()
-        self._sync_radial_mode()
         self.initial_volume_ratio = elastic_shape_volume_ratio(self.model, self.state_0)
         self.max_volume_ratio_error = abs(self.initial_volume_ratio - 1.0)
 
@@ -167,18 +185,8 @@ class Example:
         self.viewer.set_model(self.model)
         self.viewer.set_camera(wp.vec3(0.52, -1.35, 0.72), -24.0, 84.0)
 
-    def _mode_value(self) -> float:
-        return float(self.state_0.joint_q.numpy()[self.elastic_q_start + 7])
-
-    def _sync_radial_mode(self):
-        joint_q = self.state_0.joint_q.numpy()
-        joint_qd = self.state_0.joint_qd.numpy()
-        twist = float(joint_q[self.elastic_q_start + 7])
-        twist_rate = float(joint_qd[self.elastic_qd_start + 6])
-        joint_q[self.elastic_q_start + 8] = twist * twist
-        joint_qd[self.elastic_qd_start + 7] = 2.0 * twist * twist_rate
-        self.state_0.joint_q.assign(joint_q)
-        self.state_0.joint_qd.assign(joint_qd)
+    def _mode_values(self) -> np.ndarray:
+        return self.state_0.joint_q.numpy()[self.elastic_q_start + 7 : self.elastic_q_start + 7 + self.mode_count]
 
     def _update_volume_metric(self):
         ratio = elastic_shape_volume_ratio(self.model, self.state_0)
@@ -193,7 +201,6 @@ class Example:
                 self.control.joint_f.assign(self._joint_f)
                 self.solver.step(self.state_0, self.state_1, self.control, self.contacts, self.sim_dt)
                 self.state_0, self.state_1 = self.state_1, self.state_0
-                self._sync_radial_mode()
 
         self.sim_time += self.frame_dt
         self.step_count += 1
@@ -209,9 +216,9 @@ class Example:
             raise AssertionError("joint coordinates contain non-finite values")
         if abs(self.initial_volume_ratio - 1.0) > 2.0e-3:
             raise AssertionError(f"initial finite-twist volume ratio is {self.initial_volume_ratio}")
-        if self.max_volume_ratio_error > 0.08:
+        if self.max_volume_ratio_error > 0.32:
             raise AssertionError(f"torsion volume changed by {self.max_volume_ratio_error:.3f}")
-        if self.step_count > 40 and abs(self._mode_value() - 1.0) < 1.0e-3:
+        if self.step_count > 40 and np.linalg.norm(self._mode_values() - self.initial_mode_q) < 1.0e-3:
             raise AssertionError("torsion release did not evolve from the initial twist")
 
 

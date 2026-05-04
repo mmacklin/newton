@@ -554,6 +554,7 @@ class ViewerGL(ViewerBase):
         texture: np.ndarray | str | None = None,
         hidden: bool = False,
         backface_culling: bool = True,
+        colors: wp.array(dtype=wp.vec3) | None = None,
     ):
         """
         Log a mesh for rendering.
@@ -567,18 +568,20 @@ class ViewerGL(ViewerBase):
             texture: Texture path/URL or image array (H, W, C).
             hidden: Whether the mesh is hidden.
             backface_culling: Enable backface culling.
+            colors: Optional per-vertex colors.
         """
         assert isinstance(points, wp.array)
         assert isinstance(indices, wp.array)
         assert normals is None or isinstance(normals, wp.array)
         assert uvs is None or isinstance(uvs, wp.array)
+        assert colors is None or isinstance(colors, wp.array)
 
         if name not in self.objects:
             self.objects[name] = MeshGL(
                 len(points), len(indices), self.device, hidden=hidden, backface_culling=backface_culling
             )
 
-        self.objects[name].update(points, indices, normals, uvs, texture)
+        self.objects[name].update(points, indices, normals, uvs, texture, colors=colors)
         self.objects[name].hidden = hidden
         self.objects[name].backface_culling = backface_culling
 
@@ -1836,6 +1839,8 @@ class ViewerGL(ViewerBase):
                     # Reduced elastic body visualization
                     show_elastic_bodies = self.show_elastic_bodies
                     changed, self.show_elastic_bodies = imgui.checkbox("Show Elastic Bodies", show_elastic_bodies)
+                    show_elastic_strain = self.show_elastic_strain
+                    changed, self.show_elastic_strain = imgui.checkbox("Show Elastic Strain", show_elastic_strain)
 
                     # Inertia boxes toggle
                     show_inertia_boxes = self.show_inertia_boxes

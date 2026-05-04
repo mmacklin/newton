@@ -79,6 +79,7 @@ class ViewerNull(ViewerBase):
         texture: np.ndarray | str | None = None,
         hidden: bool = False,
         backface_culling: bool = True,
+        colors: wp.array(dtype=wp.vec3) | None = None,
     ):
         """
         No-op implementation for logging a mesh.
@@ -92,6 +93,7 @@ class ViewerNull(ViewerBase):
             texture: Optional texture path/URL or image array.
             hidden: Whether the mesh is hidden.
             backface_culling: Whether to enable backface culling.
+            colors: Optional per-vertex colors.
         """
         pass
 
