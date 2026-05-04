@@ -1,255 +1,170 @@
 # Cable Joints
 
-Cable simulation for Newton's XPBD solver, implementing Müller et al.
-"Cable Joints" (SCA 2018) with extensions for 3D routing and capstan
-friction.
+Newton's XPBD tendon solver is currently back at a clean baseline for
+Müller et al. "Cable Joints" (SCA 2018).  This baseline intentionally removes
+the capstan/finite-friction solver work so slip can be added back one case at a
+time.
 
-## Overview
+## Current Scope
 
-A **tendon** is an inextensible, massless cable routed through an ordered
-sequence of waypoints on rigid bodies.  Between adjacent waypoints, a
-unilateral XPBD distance constraint enforces the cable segment length.
-Rest length redistributes across segments as bodies move, keeping total
-cable length constant.
+Implemented:
 
-### Link types
+- Rolling pulley links with the full angular Jacobian in the stretch row.
+- Pinhole links that transfer rest length between their two adjacent spans.
+- Fixed attachment links.
+- Auto-computed initial rest lengths.
+- Dynamic pulley bodies with revolute joints.
+- No capstan friction path.  `mu` remains in the builder/model data for API
+  compatibility, but XPBD tendon kernels ignore it.
 
-| Type | Description |
-|------|-------------|
-| `ROLLING` | Cable wraps around a cylindrical body surface.  Attachment point tracks the tangent; arc length contributes to the segment. |
-| `ATTACHMENT` | Cable is fixed to a body-local point.  No sliding. |
-| `PINHOLE` | Cable passes through a fixed point on the body.  Rest length can transfer between adjacent segments. |
+Not implemented in the current baseline:
 
-### Builder API
+- Finite capstan friction.
+- Frictional stick/slip classification.
+- Separate no-slip/friction rows.
+- Explicit scalar pulley angle state.
+- Dynamic rerouting, merge/split, or non-circular pulley profiles.
 
-```python
-builder.add_tendon()
-builder.add_tendon_link(body, link_type, offset, axis, radius=..., mu=..., ...)
-```
+## Link Types
 
-Each `add_tendon()` starts a new cable.  `add_tendon_link()` appends a
-waypoint.  Adjacent waypoints define cable segments, each with its own
-compliance, damping, and rest length (auto-computed from initial geometry
-when `rest_length=-1`).
-
-## Architecture
-
-```
-builder.py          add_tendon(), add_tendon_link() — builds Model arrays
-tendon.py           TendonLinkType enum
-solver_xpbd.py      Tendon state init + per-substep kernel dispatch
-tendon_kernels.py   Warp GPU kernels (geometry, rest-length distribution, XPBD solve)
-cable.py            Shared visualization and cable-length test utilities
-```
-
-### Solver pipeline (per substep)
-
-1. **`update_tendon_attachments`** — For each rolling contact, compute
-   tangent points from the neighboring waypoints onto the cylinder surface.
-   Iterative for 3D (non-coplanar) configurations.
-
-2. **`distribute_tendon_rest_lengths`** — Initialize rest lengths across
-   segments while preserving total cable length. This is the free-sliding
-   baseline; rolling friction is applied by the rolling contact rows.
-
-3. **`solve_tendon_segments`** — XPBD position-level constraint solve.
-   Each segment enforces `length ≤ rest_length` with configurable compliance
-   and damping.  Body positions and velocities are corrected via inverse-mass
-   weighted deltas on the shared rigid bodies. Frictional rolling contacts add
-   a no-slip coupling row scaled by the capstan tension bound.
-
-4. **`update_tendon_coupling_rest`** — Per iteration, apply incremental
-   rolling-contact rest-length transfer from accepted rim motion. Kinematic
-   rolling bodies have zero inverse inertia, so their `dtheta` is zero and no
-   rim-motion transfer occurs.
-
-## Formulation decisions
-
-This implementation deliberately separates three ideas that are easy to
-conflate: cable stretch, cable redistribution, and rolling contact friction.
-
-### Cable length is stored once
-
-Each tendon stores a fixed total cable length:
-
-```text
-L_total = sum(segment_rest_lengths) + sum(wrap_angle * radius)
-```
-
-The mutable per-segment rest lengths are the solver's distribution of that
-fixed cable length across straight spans.  Rest length can move between
-neighboring spans, but the target total is not supposed to drift.  The example
-tests measure the geometric total length as straight span lengths plus wrap
-arcs and compare it against this stored target.
-
-Because the segment constraint is unilateral, a slack route can have a current
-taut geometric length smaller than `L_total`.  That is slack, not cable loss.
-Positive error corresponds to actual stretch; negative error corresponds to
-unrepresented slack length.
-
-### Stretch and rolling are separate constraints
-
-The stretch row for a segment is the unilateral XPBD distance constraint:
-
-```text
-C_stretch = |x_r - x_l| - rest <= 0
-```
-
-For rolling links, this row does not directly torque the pulley.  The straight
-span endpoint is a tangent point, and using the stretch row's angular Jacobian
-as the rolling friction model would mix geometric length enforcement with
-rim-contact friction.  Instead, rolling contact is represented by a separate
-constraint row that couples cable travel to rim travel:
-
-```text
-C_roll = dx - sign * R * dtheta = 0
-```
-
-Equivalently, for a segment adjacent to a frictional rolling pulley the implementation
-stores the invariant:
-
-```text
-segment_length + sign * orientation * R * theta = constant
-```
-
-That rolling row has the pulley angular Jacobian.  This keeps the physics
-meaning of the rows clear: stretch enforces cable length, rolling transfers
-linear cable motion into pulley rotation.
-
-### Friction limits force transfer, not geometry
-
-Capstan friction is expressed as a force/tension admissibility condition:
-
-```text
-T_tight / T_slack <= exp(mu * theta_wrap)
-```
-
-The solver estimates the adjacent segment tensions from the lagged compliant
-stretch residuals:
-
-```text
-T ~= max(length - rest, 0) / compliance
-```
-
-Those estimates are used as Coulomb-style lagged data for the friction
-decision.  We chose this over copying stretch multipliers because it keeps the
-friction decision local to the current stretch state and avoids extra lambda
-bookkeeping.
-
-When the capstan bound can support the requested transfer, the rolling contact
-sticks.  When it cannot, transfer is reduced by the capstan stick fraction.
-The same rolling row is used for dynamic and kinematic pulleys; the only
-difference is the inverse mass/inertia supplied to the row.
-
-### Incremental rolling transfer
-
-Rolling transfer is incremental per solver iteration, not a one-time
-redistribution at the start of the step.  The relevant state is:
-
-```text
-dtheta = theta_current - theta_ref
-du = orientation * R * dtheta
-```
-
-After the transfer is applied, `theta_ref` is updated to the current angle.
-This lets redistribution participate in each XPBD iteration rather than
-lagging an entire time step behind the body solve.
-
-### Dynamic and kinematic pulleys use the same row
-
-The special cases follow from the same constraints and force limits:
-
-| Case | Behavior |
+| Type | Behavior |
 |------|----------|
-| `mu = 0` | No friction transfer. Cable can slide, and a dynamic pulley receives no rolling torque. |
-| Finite `mu`, below critical | Capstan bound allows only partial transfer; relative slip remains. |
-| Large `mu` / stick | Rolling row enforces zero relative slip: cable travel matches `R * dtheta`. |
-| Dynamic pulley | Rolling transfer spins the pulley and couples its effective inertia `I/R^2` into the cable dynamics. |
-| Kinematic pulley | Infinite mass/inertia means zero inverse mass/inertia; `dtheta = 0`, so high friction locks cable transfer. |
+| `ROLLING` | Cable wraps around a circular body. Tangent points are recomputed from current geometry, and stretch constraints use the full linear and angular Jacobian at those tangent points. |
+| `ATTACHMENT` | Cable endpoint fixed to a body-local point. |
+| `PINHOLE` | Zero-radius waypoint. The two adjacent rest lengths redistribute proportionally to current span lengths, preserving their sum. |
 
-For small dynamic pulley inertia, frictionless and no-slip cable trajectories
-become similar because the pulley stores little energy.  Increasing inertia
-makes the rim motion and no-slip coupling easier to see.
+## Solver Pipeline
 
-## Examples
+The XPBD tendon path has two kernel entry points:
 
-All examples are in `newton/examples/cable/` and support `--record` for
-headless MP4 capture.
+1. `update_tendon_attachments`
+   - Runs once per tendon per solver substep, before the XPBD iterations.
+   - Recomputes rolling tangent points.
+   - Applies the paper's `surfaceDist(old, new)` rest-length transfer.
+   - Applies pinhole rest transfer between adjacent spans.
 
-| Example | Description |
-|---------|-------------|
-| `tendon_pulley` | Single pulley, two weights — basic Atwood machine |
-| `tendon_rolling_pulley` | Dynamic pulley on a hinge joint |
-| `tendon_compound_pulley` | Compound (block-and-tackle) pulley system |
-| `tendon_cable_machine` | Multi-pulley cable routing |
-| `tendon_3d_routing` | Non-coplanar cylinders with iterative 3D tangent solver |
-| `tendon_equilibrium` | Static equilibrium validation |
-| `tendon_pinhole` | Cable through a fixed point |
-| `tendon_capstan_friction` | Dynamic-pulley capstan friction: frictionless, partial grip, no-slip |
-| `tendon_capstan_kinematic` | Kinematic-pulley capstan friction: free slide, partial slip, lock |
+2. `solve_tendon_segments`
+   - Runs once per segment per solver iteration.
+   - Solves the unilateral stretch inequality:
 
-Run with:
-```bash
-uv sync --extra examples
-uv run -m newton.examples tendon_pulley
-uv run -m newton.examples tendon_pulley --record   # saves MP4
+     ```text
+     C = |x_r - x_l| - rest <= 0
+     ```
+
+   - Uses the full angular Jacobian:
+
+     ```text
+     Jw_l = -cross(r_l, n)
+     Jw_r =  cross(r_r, n)
+     ```
+
+There is no separate capstan/friction kernel in this baseline.
+
+## Formulation Notes
+
+Each segment stores a mutable free-span rest length.  Rolling links transfer
+rest length with the original paper update:
+
+```text
+rest += surfaceDist(old_left,  new_left)
+rest -= surfaceDist(old_right, new_right)
 ```
 
-`render_all_examples.py` in the repo root renders all examples headless to
-`~/reports/cable-sim-research/`.
+Attachment points are stored in body-local coordinates.  At the start of a
+substep, the old local contacts are transformed by the current body pose, new
+tangents are computed, and the signed surface distance between those two points
+updates the segment rest length.  During XPBD iterations, the stretch row
+transforms the same local contacts by the current body pose every iteration.
+This is what makes pulley rotation and cable motion couple immediately; the
+contact point is fixed on the body during the solve rather than being a stale
+world-space point.
 
-## Reference implementation
+No separate pulley-angle state is tracked.  The only rolling state is the
+body-local contact point stored per segment endpoint.
 
-The original C++ implementation is at `~/src-2/SimpleSolverExt.cpp` (Müller
-et al.).  The Newton port maps roughly as:
+Pinhole links are the only intentional slip points in this baseline.  A pinhole
+preserves the sum of the two adjacent rest lengths and redistributes that sum
+from current span geometry:
 
-| C++ | Newton |
-|-----|--------|
-| `Cable::solve()` | Three-phase kernel dispatch in `solver_xpbd.py` |
-| `getTangentPointBody()` | `tangent_point_circle()` in `tendon_kernels.py` |
-| `surfaceLength()` | `arc_length_on_circle()` in `tendon_kernels.py` |
-| `addLink()` | `add_tendon_link()` in `builder.py` |
+```text
+rest_left = (rest_left + rest_right) * length_left / (length_left + length_right)
+```
 
-## Roadmap
+The stretch row remains unilateral, so slack cable is allowed.  Example tests
+still track geometric total cable length as straight spans plus rolling wrap
+arcs; small slack/tension differences are expected, but unbounded growth or
+loss is not.
 
-Features remaining to port from the reference implementation.
+## Current Validation
 
-### Not yet implemented
+The focused baseline regression suite is `newton.tests.test_tendon_capstan`.
+Despite the historical filename, it now validates the no-friction baseline:
 
-1. **Convex hull profiles** — Reference supports arbitrary mesh cross-sections
-   by slicing with the cable plane to get a 2D convex hull.  Newton only
-   supports circle profiles (cylinders).  Reference: `addLink()` lines
-   240–281, `getTangentPointBody()` lines 80–93.
+- Pinhole Atwood: the heavy side descends and the light side rises through a
+  pinhole.
+- Dynamic rolling pulley Atwood: the heavy side descends, the light side rises,
+  and the pulley rotates from the angular Jacobian.
+- `mu` ignored: changing `mu` does not change baseline motion.
+- Motorized rolling pulley: a driven dynamic pulley produces slider motion
+  through the no-slip cable path.
+- Motorized delay regression: a driven pulley must move the cable during the
+  initial rotation window.
 
-2. **Pinhole rest-length transfer** — Reference transfers rest length between
-   segments adjacent to a pinhole based on stretch difference.  Newton's
-   proportional distribution doesn't do pinhole-specific transfer.
-   Reference: lines 526–557.
+Latest run:
 
-3. **Merge/split (dynamic rerouting)** — Dynamically add/remove rolling
-   contacts as cables wrap/unwrap around bodies.  Reference: lines 429–522.
+```bash
+uv run --extra examples python -m unittest newton.tests.test_tendon_capstan
+```
 
-4. **Compression compliance** — Separate compliance for slack cable, allowing
-   configurable buckling stiffness.  Reference: `compressionCompliance`.
+Result: 10 tests passed on CPU and CUDA.
 
-5. **Rolling limit detection** — Prevent wrap angle from going negative when
-   cable tries to unwrap past a pulley edge.  Reference: `inLimit` flag,
-   lines 573–641.
+The cross-base XY table was also tested against this baseline with all pulleys
+dynamic:
 
-6. **Curved cable visualization** — Smooth visual samples along cable arcs
-   and catenary-like curves for slack segments.  Reference:
-   `computeSamples()`.
+```bash
+uv run --extra examples python -m newton.examples.cable.example_tendon_xy_table \
+  --device cuda:0 --test --quiet --viewer null --num-frames 480
+```
 
-### Already implemented
+Result: passed on CUDA over the full 480-frame render horizon.  The
+example now restores the historical reference route with lower table endpoints,
+X/Y prismatic axes, and both drive pulleys using the original winding.  It
+asserts the exact initial tangent-point fingerprint, that drive pulley rotation
+produces measurable table sliding, that both drive windings do not cross
+between their guide pulleys, and that all passive guide pulleys rotate.
 
-- Circle-profile rolling contacts (tangent point, arc length)
-- Fixed attachments and pinhole geometry
-- Unilateral XPBD distance constraints
-- Rest-length redistribution (frictionless)
-- Capstan friction for rolling contacts:
-  `T_tight/T_slack <= exp(mu * theta)`, with kinematic lock and dynamic
-  finite-friction no-slip coupling through the same rolling row.
-- 3D iterative tangent computation for non-coplanar pulleys
-- Auto-computed rest lengths (`rest_length=-1`)
-- Dynamic pulley bodies with finite mass/inertia
-- Headless MP4 recording via `ViewerGL --record`
+The rolling and compound examples now have boundedness and pulley-clearance
+gates over their longer render windows:
+
+```bash
+uv run --extra examples python -m newton.examples.cable.example_tendon_rolling_pulley \
+  --device cuda:0 --test --quiet --viewer null --num-frames 180
+uv run --extra examples python -m newton.examples.cable.example_tendon_compound_pulley \
+  --device cuda:0 --test --quiet --viewer null --num-frames 220
+```
+
+Result: both passed on CUDA.  The rolling example now enables rigid
+contact between the weights and pulley, uses shorter initial spans and more
+conservative contact relaxation/substepping, and asserts that the light body
+reaches the pulley contact neighborhood without unbounded frame jumps.
+
+The 3D routing example also passes its 180-frame CUDA test.  It uses the
+iterative tangent construction so adjacent pulleys can have non-coplanar cable
+planes; its total-length check allows slack because the heavy body reaches the
+ground and the taut geometric path can be shorter than the stored cable length.
+
+The following examples are still WIP under this no-friction baseline:
+
+- `tendon_capstan_kinematic`: expects finite-friction/free-slide/lock behavior,
+  which is intentionally not implemented yet.
+- `tendon_cable_machine`: runs, but still permits large stretch in the current
+  authored parameters and should not be promoted until it has a tighter motion
+  test.
+
+## Repair Order
+
+1. Keep this no-friction baseline stable.
+2. Add one finite-slip case back with a small, isolated test.
+3. Add capstan stick/slip projection only after the baseline tests stay green.
+4. Re-render and promote complex examples only after their motion has a test
+   gate that catches direction, delayed coupling, and pulley sign failures.

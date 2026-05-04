@@ -60,6 +60,8 @@ class Example:
         self.pulley_indices = []
         self.left_indices = []
         self.right_indices = []
+        self._left_z_history = []
+        self._right_z_history = []
 
         for mu, x_off in zip(self.mus, self.x_offsets, strict=True):
             pulley_pos = wp.vec3(x_off, 0.0, 3.5)
@@ -147,6 +149,9 @@ class Example:
         self.state_1 = self.model.state()
         self.control = self.model.control()
         self.contacts = self.model.contacts()
+        body_q = self.state_0.body_q.numpy()
+        self._initial_left_z = np.array([body_q[i][2] for i in self.left_indices], dtype=np.float64)
+        self._initial_right_z = np.array([body_q[i][2] for i in self.right_indices], dtype=np.float64)
 
         if self.viewer is not None:
             self.viewer.set_model(self.model)
@@ -166,6 +171,12 @@ class Example:
     def step(self):
         self.simulate()
         self.sim_time += self.frame_dt
+        self._record_motion_sample()
+
+    def _record_motion_sample(self):
+        body_q = self.state_0.body_q.numpy()
+        self._left_z_history.append(np.array([body_q[i][2] for i in self.left_indices], dtype=np.float64))
+        self._right_z_history.append(np.array([body_q[i][2] for i in self.right_indices], dtype=np.float64))
 
     def test_post_step(self):
         assert_tendon_total_length(self)
@@ -189,6 +200,29 @@ class Example:
         assert_tendon_total_length(self)
         body_q = self.state_0.body_q.numpy()
         assert np.isfinite(body_q).all(), "Non-finite values in body positions"
+        if not self._right_z_history:
+            self._record_motion_sample()
+
+        left_z = np.array(self._left_z_history)
+        right_z = np.array(self._right_z_history)
+        assert np.isfinite(left_z).all() and np.isfinite(right_z).all(), "Non-finite capstan trajectory"
+
+        left_disp = left_z[-1] - self._initial_left_z
+        right_disp = self._initial_right_z - right_z[-1]
+        assert np.all(left_disp > -0.04), f"Light weights should not sink in kinematic capstan: dz={left_disp}"
+        assert np.all(right_disp > -0.02), f"Heavy weights should not rise in kinematic capstan: dz={right_disp}"
+
+        free_disp, mid_disp, locked_disp = right_disp
+        assert free_disp > 0.20, f"Frictionless kinematic capstan should slide freely: dz={free_disp:.4f}"
+        assert mid_disp > locked_disp + 0.08, (
+            f"Subcritical friction should still slide relative to locked case: mid={mid_disp:.4f}, "
+            f"locked={locked_disp:.4f}"
+        )
+        assert abs(free_disp - mid_disp) > 0.08, (
+            f"Kinematic capstan friction coefficients must produce distinct motion: free={free_disp:.4f}, "
+            f"mid={mid_disp:.4f}"
+        )
+        assert locked_disp < 0.12, f"High-friction kinematic capstan should lock: dz={locked_disp:.4f}"
 
     def render(self):
         if self.viewer is not None:

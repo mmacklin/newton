@@ -292,7 +292,7 @@ add_example_test(
     name="cable.example_tendon_rolling_pulley",
     devices=test_devices,
     use_viewer=True,
-    test_options={"num-frames": 100},
+    test_options={"num-frames": 180},
 )
 add_example_test(
     TestCableExamples,
@@ -306,7 +306,7 @@ add_example_test(
     name="cable.example_tendon_compound_pulley",
     devices=test_devices,
     use_viewer=True,
-    test_options={"num-frames": 100},
+    test_options={"num-frames": 220},
 )
 add_example_test(
     TestCableExamples,
@@ -320,7 +320,7 @@ add_example_test(
     name="cable.example_tendon_3d_routing",
     devices=test_devices,
     use_viewer=True,
-    test_options={"num-frames": 100},
+    test_options={"num-frames": 70},
 )
 add_example_test(
     TestCableExamples,

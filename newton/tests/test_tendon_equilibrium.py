@@ -23,11 +23,10 @@ def build_atwood_equal_weights(mass=2.0, pulley_mass=0.5, pulley_radius=0.15):
 
     Dof = newton.ModelBuilder.JointDofConfig
 
-    j_pulley = builder.add_joint_d6(
+    j_pulley = builder.add_joint_revolute(
         parent=-1,
         child=pulley,
-        linear_axes=[],
-        angular_axes=[Dof(axis=Axis.Y)],
+        axis=Axis.Y,
         parent_xform=wp.transform(p=wp.vec3(0.0, 0.0, 3.5), q=wp.quat_identity()),
         child_xform=wp.transform(),
     )

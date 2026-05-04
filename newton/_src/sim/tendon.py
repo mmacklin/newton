@@ -4,13 +4,12 @@
 """Tendon system for cable-driven mechanisms.
 
 Implements massless cable routing through rigid body contact points (pulleys,
-pinholes, attachments) using the Cable Joints method [Müller et al. SCA 2018]
-extended with capstan friction for tension-dependent force transmission.
+pinholes, attachments) using the Cable Joints method [Müller et al. SCA 2018].
 
 Each tendon is an ordered sequence of waypoints on rigid bodies. Between
 adjacent waypoints, a unilateral distance constraint enforces the cable
-length. Rest length flows between segments as bodies rotate, and capstan
-friction bounds the tension ratio at each contact.
+length. Rolling links are no-slip in the XPBD baseline, and pinholes transfer
+rest length between their two adjacent spans as frictionless slip waypoints.
 """
 
 from __future__ import annotations
@@ -31,5 +30,4 @@ class TendonLinkType(IntEnum):
 
     PINHOLE = 2
     """Cable passes through a fixed point on the body. Attachment does not
-    move, but rest length transfers between adjacent segments subject to
-    capstan friction bounds."""
+    move, but rest length transfers between adjacent segments."""

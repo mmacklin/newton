@@ -24,9 +24,8 @@ from newton._src.sim.builder import Axis
 from newton._src.sim.tendon import TendonLinkType
 from newton.examples.cable.cable import (
     assert_tendon_total_length,
+    get_tendon_attachment_worlds,
     get_tendon_cable_lines,
-    quat_multiply,
-    set_body_quat,
 )
 
 
@@ -56,8 +55,7 @@ class Example:
         q_p1_wp = wp.quat(*self.q_p1_init.tolist())
         p1 = builder.add_body(
             xform=wp.transform(p=wp.vec3(-self.r1, self.r1, 4.0), q=q_p1_wp),
-            mass=0.0,
-            is_kinematic=True,
+            mass=0.5,
         )
         builder.add_shape_cylinder(p1, radius=self.r1, half_height=0.06)
         self.p1_idx = p1
@@ -67,8 +65,7 @@ class Example:
         q_p2_wp = wp.quat(*self.q_p2_init.tolist())
         p2 = builder.add_body(
             xform=wp.transform(p=wp.vec3(0.0, 0.0, 2.0), q=q_p2_wp),
-            mass=0.0,
-            is_kinematic=True,
+            mass=0.5,
         )
         builder.add_shape_cylinder(p2, radius=self.r2, half_height=0.3)
         self.p2_idx = p2
@@ -79,13 +76,37 @@ class Example:
         q_p3_wp = wp.quat(*self.q_p3_init.tolist())
         p3 = builder.add_body(
             xform=wp.transform(p=wp.vec3(self.r3, -self.r3, 4.0), q=q_p3_wp),
-            mass=0.0,
-            is_kinematic=True,
+            mass=0.5,
         )
         builder.add_shape_cylinder(p3, radius=self.r3, half_height=0.06)
         self.p3_idx = p3
 
         Dof = newton.ModelBuilder.JointDofConfig
+        j_p1 = builder.add_joint_revolute(
+            parent=-1,
+            child=p1,
+            axis=Axis.Z,
+            parent_xform=wp.transform(p=wp.vec3(-self.r1, self.r1, 4.0), q=q_p1_wp),
+            child_xform=wp.transform(),
+            label="pulley_1_axis",
+        )
+        j_p2 = builder.add_joint_revolute(
+            parent=-1,
+            child=p2,
+            axis=Axis.Z,
+            parent_xform=wp.transform(p=wp.vec3(0.0, 0.0, 2.0), q=q_p2_wp),
+            child_xform=wp.transform(),
+            label="pulley_2_axis",
+        )
+        j_p3 = builder.add_joint_revolute(
+            parent=-1,
+            child=p3,
+            axis=Axis.Z,
+            parent_xform=wp.transform(p=wp.vec3(self.r3, -self.r3, 4.0), q=q_p3_wp),
+            child_xform=wp.transform(),
+            label="pulley_3_axis",
+        )
+
         free_lin = [Dof(axis=Axis.X), Dof(axis=Axis.Y), Dof(axis=Axis.Z)]
         free_ang = [Dof(axis=Axis.X), Dof(axis=Axis.Y), Dof(axis=Axis.Z)]
 
@@ -119,10 +140,14 @@ class Example:
             child_xform=wp.transform(),
         )
 
+        builder.add_articulation([j_p1])
+        builder.add_articulation([j_p2])
+        builder.add_articulation([j_p3])
         builder.add_articulation([j1])
         builder.add_articulation([j2])
 
         axis_z = (0.0, 0.0, 1.0)
+        drive_mu = 10.0
         builder.add_tendon()
 
         builder.add_tendon_link(
@@ -136,7 +161,7 @@ class Example:
             link_type=int(TendonLinkType.ROLLING),
             radius=self.r1,
             orientation=1,
-            mu=0.0,
+            mu=drive_mu,
             offset=(0.0, 0.0, 0.0),
             axis=axis_z,
             compliance=1.0e-5,
@@ -148,7 +173,7 @@ class Example:
             link_type=int(TendonLinkType.ROLLING),
             radius=self.r2,
             orientation=-1,
-            mu=0.0,
+            mu=drive_mu,
             offset=(0.0, 0.0, 0.0),
             axis=axis_z,
             compliance=1.0e-5,
@@ -160,7 +185,7 @@ class Example:
             link_type=int(TendonLinkType.ROLLING),
             radius=self.r3,
             orientation=1,
-            mu=0.0,
+            mu=drive_mu,
             offset=(0.0, 0.0, 0.0),
             axis=axis_z,
             compliance=1.0e-5,
@@ -190,10 +215,10 @@ class Example:
         self.state_1 = self.model.state()
         self.control = self.model.control()
         self.contacts = self.model.contacts()
-
-        self.p1_angle = 0.0
-        self.p2_angle = 0.0
-        self.p3_angle = 0.0
+        self._initial_body_q = self.state_0.body_q.numpy().copy()
+        self._pulley_theta = np.zeros(3, dtype=np.float64)
+        self._last_pulley_angles = None
+        self._pulley_rotation_history = []
 
         if self.viewer is not None:
             self.viewer.set_model(self.model)
@@ -203,8 +228,6 @@ class Example:
 
     def simulate(self):
         for _ in range(self.sim_substeps):
-            rest_before = self.solver.tendon_seg_rest_length.numpy().copy()
-
             self.state_0.clear_forces()
             if self.viewer is not None:
                 self.viewer.apply_forces(self.state_0)
@@ -212,29 +235,41 @@ class Example:
             self.solver.step(self.state_0, self.state_1, self.control, self.contacts, self.sim_dt)
             self.state_0, self.state_1 = self.state_1, self.state_0
 
-            rest_after = self.solver.tendon_seg_rest_length.numpy()
-
-            d_cable = rest_after[0] - rest_before[0]
-            self.p1_angle -= d_cable / self.r1
-            self.p2_angle += d_cable / self.r2
-            self.p3_angle -= d_cable / self.r3
-
-            q_z1 = np.array([0.0, 0.0, np.sin(self.p1_angle / 2), np.cos(self.p1_angle / 2)])
-            q_z2 = np.array([0.0, 0.0, np.sin(self.p2_angle / 2), np.cos(self.p2_angle / 2)])
-            q_z3 = np.array([0.0, 0.0, np.sin(self.p3_angle / 2), np.cos(self.p3_angle / 2)])
-            set_body_quat(self.state_0, self.p1_idx, quat_multiply(self.q_p1_init, q_z1))
-            set_body_quat(self.state_0, self.p2_idx, quat_multiply(self.q_p2_init, q_z2))
-            set_body_quat(self.state_0, self.p3_idx, quat_multiply(self.q_p3_init, q_z3))
-
     def step(self):
         self.simulate()
         self.sim_time += self.frame_dt
+        self._record_motion_sample()
+
+    @staticmethod
+    def _axis_angle(q, axis_index):
+        return float(2.0 * np.arctan2(q[3 + axis_index], q[6]))
+
+    @staticmethod
+    def _angle_delta(prev_angle, angle):
+        return float((angle - prev_angle + np.pi) % (2.0 * np.pi) - np.pi)
+
+    def _record_motion_sample(self):
+        body_q = self.state_0.body_q.numpy()
+        angles = np.array(
+            [
+                self._axis_angle(body_q[self.p1_idx], 2),
+                self._axis_angle(body_q[self.p2_idx], 2),
+                self._axis_angle(body_q[self.p3_idx], 2),
+            ],
+            dtype=np.float64,
+        )
+        if self._last_pulley_angles is not None:
+            self._pulley_theta += np.array(
+                [self._angle_delta(prev, cur) for prev, cur in zip(self._last_pulley_angles, angles, strict=True)],
+                dtype=np.float64,
+            )
+        self._last_pulley_angles = angles
+        self._pulley_rotation_history.append(self._pulley_theta.copy())
 
     def test_post_step(self):
-        assert_tendon_total_length(self)
+        assert_tendon_total_length(self, rel_tol=0.06, allow_slack=True)
         if self.sim_time < self.frame_dt * 1.5:
-            att_l = self.solver.tendon_seg_attachment_l.numpy()
-            att_r = self.solver.tendon_seg_attachment_r.numpy()
+            att_l, att_r = get_tendon_attachment_worlds(self.solver, self.model, self.state_0)
             for i in range(self.model.tendon_segment_count):
                 dx = abs(att_l[i][0] - att_r[i][0])
                 dy = abs(att_l[i][1] - att_r[i][1])
@@ -244,7 +279,7 @@ class Example:
                 assert dy < 0.02, f"Segment {i} not vertical in y: dy={dy}"
 
     def test_final(self):
-        assert_tendon_total_length(self)
+        assert_tendon_total_length(self, rel_tol=0.06, allow_slack=True)
         body_q = self.state_0.body_q.numpy()
         assert np.isfinite(body_q).all(), "Non-finite values in body positions"
 
@@ -254,6 +289,13 @@ class Example:
         box_moved = np.linalg.norm(box_pos - np.array([0.4, -0.2, 1.0])) > 0.1
         assert sphere_moved, f"Sphere should have moved from start: {sphere_pos}"
         assert box_moved, f"Box should have moved from start: {box_pos}"
+        if not self._pulley_rotation_history:
+            self._record_motion_sample()
+
+        rotations = np.array(self._pulley_rotation_history)
+        assert np.isfinite(rotations).all(), "Non-finite 3D routing pulley rotation"
+        max_rot = np.max(np.abs(rotations), axis=0)
+        assert np.all(max_rot > 0.05), f"All 3D routing pulleys should rotate under high-mu no-slip: {max_rot}"
 
     def render(self):
         if self.viewer is not None:

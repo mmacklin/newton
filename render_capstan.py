@@ -1,8 +1,7 @@
 """Render capstan friction examples and generate slip-vs-mu analysis."""
 
-import os
-import sys
 import importlib
+import os
 
 os.environ["DISPLAY"] = ":99"
 
@@ -10,9 +9,12 @@ import imageio
 import numpy as np
 import warp as wp
 
+import newton
+from newton._src.sim.builder import Axis
+from newton._src.sim.tendon import TendonLinkType
 from newton.viewer import ViewerGL
 
-NUM_FRAMES = 300
+NUM_FRAMES = 100
 FPS = 60
 REPORT_DIR = os.path.expanduser("~/reports/cable-sim-research")
 os.makedirs(REPORT_DIR, exist_ok=True)
@@ -58,10 +60,6 @@ def render_example(name, module_path, viewer):
 
 def run_slip_sweep():
     """Sweep mu values and measure heavy-mass displacement after 5 seconds."""
-    import newton
-    from newton._src.sim.builder import Axis
-    from newton._src.sim.tendon import TendonLinkType
-
     mu_values = np.concatenate([
         np.linspace(0.0, 0.1, 5),
         np.linspace(0.15, 0.5, 8),
@@ -293,7 +291,7 @@ def main():
 
     print(f"\n{'='*60}")
     print("Done. Outputs:")
-    base = "https://companion.mmacklin.com/cable-sim-research"
+    base = "https://reports.mmacklin.com/cable-sim-research"
     for p in [p1, p2, p3] if p3 else [p1, p2]:
         print(f"  {base}/{os.path.basename(p)}")
 

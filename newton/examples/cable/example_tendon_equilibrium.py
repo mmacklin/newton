@@ -51,11 +51,10 @@ class Example:
 
         Dof = newton.ModelBuilder.JointDofConfig
 
-        j_pulley = builder.add_joint_d6(
+        j_pulley = builder.add_joint_revolute(
             parent=-1,
             child=pulley,
-            linear_axes=[],
-            angular_axes=[Dof(axis=Axis.Y)],
+            axis=Axis.Y,
             parent_xform=wp.transform(p=wp.vec3(0.0, 0.0, 3.5), q=wp.quat_identity()),
             child_xform=wp.transform(),
         )

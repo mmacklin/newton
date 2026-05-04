@@ -9,22 +9,31 @@ import warp as wp
 from newton._src.sim.tendon import TendonLinkType
 
 
-def quat_multiply(q1, q2):
-    """Multiply two quaternions in (x, y, z, w) format."""
-    x1, y1, z1, w1 = q1
-    x2, y2, z2, w2 = q2
-    return np.array([
-        w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
-        w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
-        w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
-        w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
-    ])
+def get_tendon_attachment_worlds(solver, model, state):
+    """Return current world-space tendon segment attachment points."""
+    att_l = solver.tendon_seg_attachment_l.numpy()
+    att_r = solver.tendon_seg_attachment_r.numpy()
+    if not hasattr(solver, "tendon_seg_attachment_l_local") or solver.tendon_seg_attachment_l_local is None:
+        return att_l, att_r
+
+    local_l = solver.tendon_seg_attachment_l_local.numpy()
+    local_r = solver.tendon_seg_attachment_r_local.numpy()
+    seg_link_l = solver.tendon_seg_link_l.numpy()
+    link_body = model.tendon_link_body.numpy()
+    body_q = state.body_q.numpy()
+
+    att_l_world = np.empty_like(att_l)
+    att_r_world = np.empty_like(att_r)
+    for seg, link_l in enumerate(seg_link_l):
+        att_l_world[seg] = _transform_point_np(body_q[link_body[link_l]], local_l[seg])
+        att_r_world[seg] = _transform_point_np(body_q[link_body[link_l + 1]], local_r[seg])
+
+    return att_l_world, att_r_world
 
 
 def get_tendon_cable_lines(solver, model, state):
     """Build line-segment arrays for tendon visualization including arc wraps."""
-    att_l = solver.tendon_seg_attachment_l.numpy()
-    att_r = solver.tendon_seg_attachment_r.numpy()
+    att_l, att_r = get_tendon_attachment_worlds(solver, model, state)
 
     starts_list = []
     ends_list = []
@@ -113,8 +122,7 @@ def get_tendon_total_lengths(solver, model, state):
     if model.tendon_count == 0:
         return np.zeros(0, dtype=np.float32)
 
-    att_l = solver.tendon_seg_attachment_l.numpy()
-    att_r = solver.tendon_seg_attachment_r.numpy()
+    att_l, att_r = get_tendon_attachment_worlds(solver, model, state)
     tendon_start = model.tendon_start.numpy()
     link_type = model.tendon_link_type.numpy()
     link_body = model.tendon_link_body.numpy()
@@ -157,11 +165,13 @@ def get_tendon_total_lengths(solver, model, state):
     return lengths
 
 
-def assert_tendon_total_length(example, rel_tol=0.05, abs_tol=1.0e-3):
+def assert_tendon_total_length(example, rel_tol=0.05, abs_tol=1.0e-3, allow_slack=False):
     """Assert that an example's geometric cable lengths stay near target.
 
     The check stores peak absolute and relative errors on *example* so a
     failure reports both the current error and the worst error seen so far.
+    If allow_slack is true, only over-length errors fail; a loose cable can
+    have a taut geometric path shorter than the stored cable length.
     """
     model = example.model
     if model.tendon_count == 0:
@@ -184,7 +194,10 @@ def assert_tendon_total_length(example, rel_tol=0.05, abs_tol=1.0e-3):
     example._tendon_total_length_max_rel_error = max_rel
 
     allowed = abs_tol + rel_tol * np.maximum(np.abs(expected), 1.0e-8)
-    failed = np.nonzero(abs_err > allowed)[0]
+    if allow_slack:
+        failed = np.nonzero((current - expected) > allowed)[0]
+    else:
+        failed = np.nonzero(abs_err > allowed)[0]
     if len(failed) == 0:
         return
 
@@ -196,10 +209,3 @@ def assert_tendon_total_length(example, rel_tol=0.05, abs_tol=1.0e-3):
             f"max_abs={max_abs[i]:.6f}, max_rel={max_rel[i]:.4%}, allowed={allowed[i]:.6f}"
         )
     raise AssertionError("Tendon total cable length error exceeded tolerance: " + "; ".join(details))
-
-
-def set_body_quat(state, body_idx, quat_xyzw):
-    """Write a quaternion (x,y,z,w) into body_q for a kinematic body."""
-    bq = state.body_q.numpy()
-    bq[body_idx][3:7] = quat_xyzw
-    state.body_q = wp.array(bq, dtype=wp.transform, device=state.body_q.device)
