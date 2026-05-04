@@ -121,6 +121,9 @@ class ViewerBase(ABC):
         self.show_collision = False
         self.show_visual = True
         self.show_elastic_bodies = True
+        self.show_elastic_strain = False
+        self.elastic_strain_color_max: float | None = None
+        self.elastic_strain_color_shape_fraction = 0.1
         self.show_static = False
         self.show_inertia_boxes = False
         self.show_hydro_contact_surface = False
@@ -517,7 +520,8 @@ class ViewerBase(ABC):
                 continue
             visible = visible and self.show_elastic_bodies
 
-            local_vertices = np.array(vertex_local[start : start + count], dtype=float)
+            rest_vertices = np.array(vertex_local[start : start + count], dtype=float)
+            local_vertices = rest_vertices.copy()
             if visible:
                 elastic_index = int(body_elastic_index[body])
                 mode_count = int(elastic_mode_count[elastic_index])
@@ -529,6 +533,18 @@ class ViewerBase(ABC):
                             local_vertices[local_idx] += (
                                 vertex_phi[vertex_index * max_modes + mode] * joint_q[q_start + mode]
                             )
+
+            colors_wp = None
+            if visible and self.show_elastic_strain:
+                displacement = np.linalg.norm(local_vertices - rest_vertices, axis=1)
+                color_max = self.elastic_strain_color_max
+                if color_max is None or color_max <= 0.0:
+                    color_max = self._elastic_strain_auto_color_max(rest_vertices)
+                if color_max > 1.0e-12:
+                    color_values = displacement / color_max
+                else:
+                    color_values = np.zeros_like(displacement)
+                colors_wp = wp.array(self._matlab_jet(color_values), dtype=wp.vec3, device=self.device)
 
             world_vertices = np.empty_like(local_vertices, dtype=np.float32)
             world_offset = np.zeros(3, dtype=float)
@@ -544,7 +560,24 @@ class ViewerBase(ABC):
             indices_wp = wp.array(
                 indices[i_start : i_start + i_count].astype(np.int32), dtype=wp.int32, device=self.device
             )
-            self.log_mesh(name, points_wp, indices_wp, hidden=not visible, backface_culling=True)
+            self.log_mesh(name, points_wp, indices_wp, hidden=not visible, backface_culling=True, colors=colors_wp)
+
+    @staticmethod
+    def _matlab_jet(values: np.ndarray) -> np.ndarray:
+        """Map normalized scalar values to the Matlab jet color ramp."""
+        values = np.clip(np.asarray(values, dtype=np.float32), 0.0, 1.0)
+        red = np.clip(1.5 - np.abs(4.0 * values - 3.0), 0.0, 1.0)
+        green = np.clip(1.5 - np.abs(4.0 * values - 2.0), 0.0, 1.0)
+        blue = np.clip(1.5 - np.abs(4.0 * values - 1.0), 0.0, 1.0)
+        return np.stack((red, green, blue), axis=1).astype(np.float32)
+
+    def _elastic_strain_auto_color_max(self, rest_vertices: np.ndarray) -> float:
+        """Compute a fixed displacement scale from the rest-shape bounds."""
+        if len(rest_vertices) == 0:
+            return 1.0
+        extents = np.ptp(rest_vertices, axis=0)
+        diagonal = float(np.linalg.norm(extents))
+        return max(self.elastic_strain_color_shape_fraction * diagonal, 1.0e-6)
 
     def _log_elastic_bodies(self, state: newton.State):
         """Render reduced elastic body centerlines from sampled modal shape data."""
@@ -1051,6 +1084,7 @@ class ViewerBase(ABC):
         texture: np.ndarray | str | None = None,
         hidden: bool = False,
         backface_culling: bool = True,
+        colors: wp.array(dtype=wp.vec3) | None = None,
     ):
         """
         Register or update a mesh prototype in the viewer backend.
@@ -1064,6 +1098,7 @@ class ViewerBase(ABC):
             texture: Optional texture image array or path.
             hidden: Whether the mesh should be hidden.
             backface_culling: Whether back-face culling should be enabled.
+            colors: Optional per-vertex colors.
         """
         pass
 

@@ -381,6 +381,7 @@ class ViewerViser(ViewerBase):
         texture: np.ndarray | str | None = None,
         hidden: bool = False,
         backface_culling: bool = True,
+        colors: wp.array(dtype=wp.vec3) | None = None,
     ):
         """
         Log a mesh to viser for visualization.
@@ -394,6 +395,7 @@ class ViewerViser(ViewerBase):
             texture: Texture path/URL or image array (H, W, C).
             hidden: Whether the mesh is hidden.
             backface_culling: Whether to enable backface culling.
+            colors: Optional per-vertex colors.
         """
         assert isinstance(points, wp.array)
         assert isinstance(indices, wp.array)

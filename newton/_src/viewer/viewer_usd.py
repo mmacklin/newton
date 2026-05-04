@@ -226,6 +226,7 @@ class ViewerUSD(ViewerBase):
         texture: np.ndarray | str | None = None,
         hidden: bool = False,
         backface_culling: bool = True,
+        colors: wp.array(dtype=wp.vec3) | None = None,
     ):
         """
         Create a USD mesh prototype from vertex and index data.
@@ -239,6 +240,7 @@ class ViewerUSD(ViewerBase):
             texture: Optional texture path/URL or image array.
             hidden: If True, mesh will be hidden.
             backface_culling: If True, enable backface culling.
+            colors: Optional per-vertex colors.
         """
 
         # Convert warp arrays to numpy
