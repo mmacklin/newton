@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from html import escape
 from pathlib import Path
 
 import imageio.v2 as imageio
@@ -14,8 +15,14 @@ import newton
 import newton.viewer
 from newton.examples.basic.example_basic_reduced_elastic_beam import Example as BeamExample
 from newton.examples.basic.example_basic_reduced_elastic_beam_vibration import Example as BeamVibrationExample
+from newton.examples.basic.example_basic_reduced_elastic_bellcrank import Example as BellcrankExample
+from newton.examples.basic.example_basic_reduced_elastic_cantilever_weight import Example as CantileverWeightExample
+from newton.examples.basic.example_basic_reduced_elastic_crank_slider import Example as CrankSliderExample
 from newton.examples.basic.example_basic_reduced_elastic_fourbar import Example as FourbarExample
+from newton.examples.basic.example_basic_reduced_elastic_prismatic import Example as PrismaticExample
 from newton.examples.basic.example_basic_reduced_elastic_torsion import Example as TorsionExample
+from newton.examples.basic.example_basic_reduced_elastic_vertical_weight import Example as VerticalWeightExample
+from newton.examples.basic.example_basic_reduced_elastic_watt import Example as WattExample
 
 WIDTH = 960
 HEIGHT = 540
@@ -23,9 +30,17 @@ FPS = 60
 VIDEO_ASSETS = (
     "reduced_elastic_fourbar.mp4",
     "elastic_revolute_endpoint_fixture.mp4",
+    "reduced_elastic_prismatic_compression.mp4",
+    "reduced_elastic_crank_slider.mp4",
+    "reduced_elastic_watt_linkage.mp4",
+    "reduced_elastic_bellcrank.mp4",
     "reduced_elastic_cantilever_beam.mp4",
     "reduced_elastic_cantilever_vibration.mp4",
+    "reduced_elastic_cantilever_weight.mp4",
+    "reduced_elastic_vertical_weight.mp4",
 )
+MODE_COUNTS_START = "<!-- MODE_COUNTS_START -->"
+MODE_COUNTS_END = "<!-- MODE_COUNTS_END -->"
 
 
 def _write_video(path: Path, frames):
@@ -44,6 +59,72 @@ def _update_report_video_cache_busters(report_path: Path, cache_key: str):
             text,
         )
     report_path.write_text(text)
+
+
+def _update_report_mode_counts(report_path: Path, rows: list[tuple[str, list[int]]]):
+    text = report_path.read_text()
+    table_rows = []
+    for label, counts in rows:
+        total = sum(counts)
+        if len(counts) > 1:
+            breakdown = " + ".join(str(count) for count in counts)
+        elif counts:
+            breakdown = str(counts[0])
+        else:
+            breakdown = "0"
+        table_rows.append(f"        <tr><td>{escape(label)}</td><td>{total}</td><td>{escape(breakdown)}</td></tr>")
+    table_html = "\n".join(table_rows)
+    pattern = re.compile(rf"{re.escape(MODE_COUNTS_START)}.*?{re.escape(MODE_COUNTS_END)}", re.S)
+    replacement = f"{MODE_COUNTS_START}\n{table_html}\n{MODE_COUNTS_END}"
+    if not pattern.search(text):
+        raise RuntimeError("report is missing mode count markers")
+    report_path.write_text(pattern.sub(replacement, text))
+
+
+def _elastic_mode_counts(example) -> list[int]:
+    model = example.model
+    elastic_body_count = int(getattr(model, "elastic_body_count", 0))
+    if elastic_body_count == 0 or getattr(model, "elastic_mode_count", None) is None:
+        return []
+    return [int(count) for count in model.elastic_mode_count.numpy()[:elastic_body_count]]
+
+
+def _prepare_example(label: str, example, mode_rows: list[tuple[str, list[int]]]):
+    example.viewer.show_elastic_strain = False
+    example.viewer.elastic_strain_color_max = None
+    counts = _elastic_mode_counts(example)
+    total = sum(counts)
+    unit = "mode" if total == 1 else "modes"
+    if len(counts) > 1:
+        print(f"{label}: {total} {unit} ({' + '.join(str(count) for count in counts)} per elastic body)")
+    else:
+        print(f"{label}: {total} {unit}")
+    mode_rows.append((label, counts))
+    return example
+
+
+def _render_example(
+    viewer,
+    mode_rows: list[tuple[str, list[int]]],
+    label: str,
+    example_cls,
+    frame_count: int,
+    video_path: Path,
+    screenshot_path: Path,
+    screenshot_frame: int | None = None,
+):
+    if viewer.model is not None:
+        viewer.clear_model()
+
+    example = _prepare_example(label, example_cls(viewer, None), mode_rows)
+    frames = _capture(
+        example,
+        viewer,
+        frame_count=frame_count,
+        screenshot_path=screenshot_path,
+        screenshot_frame=screenshot_frame,
+    )
+    _write_video(video_path, frames)
 
 
 def _capture(
@@ -71,54 +152,131 @@ def main():
     root = Path(__file__).resolve().parent
     assets = root / "assets"
     cache_key = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    mode_rows: list[tuple[str, list[int]]] = []
 
     viewer = newton.viewer.ViewerGL(width=WIDTH, height=HEIGHT, headless=True)
-    fourbar = FourbarExample(viewer, None)
-    frames = _capture(
-        fourbar,
+    _render_example(
         viewer,
+        mode_rows,
+        "Elastic 4-Bar Linkage",
+        FourbarExample,
         frame_count=180,
+        video_path=assets / "reduced_elastic_fourbar.mp4",
         screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_fourbar.jpg"),
     )
-    _write_video(assets / "reduced_elastic_fourbar.mp4", frames)
 
-    viewer.clear_model()
-    fixture = TorsionExample(viewer, None)
-    frames = _capture(
-        fixture,
+    _render_example(
         viewer,
+        mode_rows,
+        "Revolute Torsion Fixture",
+        TorsionExample,
         frame_count=150,
+        video_path=assets / "elastic_revolute_endpoint_fixture.mp4",
         screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_torsion.jpg"),
+        screenshot_frame=15,
     )
-    _write_video(assets / "elastic_revolute_endpoint_fixture.mp4", frames)
 
-    viewer.clear_model()
-    beam = BeamExample(viewer, None)
-    frames = _capture(
-        beam,
+    _render_example(
         viewer,
+        mode_rows,
+        "Prismatic Compression Fixture",
+        PrismaticExample,
+        frame_count=180,
+        video_path=assets / "reduced_elastic_prismatic_compression.mp4",
+        screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_prismatic.jpg"),
+        screenshot_frame=120,
+    )
+
+    _render_example(
+        viewer,
+        mode_rows,
+        "Elastic Slider-Crank",
+        CrankSliderExample,
+        frame_count=180,
+        video_path=assets / "reduced_elastic_crank_slider.mp4",
+        screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_crank_slider.jpg"),
+        screenshot_frame=95,
+    )
+
+    _render_example(
+        viewer,
+        mode_rows,
+        "Elastic Watt Linkage",
+        WattExample,
+        frame_count=300,
+        video_path=assets / "reduced_elastic_watt_linkage.mp4",
+        screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_watt.jpg"),
+        screenshot_frame=180,
+    )
+
+    _render_example(
+        viewer,
+        mode_rows,
+        "Elastic Bell-Crank Transfer",
+        BellcrankExample,
+        frame_count=300,
+        video_path=assets / "reduced_elastic_bellcrank.mp4",
+        screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_bellcrank.jpg"),
+        screenshot_frame=180,
+    )
+
+    _render_example(
+        viewer,
+        mode_rows,
+        "Cantilever Tip Load",
+        BeamExample,
         frame_count=150,
+        video_path=assets / "reduced_elastic_cantilever_beam.mp4",
         screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_beam.jpg"),
     )
-    _write_video(assets / "reduced_elastic_cantilever_beam.mp4", frames)
 
-    viewer.clear_model()
-    vibration = BeamVibrationExample(viewer, None)
-    frames = _capture(
-        vibration,
+    _render_example(
         viewer,
+        mode_rows,
+        "Cantilever Vibration",
+        BeamVibrationExample,
         frame_count=180,
+        video_path=assets / "reduced_elastic_cantilever_vibration.mp4",
         screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_beam_vibration.jpg"),
         screenshot_frame=8,
     )
-    _write_video(assets / "reduced_elastic_cantilever_vibration.mp4", frames)
+
+    _render_example(
+        viewer,
+        mode_rows,
+        "Cantilever With Rigid Weight",
+        CantileverWeightExample,
+        frame_count=180,
+        video_path=assets / "reduced_elastic_cantilever_weight.mp4",
+        screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_cantilever_weight.jpg"),
+        screenshot_frame=60,
+    )
+
+    _render_example(
+        viewer,
+        mode_rows,
+        "Vertical Suspended Weight",
+        VerticalWeightExample,
+        frame_count=180,
+        video_path=assets / "reduced_elastic_vertical_weight.mp4",
+        screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_vertical_weight.jpg"),
+        screenshot_frame=60,
+    )
     viewer.close()
-    _update_report_video_cache_busters(root / "reduced_elastic_links_implementation.html", cache_key)
+    report_path = root / "reduced_elastic_links_implementation.html"
+    _update_report_mode_counts(report_path, mode_rows)
+    _update_report_video_cache_busters(report_path, cache_key)
 
     print(f"Wrote {assets / 'reduced_elastic_fourbar.mp4'}")
     print(f"Wrote {assets / 'elastic_revolute_endpoint_fixture.mp4'}")
+    print(f"Wrote {assets / 'reduced_elastic_prismatic_compression.mp4'}")
+    print(f"Wrote {assets / 'reduced_elastic_crank_slider.mp4'}")
+    print(f"Wrote {assets / 'reduced_elastic_watt_linkage.mp4'}")
+    print(f"Wrote {assets / 'reduced_elastic_bellcrank.mp4'}")
     print(f"Wrote {assets / 'reduced_elastic_cantilever_beam.mp4'}")
     print(f"Wrote {assets / 'reduced_elastic_cantilever_vibration.mp4'}")
+    print(f"Wrote {assets / 'reduced_elastic_cantilever_weight.mp4'}")
+    print(f"Wrote {assets / 'reduced_elastic_vertical_weight.mp4'}")
     print(f"Updated report video cache key: {cache_key}")
 
 

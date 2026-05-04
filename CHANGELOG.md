@@ -12,12 +12,17 @@
 - Add reduced elastic body links with floating-frame modal coordinates, VBD support for revolute-joint attachments, and deformed Viewer mesh rendering
 - Add sampled `ModalBasis` and modal generators for reusable reduced elastic mode construction
 - Add a reduced elastic cantilever vibration example with finite modal mass dynamics
+- Add a reduced elastic prismatic compression example with Poisson bulging and parent rotation validation
+- Add reduced elastic crank-slider, Watt linkage, and bell-crank examples with analytic geometry checks
+- Add reduced elastic gravity examples for a tip-weight cantilever and a suspended vertical bar
+- Add optional per-vertex elastic displacement coloring in ViewerGL
 - Add brick stacking example
 - Add box pyramid example and ASV benchmark for dense convex-on-convex contacts
 
 ### Changed
 
 - Tune reduced elastic torsion and cantilever vibration examples for smoother and faster motion
+- Tune reduced elastic mechanism and gravity examples for clearer visible deformation and camera framing
 - Increase elastic box render tessellation and make the torsion fixture a held 90 degree shaft release with exact surface modal samples
 - Unify heightfield and mesh collision pipeline paths; the separate `heightfield_midphase_kernel` and `shape_pairs_heightfield` buffer are removed in favor of the shared mesh midphase
 - Replace per-shape `Model.shape_heightfield_data` / `Model.heightfield_elevation_data` with compact `Model.shape_heightfield_index` / `Model.heightfield_data` / `Model.heightfield_elevations`, matching the SDF indirection pattern

@@ -229,6 +229,7 @@ class ViewerRerun(ViewerBase):
         texture: np.ndarray | str | None = None,
         hidden: bool = False,
         backface_culling: bool = True,
+        colors: wp.array(dtype=wp.vec3) | None = None,
     ):
         """
         Log a mesh to rerun for visualization.
@@ -242,6 +243,7 @@ class ViewerRerun(ViewerBase):
             texture: Optional texture path/URL or image array.
             hidden: Whether the mesh is hidden.
             backface_culling: Whether to enable backface culling (unused).
+            colors: Optional per-vertex colors.
         """
         if not hidden:
             assert isinstance(points, wp.array)

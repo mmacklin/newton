@@ -77,6 +77,7 @@ shape_vertex_shader = """
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
 layout (location = 2) in vec2 aTexCoord;
+layout (location = 9) in vec3 aVertexColor;
 
 // column vectors of the instance transform matrix
 layout (location = 3) in vec4 aInstanceTransform0;
@@ -99,6 +100,7 @@ out vec3 FragPos;
 out vec3 LocalPos;
 out vec2 TexCoord;
 out vec3 ObjectColor;
+out vec3 VertexColor;
 out vec4 FragPosLightSpace;
 out vec4 Material;
 
@@ -115,6 +117,7 @@ void main()
     Normal = mat3(transpose(inverse(rotation))) * aNormal;
     TexCoord = aTexCoord;
     ObjectColor = aObjectColor;
+    VertexColor = aVertexColor;
     FragPosLightSpace = light_space_matrix * worldPos;
     Material = aMaterial;
 }
@@ -129,6 +132,7 @@ in vec3 FragPos;
 in vec3 LocalPos;
 in vec2 TexCoord;
 in vec3 ObjectColor; // used as albedo
+in vec3 VertexColor; // optional per-vertex albedo, negative x means disabled
 in vec4 FragPosLightSpace;
 in vec4 Material;
 
@@ -305,7 +309,8 @@ void main()
     float checker_scale = 1.0;
 
     // convert to linear space
-    vec3 albedo = pow(ObjectColor, vec3(2.2));
+    vec3 base_color = VertexColor.x < -0.5 ? ObjectColor : VertexColor;
+    vec3 albedo = pow(base_color, vec3(2.2));
     if (texture_enable > 0.5)
     {
         vec3 tex_color = texture(albedo_map, TexCoord).rgb;

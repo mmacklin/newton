@@ -12,11 +12,33 @@ from newton.examples.basic._reduced_elastic import (
     beam_render_sample_points,
     box_surface_mesh,
     finite_torsion_displacement,
+    joint_endpoint_world,
     mesh_volume,
 )
 from newton.tests.unittest_utils import add_function_test, get_test_devices
 
 devices = get_test_devices()
+
+
+class _ElasticMeshColorProbe(newton.viewer.ViewerNull):
+    def __init__(self):
+        super().__init__(num_frames=1)
+        self.mesh_colors = {}
+
+    def log_mesh(
+        self,
+        name,
+        points,
+        indices,
+        normals=None,
+        uvs=None,
+        texture=None,
+        hidden=False,
+        backface_culling=True,
+        colors=None,
+    ):
+        if name.startswith("/model/elastic_shapes/"):
+            self.mesh_colors[name] = None if colors is None else colors.numpy()
 
 
 def _identity_inertia():
@@ -25,6 +47,12 @@ def _identity_inertia():
 
 def _quat_from_angle_z(theta: float):
     return wp.quat_from_axis_angle(wp.vec3(0.0, 0.0, 1.0), theta)
+
+
+def _quat_angle_error(q_a: np.ndarray, q_b: np.ndarray) -> float:
+    dot = abs(float(np.dot(q_a, q_b)))
+    dot = min(max(dot, -1.0), 1.0)
+    return 2.0 * math.acos(dot)
 
 
 def _quat_rotate_np(q: np.ndarray, v: np.ndarray) -> np.ndarray:
@@ -413,6 +441,53 @@ def test_elastic_shape_box_exact_modal_samples(test, device):
     np.testing.assert_allclose(phi, expected_phi, atol=1.0e-7)
 
 
+def test_elastic_strain_visualization_colors(test, device):
+    length = 1.0
+
+    def axial_gradient_shape(x):
+        s = float(x[0] + 0.5 * length)
+        return np.array([[s / length, 0.0, 0.0]], dtype=np.float32)
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    body = builder.add_body_elastic(
+        mass=1.0,
+        inertia=_identity_inertia(),
+        mode_count=1,
+        mode_shape_fn=axial_gradient_shape,
+    )
+    builder.add_shape_box(body, hx=0.5 * length, hy=0.04, hz=0.03)
+    builder.color()
+    model = builder.finalize(device=device)
+    state = model.state()
+
+    owner_joint = int(model.elastic_joint.numpy()[0])
+    q_start = int(model.joint_q_start.numpy()[owner_joint])
+
+    viewer = _ElasticMeshColorProbe()
+    viewer.set_model(model)
+    viewer.show_elastic_strain = True
+
+    q = state.joint_q.numpy()
+    q[q_start + 7] = 0.04
+    state.joint_q.assign(q)
+    viewer.log_state(state)
+    colors_small = viewer.mesh_colors["/model/elastic_shapes/shape_0"].copy()
+
+    q[q_start + 7] = 0.08
+    state.joint_q.assign(q)
+    viewer.log_state(state)
+
+    test.assertIn("/model/elastic_shapes/shape_0", viewer.mesh_colors)
+    colors = viewer.mesh_colors["/model/elastic_shapes/shape_0"]
+    test.assertIsNotNone(colors)
+    test.assertEqual(colors.shape[1], 3)
+    test.assertGreater(float(np.max(np.abs(colors - colors_small))), 0.2)
+    test.assertGreater(float(np.ptp(colors[:, 0])), 0.1)
+    test.assertGreater(float(np.ptp(colors[:, 2])), 0.1)
+    test.assertTrue(bool(np.all(colors >= -1.0e-6)))
+    test.assertTrue(bool(np.all(colors <= 1.0 + 1.0e-6)))
+
+
 def test_torsion_render_shape_sampling(test, device):
     length = 1.0
     hy = 0.06
@@ -456,6 +531,48 @@ def test_finite_torsion_exemplar_preserves_volume(test, device):
     linear_vertices[:, 2] += vertices[:, 1] * theta
     linear_ratio = mesh_volume(linear_vertices, indices) / rest_volume
     test.assertGreater(linear_ratio, 1.5)
+
+
+def test_finite_torsion_pod_modes_project_exemplar(test, device):
+    length = 1.0
+    hy = 0.085
+    hz = 0.05
+    tip_twist = math.pi / 2.0
+    mode_count = 8
+    vertices, indices = box_surface_mesh(length, hy, hz)
+    sample_points = beam_render_sample_points(
+        length,
+        hy,
+        hz,
+        extra_points=((-0.5 * length, 0.0, 0.0), (0.5 * length, 0.0, 0.0)),
+    )
+    snapshot_amplitudes = np.linspace(-1.0, 1.0, 17, dtype=np.float32)
+    snapshot_amplitudes = snapshot_amplitudes[np.abs(snapshot_amplitudes) > 1.0e-6]
+    snapshots = np.asarray(
+        [
+            finite_torsion_displacement(sample_points, length, tip_twist * float(amplitude))
+            for amplitude in snapshot_amplitudes
+        ],
+        dtype=np.float32,
+    )
+
+    basis = newton.ModalGeneratorPOD(
+        sample_points=sample_points,
+        displacements=snapshots,
+        mode_count=mode_count,
+        total_mass=1.0,
+        stiffness_scale=1.0,
+    ).build()
+    phi = basis.sample_phi.reshape((sample_points.shape[0], mode_count, 3))
+    projection_matrix = np.transpose(phi, (0, 2, 1)).reshape((-1, mode_count))
+    target = finite_torsion_displacement(sample_points, length, tip_twist)
+    q, *_ = np.linalg.lstsq(projection_matrix, target.reshape(-1), rcond=None)
+    projected = np.einsum("smc,m->sc", phi, q)
+
+    test.assertEqual(basis.mode_count, mode_count)
+    test.assertLess(float(np.max(np.linalg.norm(projected - target, axis=1))), 1.0e-5)
+    ratio = mesh_volume(vertices + projected[: vertices.shape[0]], indices) / mesh_volume(vertices, indices)
+    np.testing.assert_allclose(ratio, 1.0, atol=2.0e-3)
 
 
 def test_cantilever_tip_load_solution(test, device):
@@ -759,6 +876,189 @@ def test_fourbar_elastic_coupler_geometry(test, device):
     np.testing.assert_allclose(np.linalg.norm(p_bc_parent - p_ab_child), b_eff, atol=2.0e-6)
 
 
+def test_vbd_prismatic_rotates_elastic_child(test, device):
+    builder = newton.ModelBuilder(gravity=0.0)
+    inertia = wp.mat33(0.02, 0.0, 0.0, 0.0, 0.02, 0.0, 0.0, 0.0, 0.02)
+    parent = builder.add_body(
+        xform=wp.transform(wp.vec3(0.0, 0.0, 0.0), wp.quat_identity()),
+        mass=1.0,
+        inertia=inertia,
+    )
+    child = builder.add_body_elastic(
+        xform=wp.transform(wp.vec3(0.4, 0.0, 0.0), wp.quat_identity()),
+        mass=1.0,
+        inertia=inertia,
+        mode_count=1,
+    )
+    parent_joint = builder.add_joint_revolute(
+        parent=-1,
+        child=parent,
+        axis=(0.0, 0.0, 1.0),
+    )
+    builder.add_joint_prismatic(
+        parent=parent,
+        child=child,
+        axis=(1.0, 0.0, 0.0),
+        parent_xform=wp.transform(wp.vec3(0.4, 0.0, 0.0), wp.quat_identity()),
+        child_xform=wp.transform_identity(),
+        target_pos=0.0,
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+
+    state_0 = model.state()
+    state_1 = model.state()
+    control = model.control()
+    parent_qd_start = int(model.joint_qd_start.numpy()[parent_joint])
+    joint_f = control.joint_f.numpy()
+    joint_f[parent_qd_start] = 1.0
+    control.joint_f.assign(joint_f)
+
+    solver = newton.solvers.SolverVBD(
+        model,
+        iterations=20,
+        rigid_joint_linear_k_start=1.0e5,
+        rigid_joint_angular_k_start=1.0e5,
+        rigid_joint_linear_ke=1.0e6,
+        rigid_joint_angular_ke=1.0e6,
+    )
+    for _ in range(60):
+        solver.step(state_0, state_1, control, None, 1.0 / 180.0)
+        state_0, state_1 = state_1, state_0
+
+    body_q = state_0.body_q.numpy()
+    parent_angle = 2.0 * math.atan2(float(body_q[parent, 5]), float(body_q[parent, 6]))
+    child_angle = 2.0 * math.atan2(float(body_q[child, 5]), float(body_q[child, 6]))
+    test.assertGreater(abs(parent_angle), 0.1)
+    test.assertLess(_quat_angle_error(body_q[parent, 3:7], body_q[child, 3:7]), 1.0e-4)
+    np.testing.assert_allclose(child_angle, parent_angle, atol=1.0e-4)
+
+
+def test_crank_slider_elastic_analytic_geometry(test, device):
+    crank_length = 0.24
+    rod_rest_length = 0.64
+    axial_q = 0.05
+    theta = 0.72
+    rod_length = rod_rest_length + axial_q
+    slider_x = crank_length * math.cos(theta) + math.sqrt(
+        rod_length * rod_length - (crank_length * math.sin(theta)) ** 2
+    )
+
+    crank_pin = np.array([crank_length * math.cos(theta), crank_length * math.sin(theta), 0.0])
+    slider_pin = np.array([slider_x, 0.0, 0.0])
+    rod_theta = math.atan2(float(slider_pin[1] - crank_pin[1]), float(slider_pin[0] - crank_pin[0]))
+
+    basis = newton.ModalGeneratorBeam(
+        length=rod_rest_length,
+        half_width_y=0.03,
+        half_width_z=0.02,
+        mode_specs=[{"type": newton.ModalGeneratorBeam.Mode.AXIAL}],
+    ).build(sample_points=[[-0.5 * rod_rest_length, 0.0, 0.0], [0.5 * rod_rest_length, 0.0, 0.0]])
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    crank = builder.add_body(
+        xform=wp.transform(
+            wp.vec3(*(0.5 * crank_pin)),
+            _quat_from_angle_z(theta),
+        ),
+        mass=1.0,
+        inertia=_identity_inertia(),
+    )
+    rod = builder.add_body_elastic(
+        xform=wp.transform(wp.vec3(*(0.5 * (crank_pin + slider_pin))), _quat_from_angle_z(rod_theta)),
+        mass=1.0,
+        inertia=_identity_inertia(),
+        mode_q=[axial_q],
+        modal_basis=basis,
+    )
+    slider = builder.add_body(
+        xform=wp.transform(wp.vec3(*slider_pin), wp.quat_identity()),
+        mass=1.0,
+        inertia=_identity_inertia(),
+    )
+    j_crank_rod = builder.add_joint_revolute(
+        parent=crank,
+        child=rod,
+        axis=(0.0, 0.0, 1.0),
+        parent_xform=wp.transform(wp.vec3(0.5 * crank_length, 0.0, 0.0), wp.quat_identity()),
+        child_xform=wp.transform(wp.vec3(-0.5 * rod_rest_length, 0.0, 0.0), wp.quat_identity()),
+    )
+    j_rod_slider = builder.add_joint_revolute(
+        parent=rod,
+        child=slider,
+        axis=(0.0, 0.0, 1.0),
+        parent_xform=wp.transform(wp.vec3(0.5 * rod_rest_length, 0.0, 0.0), wp.quat_identity()),
+        child_xform=wp.transform_identity(),
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+    state = model.state()
+
+    p_crank = joint_endpoint_world(model, state, j_crank_rod, "parent")
+    p_rod_left = joint_endpoint_world(model, state, j_crank_rod, "child")
+    p_rod_right = joint_endpoint_world(model, state, j_rod_slider, "parent")
+    p_slider = joint_endpoint_world(model, state, j_rod_slider, "child")
+
+    np.testing.assert_allclose(p_crank, crank_pin, atol=1.0e-6)
+    np.testing.assert_allclose(p_rod_left, crank_pin, atol=1.0e-6)
+    np.testing.assert_allclose(p_rod_right, slider_pin, atol=1.0e-6)
+    np.testing.assert_allclose(p_slider, slider_pin, atol=1.0e-6)
+    np.testing.assert_allclose(np.linalg.norm(p_rod_right - p_rod_left), rod_length, atol=1.0e-6)
+
+
+def test_elastic_multiple_attachment_samples(test, device):
+    basis = newton.ModalBasis(
+        sample_points=[[-0.5, 0.0, 0.0], [0.0, 0.0, 0.0], [0.5, 0.0, 0.0]],
+        sample_phi=[
+            [[-0.5, 0.0, 0.0], [0.0, 0.0, 0.0]],
+            [[0.0, 1.0, 0.0], [0.0, 0.25, 0.0]],
+            [[0.5, 0.0, 0.0], [0.0, 0.0, 0.0]],
+        ],
+        mode_mass=[1.0, 1.0],
+    )
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    body = builder.add_body_elastic(
+        mass=1.0,
+        inertia=_identity_inertia(),
+        mode_q=[0.2, -0.4],
+        modal_basis=basis,
+    )
+    j_left = builder.add_joint_revolute(
+        parent=-1,
+        child=body,
+        axis=(0.0, 0.0, 1.0),
+        parent_xform=wp.transform(wp.vec3(-0.6, 0.0, 0.0), wp.quat_identity()),
+        child_xform=wp.transform(wp.vec3(-0.5, 0.0, 0.0), wp.quat_identity()),
+    )
+    j_mid = builder.add_joint_revolute(
+        parent=-1,
+        child=body,
+        axis=(0.0, 0.0, 1.0),
+        parent_xform=wp.transform(wp.vec3(0.0, 0.1, 0.0), wp.quat_identity()),
+        child_xform=wp.transform_identity(),
+    )
+    j_right = builder.add_joint_revolute(
+        parent=-1,
+        child=body,
+        axis=(0.0, 0.0, 1.0),
+        parent_xform=wp.transform(wp.vec3(0.6, 0.0, 0.0), wp.quat_identity()),
+        child_xform=wp.transform(wp.vec3(0.5, 0.0, 0.0), wp.quat_identity()),
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+    state = model.state()
+
+    endpoint_samples = model.elastic_endpoint_sample.numpy()
+    child_endpoints = model.joint_child_elastic_endpoint.numpy()
+    sample_ids = [int(endpoint_samples[int(child_endpoints[j])]) for j in (j_left, j_mid, j_right)]
+    test.assertEqual(sample_ids, [0, 1, 2])
+
+    np.testing.assert_allclose(joint_endpoint_world(model, state, j_left, "child"), [-0.6, 0.0, 0.0], atol=1.0e-6)
+    np.testing.assert_allclose(joint_endpoint_world(model, state, j_mid, "child"), [0.0, 0.1, 0.0], atol=1.0e-6)
+    np.testing.assert_allclose(joint_endpoint_world(model, state, j_right, "child"), [0.6, 0.0, 0.0], atol=1.0e-6)
+
+
 class TestReducedElasticBody(unittest.TestCase):
     pass
 
@@ -825,6 +1125,12 @@ for device in devices:
     )
     add_function_test(
         TestReducedElasticBody,
+        "test_elastic_strain_visualization_colors",
+        test_elastic_strain_visualization_colors,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
         "test_torsion_render_shape_sampling",
         test_torsion_render_shape_sampling,
         devices=[device],
@@ -833,6 +1139,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_finite_torsion_exemplar_preserves_volume",
         test_finite_torsion_exemplar_preserves_volume,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_finite_torsion_pod_modes_project_exemplar",
+        test_finite_torsion_pod_modes_project_exemplar,
         devices=[device],
     )
     add_function_test(
@@ -869,6 +1181,24 @@ for device in devices:
         TestReducedElasticBody,
         "test_fourbar_elastic_coupler_geometry",
         test_fourbar_elastic_coupler_geometry,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_vbd_prismatic_rotates_elastic_child",
+        test_vbd_prismatic_rotates_elastic_child,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_crank_slider_elastic_analytic_geometry",
+        test_crank_slider_elastic_analytic_geometry,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_multiple_attachment_samples",
+        test_elastic_multiple_attachment_samples,
         devices=[device],
     )
 

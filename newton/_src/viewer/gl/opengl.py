@@ -118,6 +118,7 @@ class RenderVertex:
     pos: wp.vec3
     normal: wp.vec3
     uv: wp.vec2
+    color: wp.vec3
 
 
 @wp.struct
@@ -131,6 +132,7 @@ def fill_vertex_data(
     points: wp.array(dtype=wp.vec3),
     normals: wp.array(dtype=wp.vec3),
     uvs: wp.array(dtype=wp.vec2),
+    colors: wp.array(dtype=wp.vec3),
     vertices: wp.array(dtype=RenderVertex),
 ):
     tid = wp.tid()
@@ -142,6 +144,11 @@ def fill_vertex_data(
 
     if uvs:
         vertices[tid].uv = uvs[tid]
+
+    if colors:
+        vertices[tid].color = colors[tid]
+    else:
+        vertices[tid].color = wp.vec3(-1.0, -1.0, -1.0)
 
 
 @wp.kernel
@@ -186,7 +193,7 @@ class MeshGL:
         self.texture_id = None
 
         # Set up vertex attributes in the packed format the shaders expect
-        self.vertex_byte_size = 12 + 12 + 8
+        self.vertex_byte_size = 12 + 12 + 8 + 12
         self.index_byte_size = 4
 
         self.vbo_size = self.vertex_byte_size * num_points
@@ -219,6 +226,10 @@ class MeshGL:
         gl.glVertexAttribPointer(2, 2, gl.GL_FLOAT, gl.GL_FALSE, self.vertex_byte_size, ctypes.c_void_p(6 * 4))
         gl.glEnableVertexAttribArray(2)
 
+        # per-vertex colors (location 9)
+        gl.glVertexAttribPointer(9, 3, gl.GL_FLOAT, gl.GL_FALSE, self.vertex_byte_size, ctypes.c_void_p(8 * 4))
+        gl.glEnableVertexAttribArray(9)
+
         # set constant instance transform
         gl.glDisableVertexAttribArray(3)
         gl.glDisableVertexAttribArray(4)
@@ -226,7 +237,6 @@ class MeshGL:
         gl.glDisableVertexAttribArray(6)
         gl.glDisableVertexAttribArray(7)
         gl.glDisableVertexAttribArray(8)
-        gl.glDisableVertexAttribArray(9)
 
         #   column 0  (1,0,0,0)
         gl.glVertexAttrib4f(3, 1.0, 0.0, 0.0, 0.0)
@@ -267,7 +277,7 @@ class MeshGL:
             # Ignore any errors if the GL context has already been torn down
             pass
 
-    def update(self, points, indices, normals, uvs, texture=None):
+    def update(self, points, indices, normals, uvs, texture=None, colors=None):
         """Update vertex positions in the VBO.
 
         Args:
@@ -278,6 +288,8 @@ class MeshGL:
 
         if len(points) != len(self.vertices):
             raise RuntimeError("Number of points does not match")
+        if colors is not None and len(colors) != len(self.vertices):
+            raise RuntimeError("Number of colors does not match")
 
         self._points = points
 
@@ -301,7 +313,7 @@ class MeshGL:
         wp.launch(
             fill_vertex_data,
             dim=len(self.vertices),
-            inputs=[points, normals, uvs],
+            inputs=[points, normals, uvs, colors],
             outputs=[self.vertices],
             device=self.device,
         )
@@ -593,8 +605,8 @@ def update_vbo_transforms_from_points(
 class MeshInstancerGL:
     """
     Handles instanced rendering for a mesh.
-    Note the vertices must be in the 8-dimensional format:
-        [3D point, 3D normal, UV texture coordinates]
+    Note the vertices must be in the 11-dimensional format:
+        [3D point, 3D normal, UV texture coordinates, 3D vertex color]
     """
 
     def __init__(self, num_instances, mesh):
@@ -677,6 +689,16 @@ class MeshInstancerGL:
             ctypes.c_void_p(6 * 4),
         )
         gl.glEnableVertexAttribArray(2)
+        # per-vertex colors
+        gl.glVertexAttribPointer(
+            9,
+            3,
+            gl.GL_FLOAT,
+            gl.GL_FALSE,
+            self.mesh.vertex_byte_size,
+            ctypes.c_void_p(8 * 4),
+        )
+        gl.glEnableVertexAttribArray(9)
 
         self.transform_byte_size = 16 * 4  # sizeof(mat44)
         self.color_byte_size = 3 * 4  # sizeof(vec3)
