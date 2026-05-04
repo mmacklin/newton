@@ -33,6 +33,7 @@ import newton
 import newton.examples
 from newton.examples.basic._reduced_elastic import (
     beam_render_sample_points,
+    beam_torsion_linear_modal_properties,
     box_surface_mesh,
     elastic_shape_volume_ratio,
     finite_torsion_displacement,
@@ -69,23 +70,6 @@ class Example:
             ),
         )
 
-        linear_basis = newton.ModalGeneratorBeam(
-            length=self.length,
-            half_width_y=self.hy,
-            half_width_z=self.hz,
-            mode_specs=[
-                {
-                    "type": newton.ModalGeneratorBeam.Mode.TORSION,
-                    "boundary": newton.ModalGeneratorBeam.Boundary.LINEAR,
-                    "order": 1,
-                }
-            ],
-            sample_count=49,
-            density=500.0,
-            shear_modulus=4.0e4,
-            label="linear_torsion_properties",
-        ).build(sample_points=sample_points)
-
         snapshot_amplitudes = np.linspace(-1.0, 1.0, 17, dtype=np.float32)
         snapshot_amplitudes = snapshot_amplitudes[np.abs(snapshot_amplitudes) > 1.0e-6]
         snapshot_displacements = np.asarray(
@@ -110,8 +94,15 @@ class Example:
         self.initial_mode_q = np.linalg.lstsq(projection_matrix, target_displacement, rcond=None)[0].astype(np.float32)
 
         tip_twist_scale = self.target_tip_twist * self.target_tip_twist
-        base_mass = float(linear_basis.mode_mass[0] * tip_twist_scale)
-        base_stiffness = float(linear_basis.mode_stiffness[0] * tip_twist_scale)
+        base_mass, base_stiffness = beam_torsion_linear_modal_properties(
+            self.length,
+            self.hy,
+            self.hz,
+            density=500.0,
+            shear_modulus=4.0e4,
+        )
+        base_mass *= tip_twist_scale
+        base_stiffness *= tip_twist_scale
         stiffness_ratio = (1.0 + 0.1 * np.arange(self.mode_count, dtype=np.float32)) ** 2
         mode_mass = np.full(self.mode_count, base_mass, dtype=np.float32)
         mode_stiffness = (base_stiffness * stiffness_ratio).astype(np.float32)
