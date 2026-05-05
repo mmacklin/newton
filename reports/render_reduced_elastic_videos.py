@@ -228,12 +228,12 @@ def main():
     _render_example(
         viewer,
         mode_rows,
-        "Matrix ROM Bracket",
+        "Matrix ROM Handling Beam",
         MatrixROMExample,
         frame_count=300,
         video_path=assets / "reduced_elastic_matrix_rom.mp4",
         screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_matrix_rom.jpg"),
-        screenshot_frame=170,
+        screenshot_frame=150,
     )
 
     _render_example(
@@ -244,7 +244,7 @@ def main():
         frame_count=240,
         video_path=assets / "reduced_elastic_dipper_arm.mp4",
         screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_dipper.jpg"),
-        screenshot_frame=8,
+        screenshot_frame=150,
     )
 
     _render_example(

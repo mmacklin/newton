@@ -103,8 +103,8 @@ class Example:
         self.tip_world0 = self.arm_center + _rotate_local_xz(self.arm_theta0, self.tip_local)
         self.weight_offset = 0.18
         self.weight_mass = 3.5
-        self.drive_amplitude = 0.0
-        self.drive_frequency = 0.60
+        self.drive_amplitude = 0.08
+        self.drive_frequency = 0.35
         self.max_joint_residual = 0.0
         self.max_drive_error = 0.0
         self.max_tip_bend = 0.0
@@ -496,10 +496,10 @@ class Example:
             raise AssertionError(f"dipper arm bending was too small: {self.max_tip_bend}")
         if self.max_tip_bend > 1.2e-1:
             raise AssertionError(f"dipper arm bending was too large: {self.max_tip_bend}")
-        if self.max_tip_vertical_motion < 2.0e-2:
-            raise AssertionError("dipper tip did not sag under the static payload")
-        if self.max_tip_vertical_motion > 1.2e-1:
-            raise AssertionError(f"dipper static sag was too large: {self.max_tip_vertical_motion}")
+        if self.max_tip_vertical_motion < 2.5e-1:
+            raise AssertionError("dipper tip did not move under the driven actuator and payload")
+        if self.max_tip_vertical_motion > 6.5e-1:
+            raise AssertionError(f"dipper tip vertical motion was too large: {self.max_tip_vertical_motion}")
         if np.max(np.abs(self._mode_values())) > 0.45:
             raise AssertionError(f"dipper arm mode amplitudes are out of range: {self._mode_values()}")
         if self.max_volume_ratio_error > 0.5:
