@@ -118,50 +118,33 @@ uv run --extra examples python -m unittest newton.tests.test_tendon_capstan
 
 Result: 10 tests passed on CPU and CUDA.
 
-The cross-base XY table was also tested against this baseline with all pulleys
-dynamic:
+Additional example regressions exercise the larger routed-cable scenes:
 
 ```bash
-uv run --extra examples python -m newton.examples.cable.example_tendon_xy_table \
-  --device cuda:0 --test --quiet --viewer null --num-frames 480
+uv run --extra examples python -m unittest \
+  newton.tests.test_examples.TestCableExamples \
+  -k xy_table -k 3d_routing -k cable_machine -q
+uv run --extra examples python -m unittest \
+  newton.tests.test_examples.TestCableExamples \
+  -k compound -k gear -k rolling_pulley -q
 ```
 
-Result: passed on CUDA over the full 480-frame render horizon.  The
-example now restores the historical reference route with lower table endpoints,
-X/Y prismatic axes, and both drive pulleys using the original winding.  It
-asserts the exact initial tangent-point fingerprint, that drive pulley rotation
-produces measurable table sliding, that both drive windings do not cross
-between their guide pulleys, and that all passive guide pulleys rotate.
+Result: both selected groups passed on CPU and CUDA.  These tests cover the
+cross-base XY table, non-coplanar 3D routing, cable machine, balanced compound
+pulley, five-pulley gear route, and the simple rolling pulley.  They check
+direction of motion, pulley rotation, cable length accounting, delayed-coupling
+regressions, and bounded motion.
 
-The rolling and compound examples now have boundedness and pulley-clearance
-gates over their longer render windows:
-
-```bash
-uv run --extra examples python -m newton.examples.cable.example_tendon_rolling_pulley \
-  --device cuda:0 --test --quiet --viewer null --num-frames 180
-uv run --extra examples python -m newton.examples.cable.example_tendon_compound_pulley \
-  --device cuda:0 --test --quiet --viewer null --num-frames 220
-```
-
-Result: both passed on CUDA.  The rolling example now enables rigid
-contact between the weights and pulley, uses shorter initial spans and more
-conservative contact relaxation/substepping, and asserts that the light body
-reaches the pulley contact neighborhood without unbounded frame jumps.
-
-The 3D routing example also passes its 180-frame CUDA test.  It uses the
-iterative tangent construction so adjacent pulleys can have non-coplanar cable
-planes; its total-length check allows slack because the heavy body reaches the
-ground and the taut geometric path can be shorter than the stored cable length.
-
-The following examples are still WIP under this no-friction baseline:
-
-- `tendon_capstan_kinematic`: expects finite-friction/free-slide/lock behavior,
-  which is intentionally not implemented yet.
-- `tendon_cable_machine`: runs, but still permits large stretch in the current
-  authored parameters and should not be promoted until it has a tighter motion
-  test.
+Finite-friction capstan behavior remains WIP under this no-friction baseline.
+The dynamic and kinematic capstan scenes are placeholders until the unified
+friction projection in `cable_joints_slip_plan.md` is implemented.
 
 ## Repair Order
+
+The finite-slip design criteria, capstan success criteria, implementation
+order, and test-update policy are recorded in
+[`cable_joints_slip_plan.md`](cable_joints_slip_plan.md).  Follow that document
+when changing the friction path.
 
 1. Keep this no-friction baseline stable.
 2. Add one finite-slip case back with a small, isolated test.
