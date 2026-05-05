@@ -11,10 +11,14 @@
 - Support kinematic bodies in VBD solver
 - Add reduced elastic body links with floating-frame modal coordinates, VBD support for revolute-joint attachments, and deformed Viewer mesh rendering
 - Add sampled `ModalBasis` and modal generators for reusable reduced elastic mode construction
+- Add `ModalGeneratorFEM` for matrix-based reduced elastic modes from nodal mass, stiffness, and damping matrices
 - Add a reduced elastic cantilever vibration example with finite modal mass dynamics
 - Add a reduced elastic prismatic compression example with Poisson bulging and parent rotation validation
 - Add reduced elastic crank-slider, Watt linkage, and bell-crank examples with analytic geometry checks
 - Add reduced elastic gravity examples for a tip-weight cantilever and a suspended vertical bar
+- Add a reduced elastic matrix ROM bracket example driven through rigid fixed-joint interfaces
+- Add a flexible dipper arm example with a prismatic actuator loop and suspended rigid payload
+- Add a fixed joint stiffness mode to `SolverVBD` for non-adaptive joint penalty solves
 - Add optional per-vertex elastic displacement coloring in ViewerGL
 - Add brick stacking example
 - Add box pyramid example and ASV benchmark for dense convex-on-convex contacts
