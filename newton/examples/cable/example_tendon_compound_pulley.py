@@ -4,9 +4,10 @@
 ###########################################################################
 # Example Tendon Compound Pulley
 #
-# Compound pulley system with two dynamic pulleys and two weights.
-# The cable routes: left weight -> P1 (rolling) -> P2 (rolling) -> right
-# weight.  Both pulleys rotate through the frictional rolling constraints.
+# Compound pulley system with two dynamic pulleys and balanced weights.
+# The main cable routes: two linked left weights -> P1 (rolling) -> P2
+# (rolling) -> right weight.  The two equal left weights are connected by a
+# short secondary cable, and their combined mass equals the right-side mass.
 #
 # Command: python -m newton.examples tendon_compound_pulley
 #
@@ -41,13 +42,17 @@ class Example:
         self.p2_pos = wp.vec3(0.5, 0.0, 4.2)
         pulley_mass = 80.0
         self.pulley_mass = pulley_mass
-        self.mass_light = 1.5
         self.mass_heavy = 4.0
+        self.mass_left_each = 0.5 * self.mass_heavy
+        self.mass_left_total = 2.0 * self.mass_left_each
         self.tendon_compliance = 1.0e-6
         shape_cfg = newton.ModelBuilder.ShapeConfig(density=0.0)
         pulley_half_height = 0.05
-        self.left_half_extent = 0.09
+        self.left_half_extent = 0.10
         self.right_half_extent = 0.13
+        self.left_upper_pos = wp.vec3(-0.75, 0.0, 2.85)
+        self.left_lower_pos = wp.vec3(-0.75, 0.0, 2.45)
+        self.right_pos = wp.vec3(0.70, 0.0, 2.85)
 
         def cylinder_inertia(mass, radius, half_height):
             inertia_y = 0.5 * mass * radius * radius
@@ -99,6 +104,7 @@ class Example:
         self._left_z_history = []
         self._right_z_history = []
         self._left_position_history = []
+        self._left_lower_position_history = []
         self._right_position_history = []
         self._left_attachment_history = []
         self._pulley_axis_error_history = []
@@ -138,9 +144,11 @@ class Example:
         planar_ang = []
 
         self.left_idx = left = builder.add_link(
-            xform=wp.transform(p=wp.vec3(-0.8, 0.0, 2.0), q=wp.quat_identity()),
-            mass=1.5,
-            inertia=box_inertia(1.5, self.left_half_extent, self.left_half_extent, self.left_half_extent),
+            xform=wp.transform(p=self.left_upper_pos, q=wp.quat_identity()),
+            mass=self.mass_left_each,
+            inertia=box_inertia(
+                self.mass_left_each, self.left_half_extent, self.left_half_extent, self.left_half_extent
+            ),
             lock_inertia=True,
         )
         builder.add_shape_box(
@@ -149,20 +157,47 @@ class Example:
             hy=self.left_half_extent,
             hz=self.left_half_extent,
             cfg=shape_cfg,
+            color=(0.28, 0.78, 0.32),
         )
         j1 = builder.add_joint_d6(
             parent=-1,
             child=left,
             linear_axes=planar_lin,
             angular_axes=planar_ang,
-            parent_xform=wp.transform(p=wp.vec3(-0.8, 0.0, 2.0), q=wp.quat_identity()),
+            parent_xform=wp.transform(p=self.left_upper_pos, q=wp.quat_identity()),
             child_xform=wp.transform(p=wp.vec3(0.0, 0.0, 0.0), q=wp.quat_identity()),
         )
 
+        self.left_lower_idx = left_lower = builder.add_link(
+            xform=wp.transform(p=self.left_lower_pos, q=wp.quat_identity()),
+            mass=self.mass_left_each,
+            inertia=box_inertia(
+                self.mass_left_each, self.left_half_extent, self.left_half_extent, self.left_half_extent
+            ),
+            lock_inertia=True,
+        )
+        builder.add_shape_box(
+            left_lower,
+            hx=self.left_half_extent,
+            hy=self.left_half_extent,
+            hz=self.left_half_extent,
+            cfg=shape_cfg,
+            color=(0.28, 0.78, 0.32),
+        )
+        j_left_lower = builder.add_joint_d6(
+            parent=-1,
+            child=left_lower,
+            linear_axes=planar_lin,
+            angular_axes=planar_ang,
+            parent_xform=wp.transform(p=self.left_lower_pos, q=wp.quat_identity()),
+            child_xform=wp.transform(p=wp.vec3(0.0, 0.0, 0.0), q=wp.quat_identity()),
+            label="left_lower_planar",
+        )
+
         self.right_idx = right = builder.add_link(
-            xform=wp.transform(p=wp.vec3(0.8, 0.0, 2.0), q=wp.quat_identity()),
-            mass=4.0,
-            inertia=box_inertia(4.0, self.right_half_extent, self.right_half_extent, self.right_half_extent),
+            xform=wp.transform(p=self.right_pos, q=wp.quat_identity()),
+            mass=self.mass_heavy,
+            inertia=box_inertia(self.mass_heavy, self.right_half_extent, self.right_half_extent, self.right_half_extent),
             lock_inertia=True,
         )
         builder.add_shape_box(
@@ -171,19 +206,21 @@ class Example:
             hy=self.right_half_extent,
             hz=self.right_half_extent,
             cfg=shape_cfg,
+            color=(0.86, 0.42, 0.50),
         )
         j2 = builder.add_joint_d6(
             parent=-1,
             child=right,
             linear_axes=planar_lin,
             angular_axes=planar_ang,
-            parent_xform=wp.transform(p=wp.vec3(0.8, 0.0, 2.0), q=wp.quat_identity()),
+            parent_xform=wp.transform(p=self.right_pos, q=wp.quat_identity()),
             child_xform=wp.transform(p=wp.vec3(0.0, 0.0, 0.0), q=wp.quat_identity()),
         )
 
         builder.add_articulation([j_p1])
         builder.add_articulation([j_p2])
         builder.add_articulation([j1])
+        builder.add_articulation([j_left_lower])
         builder.add_articulation([j2])
 
         axis = (0.0, 1.0, 0.0)
@@ -229,6 +266,23 @@ class Example:
             rest_length=-1.0,
         )
 
+        builder.add_tendon()
+        builder.add_tendon_link(
+            body=left,
+            link_type=int(TendonLinkType.ATTACHMENT),
+            offset=(0.0, 0.0, -self.left_half_extent),
+            axis=axis,
+        )
+        builder.add_tendon_link(
+            body=left_lower,
+            link_type=int(TendonLinkType.ATTACHMENT),
+            offset=(0.0, 0.0, self.left_half_extent),
+            axis=axis,
+            compliance=self.tendon_compliance,
+            damping=0.1,
+            rest_length=-1.0,
+        )
+
         builder.add_ground_plane()
         self.model = builder.finalize()
 
@@ -243,7 +297,8 @@ class Example:
         self.control = self.model.control()
         self.contacts = self.model.contacts()
         body_q = self.state_0.body_q.numpy()
-        self._initial_left_z = float(body_q[self.left_idx][2])
+        self._initial_left_z = self._left_center_of_mass_z(body_q)
+        self._initial_left_lower_z = float(body_q[self.left_lower_idx][2])
         self._initial_right_z = float(body_q[self.right_idx][2])
         self._pulley_anchor_positions = np.array(
             [
@@ -282,6 +337,24 @@ class Example:
     def _angle_delta(prev_angle, angle):
         return float((angle - prev_angle + np.pi) % (2.0 * np.pi) - np.pi)
 
+    def _left_center_of_mass_z(self, body_q):
+        return float(
+            (
+                self.mass_left_each * body_q[self.left_idx][2]
+                + self.mass_left_each * body_q[self.left_lower_idx][2]
+            )
+            / self.mass_left_total
+        )
+
+    def _assert_balanced_masses(self):
+        body_mass = self.model.body_mass.numpy()
+        left_total = float(body_mass[self.left_idx] + body_mass[self.left_lower_idx])
+        right_mass = float(body_mass[self.right_idx])
+        assert abs(left_total - right_mass) < 1.0e-6, (
+            f"Compound pulley balanced setup requires left mass sum to equal right mass: "
+            f"left_total={left_total:.6f}, right={right_mass:.6f}"
+        )
+
     def _compute_expected_no_slip_acceleration(self):
         att_l = self.solver.tendon_seg_attachment_l.numpy()
         att_r = self.solver.tendon_seg_attachment_r.numpy()
@@ -292,7 +365,7 @@ class Example:
 
         body_mass = self.model.body_mass.numpy()
         body_inertia = self.model.body_inertia.numpy()
-        m_light = float(body_mass[self.left_idx])
+        m_light = float(body_mass[self.left_idx] + body_mass[self.left_lower_idx])
         m_heavy = float(body_mass[self.right_idx])
         i1 = float(body_inertia[self.p1_idx][1][1])
         i2 = float(body_inertia[self.p2_idx][1][1])
@@ -323,9 +396,10 @@ class Example:
         self._last_p1_angle = p1_angle
         self._last_p2_angle = p2_angle
         self._pulley_rotation_history.append((self._p1_theta, self._p2_theta))
-        self._left_z_history.append(float(body_q[self.left_idx][2]))
+        self._left_z_history.append(self._left_center_of_mass_z(body_q))
         self._right_z_history.append(float(body_q[self.right_idx][2]))
         self._left_position_history.append(np.array(body_q[self.left_idx][:3], dtype=np.float64))
+        self._left_lower_position_history.append(np.array(body_q[self.left_lower_idx][:3], dtype=np.float64))
         self._right_position_history.append(np.array(body_q[self.right_idx][:3], dtype=np.float64))
         att_l, _ = get_tendon_attachment_worlds(self.solver, self.model, self.state_0)
         self._left_attachment_history.append(np.array(att_l[0], dtype=np.float64))
@@ -356,6 +430,7 @@ class Example:
         body_q = self.state_0.body_q.numpy()
         assert np.isfinite(body_q).all(), "Compound pulley produced non-finite body state"
         assert float(np.max(np.abs(body_q[:, :3]))) < 20.0, "Compound pulley body state became unbounded"
+        self._assert_balanced_masses()
 
         att_l = self.solver.tendon_seg_attachment_l.numpy()
         att_r = self.solver.tendon_seg_attachment_r.numpy()
@@ -379,10 +454,12 @@ class Example:
                 f"P1={axis_error[0]:.4f}, P2={axis_error[1]:.4f}"
             )
         left_clearance = float(body_q[self.left_idx][2]) - self.left_half_extent
+        left_lower_clearance = float(body_q[self.left_lower_idx][2]) - self.left_half_extent
         right_clearance = float(body_q[self.right_idx][2]) - self.right_half_extent
-        assert left_clearance > -0.03 and right_clearance > -0.03, (
+        assert left_clearance > -0.03 and left_lower_clearance > -0.03 and right_clearance > -0.03, (
             f"Compound pulley weights should remain supported by ground contact: "
-            f"left_clearance={left_clearance:.4f}, right_clearance={right_clearance:.4f}"
+            f"left_clearance={left_clearance:.4f}, left_lower_clearance={left_lower_clearance:.4f}, "
+            f"right_clearance={right_clearance:.4f}"
         )
         if len(self._pulley_rotation_history) <= self._direction_validation_frames:
             assert_tendon_total_length(self, rel_tol=0.30)
@@ -392,26 +469,30 @@ class Example:
             body_q = self.state_0.body_q.numpy()
             p1_z = body_q[self.p1_idx][2]
             p2_z = body_q[self.p2_idx][2]
-            assert att_r[0][2] > p1_z, (
-                f"Cable should wrap over P1: arrival tangent z={att_r[0][2]:.3f} <= center z={p1_z:.3f}"
+            assert att_r[0][2] >= p1_z - 1.0e-3, (
+                f"Cable should wrap onto P1 without crossing below its centerline: "
+                f"arrival tangent z={att_r[0][2]:.3f}, center z={p1_z:.3f}"
             )
-            assert att_l[2][2] > p2_z, (
-                f"Cable should wrap over P2: departure tangent z={att_l[2][2]:.3f} <= center z={p2_z:.3f}"
+            assert att_l[2][2] >= p2_z - 1.0e-3, (
+                f"Cable should wrap off P2 without crossing below its centerline: "
+                f"departure tangent z={att_l[2][2]:.3f}, center z={p2_z:.3f}"
             )
 
     def test_final(self):
         if not self._pulley_rotation_history:
             self._record_motion_sample()
 
-        sample = min(len(self._pulley_rotation_history) - 1, self._direction_validation_frames - 1)
+        self._assert_balanced_masses()
+        sample = len(self._pulley_rotation_history) - 1
         left_z = self._left_z_history[sample]
         right_z = self._right_z_history[sample]
         left_dz = left_z - self._initial_left_z
-        right_dz = self._initial_right_z - right_z
+        right_dz = right_z - self._initial_right_z
         history = np.array(self._pulley_rotation_history[: sample + 1])
         left_prefix = np.array(self._left_z_history[: sample + 1])
         right_prefix = np.array(self._right_z_history[: sample + 1])
         left_positions = np.array(self._left_position_history)
+        left_lower_positions = np.array(self._left_lower_position_history)
         right_positions = np.array(self._right_position_history)
         axis_prefix_end = min(len(self._pulley_axis_error_history), self._axis_validation_frames)
         axis_prefix = np.array(self._pulley_axis_error_history[:axis_prefix_end])
@@ -428,44 +509,51 @@ class Example:
             f"Compound pulleys should not leave their revolute axes over the long run: "
             f"max axis drift={max_axis_error:.4f}"
         )
-        assert left_dz > 0.05, (
-            f"Compound pulley light weight should rise, not fall: "
-            f"initial={self._initial_left_z:.4f}, z={left_z:.4f}, dz={left_dz:.4f}"
+        expected_accel = self._expected_no_slip_acceleration()
+        assert abs(expected_accel) < 0.005, (
+            f"Compound pulley balanced setup should have near-zero no-slip acceleration: "
+            f"expected={expected_accel:.6f}"
         )
-        assert right_dz > 0.05, (
-            f"Compound pulley heavy weight should fall, not rise: "
-            f"initial={self._initial_right_z:.4f}, z={right_z:.4f}, dz={right_dz:.4f}"
+        max_left_drift = float(np.max(np.abs(left_prefix - self._initial_left_z)))
+        max_right_drift = float(np.max(np.abs(right_prefix - self._initial_right_z)))
+        assert max_left_drift < 0.04 and max_right_drift < 0.04, (
+            f"Balanced compound pulley weights should stay near equilibrium: "
+            f"left_final_dz={left_dz:.4f}, right_final_dz={right_dz:.4f}, "
+            f"max_left={max_left_drift:.4f}, max_right={max_right_drift:.4f}"
         )
         body_q = self.state_0.body_q.numpy()
+        left_gap = float(
+            body_q[self.left_idx][2]
+            - self.left_half_extent
+            - (body_q[self.left_lower_idx][2] + self.left_half_extent)
+        )
+        initial_gap = float(self.left_upper_pos[2] - self.left_lower_pos[2] - 2.0 * self.left_half_extent)
+        assert abs(left_gap - initial_gap) < 0.02, (
+            f"Short cable between equal left weights should remain taut: "
+            f"gap={left_gap:.4f}, expected={initial_gap:.4f}"
+        )
         for attachment in self._left_attachment_history:
             self._assert_light_attachment_stays_below_p1(attachment, body_q)
-        if len(left_positions) > 1 and len(right_positions) > 1:
+        if len(left_positions) > 1 and len(left_lower_positions) > 1 and len(right_positions) > 1:
             left_step = float(np.max(np.linalg.norm(np.diff(left_positions, axis=0), axis=1)))
+            left_lower_step = float(np.max(np.linalg.norm(np.diff(left_lower_positions, axis=0), axis=1)))
             right_step = float(np.max(np.linalg.norm(np.diff(right_positions, axis=0), axis=1)))
-            assert max(left_step, right_step) < 0.40, (
+            assert max(left_step, left_lower_step, right_step) < 0.20, (
                 f"Compound pulley weights should not jump per frame: "
-                f"left_step={left_step:.4f}, right_step={right_step:.4f}"
+                f"left_step={left_step:.4f}, left_lower_step={left_lower_step:.4f}, "
+                f"right_step={right_step:.4f}"
             )
 
-        p1_theta, p2_theta = history[sample]
-        assert abs(p1_theta) > 0.03 and abs(p2_theta) > 0.10, (
-            f"Both compound pulleys should be driven by the same cable: P1={p1_theta:.4f}, P2={p2_theta:.4f}"
-        )
-        assert p1_theta * p2_theta > 0.0, (
-            f"Open-belt compound pulleys should rotate with the same cable direction: "
-            f"P1={p1_theta:.4f}, P2={p2_theta:.4f}"
-        )
-        assert p1_theta > 0.0 and p2_theta > 0.0, (
-            f"Compound pulley angular direction should match heavy-side descent: "
-            f"P1={p1_theta:.4f}, P2={p2_theta:.4f}, left_dz={left_dz:.4f}, right_dz={right_dz:.4f}"
+        max_theta = np.max(np.abs(history), axis=0)
+        assert max_theta[0] < 0.04 and max_theta[1] < 0.04, (
+            f"Balanced compound pulley should not wind up the dynamic pulleys: "
+            f"P1_max={max_theta[0]:.4f}, P2_max={max_theta[1]:.4f}"
         )
         rim_accel = self._fit_rim_acceleration()
         assert rim_accel is not None, "Compound pulley acceleration validation needs at least 16 samples"
-        expected_accel = self._expected_no_slip_acceleration()
-        min_rim_accel = min(rim_accel)
-        assert min_rim_accel > 0.5 * expected_accel, (
-            f"Compound pulley no-slip rim acceleration is too soft for the mass/inertia balance: "
-            f"expected={expected_accel:.4f}, P1={rim_accel[0]:.4f}, P2={rim_accel[1]:.4f}"
+        assert max(abs(rim_accel[0]), abs(rim_accel[1])) < 0.03, (
+            f"Balanced compound pulley rim acceleration should be near zero: "
+            f"P1={rim_accel[0]:.4f}, P2={rim_accel[1]:.4f}"
         )
 
     def render(self):

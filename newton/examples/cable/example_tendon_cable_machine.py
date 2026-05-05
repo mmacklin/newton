@@ -5,13 +5,13 @@
 # Example Tendon Cable Machine
 #
 # Cable machine with three pulleys of varying sizes routing a single
-# tendon from a light capsule weight to a heavy box weight.  A
-# decorative sphere sits at ground level.  The box descends under
-# gravity, pulling the capsule upward through the pulley chain.  All
-# three pulleys rotate through the frictional rolling constraints.
+# tendon from a light capsule weight to a heavy box weight.  The box
+# descends under gravity, pulling the capsule upward through the pulley
+# chain.  All three pulleys rotate through the frictional rolling
+# constraints.
 #
 # Demonstrates complex multi-pulley routing with diverse body shapes
-# (capsules, boxes, cylinders, spheres).
+# (capsules, boxes, cylinders).
 #
 # Command: python -m newton.examples tendon_cable_machine
 #
@@ -111,13 +111,6 @@ class Example:
         )
         self.p3_idx = p3
 
-        sphere_deco = builder.add_body(
-            xform=wp.transform(p=wp.vec3(0.5, 0.4, 1.15), q=wp.quat_identity()),
-            mass=0.0,
-            is_kinematic=True,
-        )
-        builder.add_shape_sphere(sphere_deco, radius=0.15)
-
         Dof = newton.ModelBuilder.JointDofConfig
         j_p1 = builder.add_joint_revolute(
             parent=-1,
@@ -156,9 +149,10 @@ class Example:
         builder.add_shape_capsule(
             left,
             xform=wp.transform(q=q_vert),
-            radius=0.06,
-            half_height=0.08,
+            radius=0.14,
+            half_height=0.18,
             cfg=weight_shape_cfg,
+            color=(0.86, 0.72, 0.22),
         )
         self.left_idx = left
         j1 = builder.add_joint_d6(
@@ -199,7 +193,7 @@ class Example:
         builder.add_tendon_link(
             body=left,
             link_type=int(TendonLinkType.ATTACHMENT),
-            offset=(0.0, 0.0, 0.14),
+            offset=(0.0, 0.0, 0.32),
             axis=axis,
         )
         builder.add_tendon_link(

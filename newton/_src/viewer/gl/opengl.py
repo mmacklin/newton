@@ -973,6 +973,8 @@ class RendererGL:
         self.draw_wireframe = False
         self.show_wireframe_overlay = False
         self.wireframe_line_width = 1.5  # pixels
+        self.wireframe_polygon_offset_factor = -4.0
+        self.wireframe_polygon_offset_units = -24.0
         self.line_width = 1.5  # pixels, for all log_lines batches
         self.arrow_scale = 1.0  # uniform scale for arrow line width and head size
 
@@ -1860,13 +1862,19 @@ class RendererGL:
                 specular_scale=0.0,
                 exposure=1.0,
             )
+            depth_func = gl.GLint()
+            gl.glGetIntegerv(gl.GL_DEPTH_FUNC, depth_func)
+            gl.glDepthFunc(gl.GL_LEQUAL)
+            gl.glDepthMask(False)
             gl.glEnable(gl.GL_POLYGON_OFFSET_LINE)
-            gl.glPolygonOffset(-1.0, -1.0)
+            gl.glPolygonOffset(self.wireframe_polygon_offset_factor, self.wireframe_polygon_offset_units)
             gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
             with self._shape_shader:
                 self._draw_objects(objects)
             gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_FILL)
             gl.glDisable(gl.GL_POLYGON_OFFSET_LINE)
+            gl.glDepthMask(True)
+            gl.glDepthFunc(depth_func.value)
 
         check_gl_error()
 

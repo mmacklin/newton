@@ -42,40 +42,45 @@ class Example:
 
         builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=-9.81)
 
-        self.r1 = 0.2
-        self.r2 = 0.2
-        self.r3 = 0.2
+        self.r1 = 0.32
+        self.r2 = 0.18
+        self.r3 = 0.32
+        self.p1_pos = wp.vec3(-self.r1, self.r1, 3.55)
+        self.p2_pos = wp.vec3(0.0, 0.0, 2.25)
+        self.p3_pos = wp.vec3(self.r3, -self.r3, 3.55)
+        self.left_start_pos = wp.vec3(-2.0 * self.r1, self.r1, 1.55)
+        self.right_start_pos = wp.vec3(2.0 * self.r3, -self.r3, 1.55)
 
         s = np.sin(np.pi / 4)
         c = np.cos(np.pi / 4)
 
-        # P1 at (-r, +r, +4), axis Y — wraps in XZ plane
+        # P1 at (-r, +r), axis Y — wraps in XZ plane
         # Inner edge at x=0 aligns with P2 center; y=+r matches P2 tangent offset
         self.q_p1_init = np.array([-s, 0.0, 0.0, c])
         q_p1_wp = wp.quat(*self.q_p1_init.tolist())
         p1 = builder.add_body(
-            xform=wp.transform(p=wp.vec3(-self.r1, self.r1, 4.0), q=q_p1_wp),
+            xform=wp.transform(p=self.p1_pos, q=q_p1_wp),
             mass=0.5,
         )
         builder.add_shape_cylinder(p1, radius=self.r1, half_height=0.06)
         self.p1_idx = p1
 
-        # P2 at (0, 0, +2), axis X — wraps in YZ plane
+        # P2 at (0, 0), axis X — wraps in YZ plane
         self.q_p2_init = np.array([0.0, s, 0.0, c])
         q_p2_wp = wp.quat(*self.q_p2_init.tolist())
         p2 = builder.add_body(
-            xform=wp.transform(p=wp.vec3(0.0, 0.0, 2.0), q=q_p2_wp),
+            xform=wp.transform(p=self.p2_pos, q=q_p2_wp),
             mass=0.5,
         )
-        builder.add_shape_cylinder(p2, radius=self.r2, half_height=0.3)
+        builder.add_shape_cylinder(p2, radius=self.r2, half_height=0.24)
         self.p2_idx = p2
 
-        # P3 at (+r, -r, +4), axis Y — wraps in XZ plane
+        # P3 at (+r, -r), axis Y — wraps in XZ plane
         # Inner edge at x=0 aligns with P2 center; y=-r matches P2 tangent offset
         self.q_p3_init = np.array([-s, 0.0, 0.0, c])
         q_p3_wp = wp.quat(*self.q_p3_init.tolist())
         p3 = builder.add_body(
-            xform=wp.transform(p=wp.vec3(self.r3, -self.r3, 4.0), q=q_p3_wp),
+            xform=wp.transform(p=self.p3_pos, q=q_p3_wp),
             mass=0.5,
         )
         builder.add_shape_cylinder(p3, radius=self.r3, half_height=0.06)
@@ -86,7 +91,7 @@ class Example:
             parent=-1,
             child=p1,
             axis=Axis.Z,
-            parent_xform=wp.transform(p=wp.vec3(-self.r1, self.r1, 4.0), q=q_p1_wp),
+            parent_xform=wp.transform(p=self.p1_pos, q=q_p1_wp),
             child_xform=wp.transform(),
             label="pulley_1_axis",
         )
@@ -94,7 +99,7 @@ class Example:
             parent=-1,
             child=p2,
             axis=Axis.Z,
-            parent_xform=wp.transform(p=wp.vec3(0.0, 0.0, 2.0), q=q_p2_wp),
+            parent_xform=wp.transform(p=self.p2_pos, q=q_p2_wp),
             child_xform=wp.transform(),
             label="pulley_2_axis",
         )
@@ -102,7 +107,7 @@ class Example:
             parent=-1,
             child=p3,
             axis=Axis.Z,
-            parent_xform=wp.transform(p=wp.vec3(self.r3, -self.r3, 4.0), q=q_p3_wp),
+            parent_xform=wp.transform(p=self.p3_pos, q=q_p3_wp),
             child_xform=wp.transform(),
             label="pulley_3_axis",
         )
@@ -110,7 +115,7 @@ class Example:
         free_lin = [Dof(axis=Axis.X), Dof(axis=Axis.Y), Dof(axis=Axis.Z)]
         free_ang = [Dof(axis=Axis.X), Dof(axis=Axis.Y), Dof(axis=Axis.Z)]
 
-        sphere_pos = wp.vec3(-2.0 * self.r1, self.r1, 1.0)
+        sphere_pos = self.left_start_pos
         left = builder.add_link(
             xform=wp.transform(p=sphere_pos, q=wp.quat_identity()),
             mass=1.5,
@@ -125,7 +130,7 @@ class Example:
             child_xform=wp.transform(),
         )
 
-        box_pos = wp.vec3(2.0 * self.r3, -self.r3, 1.0)
+        box_pos = self.right_start_pos
         right = builder.add_link(
             xform=wp.transform(p=box_pos, q=wp.quat_identity()),
             mass=3.5,
@@ -222,7 +227,7 @@ class Example:
 
         if self.viewer is not None:
             self.viewer.set_model(self.model)
-            self.viewer.set_camera(pos=wp.vec3(3.0, -5.2, 2.5), pitch=5.0, yaw=120.0)
+            self.viewer.set_camera(pos=wp.vec3(2.4, -4.8, 2.45), pitch=5.0, yaw=118.0)
             if hasattr(self.viewer, "renderer"):
                 self.viewer.renderer.show_wireframe_overlay = True
 
@@ -274,9 +279,12 @@ class Example:
                 dx = abs(att_l[i][0] - att_r[i][0])
                 dy = abs(att_l[i][1] - att_r[i][1])
                 dz = abs(att_l[i][2] - att_r[i][2])
-                assert dz > 0.1, f"Segment {i} has no vertical span: dz={dz}"
                 assert dx < 0.02, f"Segment {i} not vertical in x: dx={dx}"
-                assert dy < 0.02, f"Segment {i} not vertical in y: dy={dy}"
+                assert dz > 0.5, f"Segment {i} has too little vertical span: dz={dz}"
+                if i in (0, 3):
+                    assert dy < 0.02, f"End hanging segment {i} not vertical in y: dy={dy}"
+                else:
+                    assert dy < 0.20, f"Inter-pulley segment {i} drifted too far in y: dy={dy}"
 
     def test_final(self):
         assert_tendon_total_length(self, rel_tol=0.06, allow_slack=True)
@@ -285,8 +293,16 @@ class Example:
 
         sphere_pos = body_q[3][:3]
         box_pos = body_q[4][:3]
-        sphere_moved = np.linalg.norm(sphere_pos - np.array([-0.4, 0.2, 1.0])) > 0.1
-        box_moved = np.linalg.norm(box_pos - np.array([0.4, -0.2, 1.0])) > 0.1
+        left_start = np.array(
+            [self.left_start_pos[0], self.left_start_pos[1], self.left_start_pos[2]],
+            dtype=np.float32,
+        )
+        right_start = np.array(
+            [self.right_start_pos[0], self.right_start_pos[1], self.right_start_pos[2]],
+            dtype=np.float32,
+        )
+        sphere_moved = np.linalg.norm(sphere_pos - left_start) > 0.1
+        box_moved = np.linalg.norm(box_pos - right_start) > 0.1
         assert sphere_moved, f"Sphere should have moved from start: {sphere_pos}"
         assert box_moved, f"Box should have moved from start: {box_pos}"
         if not self._pulley_rotation_history:

@@ -14,14 +14,25 @@ from newton.viewer import ViewerGL
 EXAMPLES = [
     ("tendon_pulley", "newton.examples.cable.example_tendon_pulley", 240),
     ("tendon_rolling_pulley", "newton.examples.cable.example_tendon_rolling_pulley", 180),
-    ("tendon_compound_pulley", "newton.examples.cable.example_tendon_compound_pulley", 220),
-    ("tendon_cable_machine", "newton.examples.cable.example_tendon_cable_machine", 100),
-    ("tendon_3d_routing", "newton.examples.cable.example_tendon_3d_routing", 140),
     ("tendon_xy_table", "newton.examples.cable.example_tendon_xy_table", 480),
+    ("tendon_capstan_dynamic", "newton.examples.cable.example_tendon_capstan_friction", 100),
+    ("tendon_capstan_kinematic", "newton.examples.cable.example_tendon_capstan_kinematic", 100),
+    ("tendon_compound_pulley", "newton.examples.cable.example_tendon_compound_pulley", 220),
+    ("tendon_gear_pulley", "newton.examples.cable.example_tendon_gear_pulley", 180),
+    ("tendon_3d_routing", "newton.examples.cable.example_tendon_3d_routing", 140),
+    ("tendon_cable_machine", "newton.examples.cable.example_tendon_cable_machine", 100),
 ]
 
 NUM_FRAMES = 240
 FPS = 60
+OUTPUT_WIDTH = int(os.environ.get("NEWTON_RENDER_WIDTH", "960"))
+OUTPUT_HEIGHT = int(os.environ.get("NEWTON_RENDER_HEIGHT", "720"))
+SUPERSAMPLE = max(1, int(os.environ.get("NEWTON_RENDER_SUPERSAMPLE", "1")))
+EXAMPLE_FILTER = {
+    name.strip()
+    for name in os.environ.get("NEWTON_RENDER_EXAMPLES", "").split(",")
+    if name.strip()
+}
 REPORT_DIR = os.path.expanduser("~/reports/cable-sim-research")
 os.makedirs(REPORT_DIR, exist_ok=True)
 
@@ -32,6 +43,18 @@ class FakeArgs:
         self.record = False
         self.num_frames = num_frames
         self.episode_frames = None
+
+
+def downsample_frame(frame_np):
+    if SUPERSAMPLE == 1:
+        return frame_np
+
+    height, width, channels = frame_np.shape
+    out_height = height // SUPERSAMPLE
+    out_width = width // SUPERSAMPLE
+    cropped = frame_np[: out_height * SUPERSAMPLE, : out_width * SUPERSAMPLE]
+    reduced = cropped.reshape(out_height, SUPERSAMPLE, out_width, SUPERSAMPLE, channels).mean(axis=(1, 3))
+    return np.rint(reduced).astype(frame_np.dtype)
 
 
 def render_example(name, module_path, num_frames, viewer):
@@ -69,6 +92,7 @@ def render_example(name, module_path, num_frames, viewer):
 
         frame_buf = viewer.get_frame(target_image=frame_buf)
         frame_np = frame_buf.numpy()
+        frame_np = downsample_frame(frame_np)
         writer.append_data(frame_np)
         last_frame_np = np.array(frame_np, copy=True)
 
@@ -81,10 +105,17 @@ def render_example(name, module_path, num_frames, viewer):
 
 
 def main():
-    viewer = ViewerGL(width=960, height=720, headless=True)
+    viewer = ViewerGL(width=OUTPUT_WIDTH * SUPERSAMPLE, height=OUTPUT_HEIGHT * SUPERSAMPLE, headless=True)
+    if SUPERSAMPLE > 1:
+        print(
+            f"Supersampling {OUTPUT_WIDTH * SUPERSAMPLE}x{OUTPUT_HEIGHT * SUPERSAMPLE} "
+            f"-> {OUTPUT_WIDTH}x{OUTPUT_HEIGHT}"
+        )
 
     paths = {}
     for name, module_path, num_frames in EXAMPLES:
+        if EXAMPLE_FILTER and name not in EXAMPLE_FILTER:
+            continue
         try:
             mp4_path = render_example(name, module_path, num_frames, viewer)
             paths[name] = mp4_path
