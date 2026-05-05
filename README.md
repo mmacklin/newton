@@ -219,15 +219,27 @@ If you installed from source with uv, substitute `uv run` for `python` in the co
         <img width="320" src="https://raw.githubusercontent.com/newton-physics/newton/main/docs/images/examples/example_basic_reduced_elastic_vertical_weight.jpg" alt="Reduced Elastic Vertical Weight">
       </a>
     </td>
-    <td align="center" width="33%"></td>
-    <td align="center" width="33%"></td>
+    <td align="center" width="33%">
+      <a href="https://github.com/newton-physics/newton/blob/main/newton/examples/basic/example_basic_reduced_elastic_matrix_rom.py">
+        <img width="320" src="https://raw.githubusercontent.com/newton-physics/newton/main/docs/images/examples/example_basic_reduced_elastic_matrix_rom.jpg" alt="Reduced Elastic Matrix ROM">
+      </a>
+    </td>
+    <td align="center" width="33%">
+      <a href="https://github.com/newton-physics/newton/blob/main/newton/examples/basic/example_basic_reduced_elastic_dipper.py">
+        <img width="320" src="https://raw.githubusercontent.com/newton-physics/newton/main/docs/images/examples/example_basic_reduced_elastic_dipper.jpg" alt="Reduced Elastic Dipper">
+      </a>
+    </td>
   </tr>
   <tr>
     <td align="center" width="33%">
       <code>python -m newton.examples basic_reduced_elastic_vertical_weight</code>
     </td>
-    <td align="center" width="33%"></td>
-    <td align="center" width="33%"></td>
+    <td align="center" width="33%">
+      <code>python -m newton.examples basic_reduced_elastic_matrix_rom</code>
+    </td>
+    <td align="center" width="33%">
+      <code>python -m newton.examples basic_reduced_elastic_dipper</code>
+    </td>
   </tr>
   <tr>
     <td colspan="3"><h3>Robot Examples</h3></td>

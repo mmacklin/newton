@@ -18,7 +18,9 @@ from newton.examples.basic.example_basic_reduced_elastic_beam_vibration import E
 from newton.examples.basic.example_basic_reduced_elastic_bellcrank import Example as BellcrankExample
 from newton.examples.basic.example_basic_reduced_elastic_cantilever_weight import Example as CantileverWeightExample
 from newton.examples.basic.example_basic_reduced_elastic_crank_slider import Example as CrankSliderExample
+from newton.examples.basic.example_basic_reduced_elastic_dipper import Example as DipperExample
 from newton.examples.basic.example_basic_reduced_elastic_fourbar import Example as FourbarExample
+from newton.examples.basic.example_basic_reduced_elastic_matrix_rom import Example as MatrixROMExample
 from newton.examples.basic.example_basic_reduced_elastic_prismatic import Example as PrismaticExample
 from newton.examples.basic.example_basic_reduced_elastic_torsion import Example as TorsionExample
 from newton.examples.basic.example_basic_reduced_elastic_vertical_weight import Example as VerticalWeightExample
@@ -34,6 +36,8 @@ VIDEO_ASSETS = (
     "reduced_elastic_crank_slider.mp4",
     "reduced_elastic_watt_linkage.mp4",
     "reduced_elastic_bellcrank.mp4",
+    "reduced_elastic_matrix_rom.mp4",
+    "reduced_elastic_dipper_arm.mp4",
     "reduced_elastic_cantilever_beam.mp4",
     "reduced_elastic_cantilever_vibration.mp4",
     "reduced_elastic_cantilever_weight.mp4",
@@ -90,8 +94,9 @@ def _elastic_mode_counts(example) -> list[int]:
 
 
 def _prepare_example(label: str, example, mode_rows: list[tuple[str, list[int]]]):
-    example.viewer.show_elastic_strain = False
-    example.viewer.elastic_strain_color_max = None
+    example.viewer.show_elastic_strain = bool(getattr(example, "show_elastic_strain", False))
+    if not example.viewer.show_elastic_strain:
+        example.viewer.elastic_strain_color_max = None
     counts = _elastic_mode_counts(example)
     total = sum(counts)
     unit = "mode" if total == 1 else "modes"
@@ -223,6 +228,28 @@ def main():
     _render_example(
         viewer,
         mode_rows,
+        "Matrix ROM Bracket",
+        MatrixROMExample,
+        frame_count=300,
+        video_path=assets / "reduced_elastic_matrix_rom.mp4",
+        screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_matrix_rom.jpg"),
+        screenshot_frame=170,
+    )
+
+    _render_example(
+        viewer,
+        mode_rows,
+        "Flexible Dipper Arm",
+        DipperExample,
+        frame_count=240,
+        video_path=assets / "reduced_elastic_dipper_arm.mp4",
+        screenshot_path=Path("docs/images/examples/example_basic_reduced_elastic_dipper.jpg"),
+        screenshot_frame=8,
+    )
+
+    _render_example(
+        viewer,
+        mode_rows,
         "Cantilever Tip Load",
         BeamExample,
         frame_count=150,
@@ -273,6 +300,8 @@ def main():
     print(f"Wrote {assets / 'reduced_elastic_crank_slider.mp4'}")
     print(f"Wrote {assets / 'reduced_elastic_watt_linkage.mp4'}")
     print(f"Wrote {assets / 'reduced_elastic_bellcrank.mp4'}")
+    print(f"Wrote {assets / 'reduced_elastic_matrix_rom.mp4'}")
+    print(f"Wrote {assets / 'reduced_elastic_dipper_arm.mp4'}")
     print(f"Wrote {assets / 'reduced_elastic_cantilever_beam.mp4'}")
     print(f"Wrote {assets / 'reduced_elastic_cantilever_vibration.mp4'}")
     print(f"Wrote {assets / 'reduced_elastic_cantilever_weight.mp4'}")

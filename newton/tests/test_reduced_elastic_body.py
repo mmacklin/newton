@@ -16,6 +16,8 @@ from newton.examples.basic._reduced_elastic import (
     joint_endpoint_world,
     mesh_volume,
 )
+from newton.examples.basic.example_basic_reduced_elastic_dipper import Example as DipperExample
+from newton.examples.basic.example_basic_reduced_elastic_matrix_rom import Example as MatrixROMExample
 from newton.tests.unittest_utils import add_function_test, get_test_devices
 
 devices = get_test_devices()
@@ -64,6 +66,150 @@ def _quat_rotate_np(q: np.ndarray, v: np.ndarray) -> np.ndarray:
 
 def _transform_point_np(xform: np.ndarray, point: np.ndarray) -> np.ndarray:
     return xform[:3] + _quat_rotate_np(xform[3:7], point)
+
+
+def _add_modal_projection_joint(builder, joint_kind: str, parent: int, child: int, parent_xform, child_xform):
+    if joint_kind == "ball":
+        return builder.add_joint_ball(parent=parent, child=child, parent_xform=parent_xform, child_xform=child_xform)
+    if joint_kind == "fixed":
+        return builder.add_joint_fixed(parent=parent, child=child, parent_xform=parent_xform, child_xform=child_xform)
+    if joint_kind == "revolute":
+        return builder.add_joint_revolute(
+            parent=parent,
+            child=child,
+            axis=(1.0, 0.0, 0.0),
+            parent_xform=parent_xform,
+            child_xform=child_xform,
+        )
+    if joint_kind == "prismatic":
+        return builder.add_joint_prismatic(
+            parent=parent,
+            child=child,
+            axis=(1.0, 0.0, 0.0),
+            parent_xform=parent_xform,
+            child_xform=child_xform,
+        )
+    raise ValueError(f"Unsupported joint kind: {joint_kind}")
+
+
+def _assert_elastic_modal_projection_matches_joint_force(test, device, joint_kind: str, elastic_side: str = "child"):
+    phi_local = np.array([0.35, -0.45, 0.25], dtype=np.float32)
+    elastic_anchor = np.array([0.12, -0.03, 0.04], dtype=float)
+    elastic_pos = np.array([0.02, 0.01, -0.015], dtype=float)
+    elastic_quat = wp.quat_from_axis_angle(wp.vec3(0.0, 0.0, 1.0), 0.37)
+    elastic_xform = wp.transform(wp.vec3(*elastic_pos), elastic_quat)
+    elastic_quat_np = np.array([elastic_quat[0], elastic_quat[1], elastic_quat[2], elastic_quat[3]], dtype=float)
+    k = 2500.0
+
+    def shape_fn(_x):
+        return np.array([phi_local], dtype=np.float32)
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    if elastic_side == "child":
+        body = builder.add_body_elastic(
+            xform=elastic_xform,
+            mass=1.0,
+            inertia=_identity_inertia(),
+            mode_count=1,
+            mode_mass=[0.0],
+            mode_stiffness=[0.0],
+            mode_damping=[0.0],
+            mode_q=[0.0],
+            mode_shape_fn=shape_fn,
+            is_kinematic=True,
+        )
+        parent_anchor = np.array([-0.08, 0.07, -0.02], dtype=float)
+        child_anchor = elastic_anchor
+        _add_modal_projection_joint(
+            builder,
+            joint_kind,
+            parent=-1,
+            child=body,
+            parent_xform=wp.transform(wp.vec3(*parent_anchor), wp.quat_identity()),
+            child_xform=wp.transform(wp.vec3(*child_anchor), wp.quat_identity()),
+        )
+        x_p = parent_anchor
+        x_c = elastic_pos + _quat_rotate_np(elastic_quat_np, child_anchor)
+        dC_dq = _quat_rotate_np(elastic_quat_np, phi_local.astype(float))
+        side_force_sign = -1.0
+    elif elastic_side == "parent":
+        body = builder.add_body_elastic(
+            xform=elastic_xform,
+            mass=1.0,
+            inertia=_identity_inertia(),
+            mode_count=1,
+            mode_mass=[0.0],
+            mode_stiffness=[0.0],
+            mode_damping=[0.0],
+            mode_q=[0.0],
+            mode_shape_fn=shape_fn,
+            is_kinematic=True,
+        )
+        child_pos = np.array([-0.06, 0.09, 0.035], dtype=float)
+        child = builder.add_body(
+            xform=wp.transform(wp.vec3(*child_pos), wp.quat_identity()),
+            mass=1.0,
+            inertia=_identity_inertia(),
+            is_kinematic=True,
+        )
+        parent_anchor = elastic_anchor
+        child_anchor = np.array([0.03, -0.015, 0.02], dtype=float)
+        _add_modal_projection_joint(
+            builder,
+            joint_kind,
+            parent=body,
+            child=child,
+            parent_xform=wp.transform(wp.vec3(*parent_anchor), wp.quat_identity()),
+            child_xform=wp.transform(wp.vec3(*child_anchor), wp.quat_identity()),
+        )
+        x_p = elastic_pos + _quat_rotate_np(elastic_quat_np, parent_anchor)
+        x_c = child_pos + child_anchor
+        endpoint_phi_world = _quat_rotate_np(elastic_quat_np, phi_local.astype(float))
+        dC_dq = -endpoint_phi_world
+        side_force_sign = 1.0
+    else:
+        raise ValueError(f"Unsupported elastic side: {elastic_side}")
+
+    builder.color()
+    model = builder.finalize(device=device)
+    state_0 = model.state()
+    state_1 = model.state()
+    control = model.control()
+
+    P = np.eye(3)
+    if joint_kind == "prismatic":
+        axis = np.array([1.0, 0.0, 0.0])
+        P -= np.outer(axis, axis)
+
+    C = x_c - x_p
+    PC = P @ C
+    PdC = P @ dC_dq
+    h = k * float(np.dot(PdC, PdC))
+    grad = k * float(np.dot(PC, PdC))
+    test.assertGreater(h, 0.0)
+
+    endpoint_phi_world = _quat_rotate_np(elastic_quat_np, phi_local.astype(float))
+    rigid_side_force = side_force_sign * k * PC
+    modal_force_from_joint = float(np.dot(endpoint_phi_world, rigid_side_force))
+    modal_force_from_energy = -grad
+    np.testing.assert_allclose(modal_force_from_energy, modal_force_from_joint, rtol=1.0e-6, atol=1.0e-7)
+
+    solver = newton.solvers.SolverVBD(
+        model,
+        iterations=1,
+        rigid_joint_linear_k_start=k,
+        rigid_joint_linear_ke=k,
+        rigid_joint_angular_ke=0.0,
+        rigid_joint_linear_kd=0.0,
+        rigid_joint_angular_kd=0.0,
+        rigid_joint_adaptive_stiffness=False,
+    )
+    solver.step(state_0, state_1, control, None, 0.01)
+
+    owner_joint = int(model.elastic_joint.numpy()[0])
+    q_start = int(model.joint_q_start.numpy()[owner_joint])
+    q_expected = modal_force_from_joint / h
+    np.testing.assert_allclose(state_1.joint_q.numpy()[q_start + 7], q_expected, rtol=1.0e-5, atol=1.0e-6)
 
 
 def test_modal_basis_add_sample(test, device):
@@ -127,6 +273,42 @@ def test_modal_generator_pod_rank_one(test, device):
     np.testing.assert_allclose(np.abs(basis.sample_value(1)[0]), [0.0, 1.0, 0.0], atol=1.0e-7)
     np.testing.assert_allclose(basis.mode_mass, [1.0], atol=1.0e-7)
     np.testing.assert_allclose(basis.mode_stiffness, [3.0], atol=1.0e-7)
+
+
+def test_modal_generator_fem_matrix_rom(test, device):
+    nodes = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=np.float32)
+    mass = np.diag([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+    stiffness = np.zeros((6, 6), dtype=np.float64)
+    stiffness[3, 3] = 8.0
+    stiffness[4, 4] = 18.0
+    stiffness[5, 5] = 32.0
+    damping = np.zeros((6, 6), dtype=np.float64)
+    damping[3, 3] = 0.4
+    damping[4, 4] = 0.6
+    damping[5, 5] = 0.8
+    sample_points = np.array([[1.0, 0.0, 0.2], [0.0, 0.0, -0.1]], dtype=np.float32)
+
+    generator = newton.ModalGeneratorFEM(
+        node_positions=nodes,
+        mass_matrix=mass,
+        stiffness_matrix=stiffness,
+        damping_matrix=damping,
+        sample_points=sample_points,
+        sample_node_indices=[1, 0],
+        fixed_node_indices=[0],
+        mode_count=3,
+    )
+    basis = generator.build()
+
+    test.assertEqual(basis.mode_count, 3)
+    np.testing.assert_allclose(basis.mode_mass, [1.0, 1.0, 1.0], atol=1.0e-6)
+    np.testing.assert_allclose(basis.mode_stiffness, [4.0, 9.0, 16.0], atol=1.0e-6)
+    np.testing.assert_allclose(basis.mode_damping, [0.2, 0.3, 0.4], atol=1.0e-6)
+    np.testing.assert_allclose(
+        generator.frequencies, [1.0 / math.pi, 3.0 / (2.0 * math.pi), 2.0 / math.pi], atol=1.0e-6
+    )
+    np.testing.assert_allclose(np.abs(basis.sample_value(0)), np.eye(3) / math.sqrt(2.0), atol=1.0e-6)
+    np.testing.assert_allclose(basis.sample_value(1), np.zeros((3, 3)), atol=1.0e-7)
 
 
 def _deformed_endpoint_world(model, state, joint: int, side: str) -> np.ndarray:
@@ -819,6 +1001,103 @@ def test_vbd_revolute_constraint_solves_elastic_mode(test, device):
     np.testing.assert_allclose(after, [target_anchor, 0.0, 0.0], atol=1.0e-4)
 
 
+def test_vbd_fixed_joint_stiffness_pins_penalties(test, device):
+    builder = newton.ModelBuilder(gravity=0.0)
+    body = builder.add_body(
+        xform=wp.transform(wp.vec3(0.0, 0.0, 0.0), wp.quat_identity()),
+        mass=1.0,
+        inertia=_identity_inertia(),
+    )
+    builder.add_joint_revolute(
+        parent=-1,
+        child=body,
+        axis=(0.0, 0.0, 1.0),
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+
+    solver = newton.solvers.SolverVBD(
+        model,
+        iterations=2,
+        rigid_joint_linear_k_start=10.0,
+        rigid_joint_angular_k_start=5.0,
+        rigid_joint_linear_ke=1234.0,
+        rigid_joint_angular_ke=567.0,
+        rigid_joint_adaptive_stiffness=False,
+    )
+
+    np.testing.assert_allclose(solver.joint_penalty_k.numpy(), solver.joint_penalty_k_max.numpy())
+    np.testing.assert_allclose(solver.joint_penalty_k_min.numpy(), solver.joint_penalty_k_max.numpy())
+    np.testing.assert_allclose(solver.joint_penalty_k.numpy()[:2], [1234.0, 567.0])
+
+    state_0 = model.state()
+    state_1 = model.state()
+    solver.step(state_0, state_1, model.control(), None, 0.01)
+
+    np.testing.assert_allclose(solver.joint_penalty_k.numpy(), solver.joint_penalty_k_max.numpy())
+
+
+def test_vbd_elastic_modal_force_matches_joint_projection(test, device):
+    for joint_kind in ("ball", "fixed", "revolute", "prismatic"):
+        _assert_elastic_modal_projection_matches_joint_force(test, device, joint_kind, elastic_side="child")
+    _assert_elastic_modal_projection_matches_joint_force(test, device, "revolute", elastic_side="parent")
+
+
+def test_vbd_elastic_modal_joint_damping_projection(test, device):
+    dt = 0.01
+    mode_mass = 1.0
+    mode_qd = 0.5
+    joint_k = 100.0
+    joint_kd = 0.2
+
+    def shape_fn(_x):
+        return np.array([[1.0, 0.0, 0.0]], dtype=np.float32)
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    body = builder.add_body_elastic(
+        mass=1.0,
+        inertia=_identity_inertia(),
+        mode_count=1,
+        mode_mass=[mode_mass],
+        mode_stiffness=[0.0],
+        mode_damping=[0.0],
+        mode_q=[0.0],
+        mode_qd=[mode_qd],
+        mode_shape_fn=shape_fn,
+        is_kinematic=True,
+    )
+    builder.add_joint_ball(
+        parent=-1,
+        child=body,
+        parent_xform=wp.transform_identity(),
+        child_xform=wp.transform_identity(),
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+
+    state_0 = model.state()
+    state_1 = model.state()
+    solver = newton.solvers.SolverVBD(
+        model,
+        iterations=1,
+        rigid_joint_linear_k_start=joint_k,
+        rigid_joint_linear_ke=joint_k,
+        rigid_joint_linear_kd=joint_kd,
+        rigid_joint_adaptive_stiffness=False,
+    )
+    solver.step(state_0, state_1, model.control(), None, dt)
+
+    q_start = int(model.joint_q_start.numpy()[int(model.elastic_joint.numpy()[0])])
+    q_integrated = dt * mode_qd
+    modal_inertia = mode_mass / (dt * dt)
+    joint_damping_h = joint_kd * joint_k / dt
+    h = modal_inertia + joint_k + joint_damping_h
+    grad = joint_k * q_integrated + joint_kd * joint_k * mode_qd
+    q_expected = q_integrated - grad / h
+
+    np.testing.assert_allclose(state_1.joint_q.numpy()[q_start + 7], q_expected, rtol=1.0e-6, atol=1.0e-7)
+
+
 def test_fourbar_elastic_coupler_geometry(test, device):
     a, b_rest, c, d = 0.2, 0.5, 0.4, 0.5
     eta = 0.06
@@ -1071,6 +1350,26 @@ def test_elastic_multiple_attachment_samples(test, device):
     np.testing.assert_allclose(joint_endpoint_world(model, state, j_right, "child"), [0.6, 0.0, 0.0], atol=1.0e-6)
 
 
+def test_matrix_rom_example(test, device):
+    with wp.ScopedDevice(device):
+        viewer = newton.viewer.ViewerNull()
+        example = MatrixROMExample(viewer, None)
+        for _ in range(100):
+            example.step()
+            example.render()
+        example.test_final()
+
+
+def test_dipper_arm_example(test, device):
+    with wp.ScopedDevice(device):
+        viewer = newton.viewer.ViewerNull()
+        example = DipperExample(viewer, None)
+        for _ in range(120):
+            example.step()
+            example.render()
+        example.test_final()
+
+
 class TestReducedElasticBody(unittest.TestCase):
     pass
 
@@ -1089,6 +1388,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_modal_generator_pod_rank_one",
         test_modal_generator_pod_rank_one,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_modal_generator_fem_matrix_rom",
+        test_modal_generator_fem_matrix_rom,
         devices=[device],
     )
     add_function_test(TestReducedElasticBody, "test_elastic_link_layout", test_elastic_link_layout, devices=[device])
@@ -1191,6 +1496,24 @@ for device in devices:
     )
     add_function_test(
         TestReducedElasticBody,
+        "test_vbd_fixed_joint_stiffness_pins_penalties",
+        test_vbd_fixed_joint_stiffness_pins_penalties,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_vbd_elastic_modal_force_matches_joint_projection",
+        test_vbd_elastic_modal_force_matches_joint_projection,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_vbd_elastic_modal_joint_damping_projection",
+        test_vbd_elastic_modal_joint_damping_projection,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
         "test_fourbar_elastic_coupler_geometry",
         test_fourbar_elastic_coupler_geometry,
         devices=[device],
@@ -1211,6 +1534,18 @@ for device in devices:
         TestReducedElasticBody,
         "test_elastic_multiple_attachment_samples",
         test_elastic_multiple_attachment_samples,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_matrix_rom_example",
+        test_matrix_rom_example,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_dipper_arm_example",
+        test_dipper_arm_example,
         devices=[device],
     )
 

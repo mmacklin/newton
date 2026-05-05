@@ -393,6 +393,205 @@ class ModalGeneratorPOD:
         return stiffness
 
 
+class ModalGeneratorFEM:
+    """Build linear modal modes from nodal finite-element matrices.
+
+    This generator solves the generalized eigenvalue problem
+    ``K phi = lambda M phi`` on translational nodal DOFs, mass-normalizes the
+    selected eigenvectors, and returns a sampled :class:`ModalBasis`.
+
+    Args:
+        node_positions: Rest node positions [m], shape ``[node_count, 3]``.
+        mass_matrix: Nodal mass matrix [kg], shape
+            ``[3 * node_count, 3 * node_count]``.
+        stiffness_matrix: Nodal stiffness matrix [N/m], shape
+            ``[3 * node_count, 3 * node_count]``.
+        damping_matrix: Optional nodal damping matrix [N s/m], shape
+            ``[3 * node_count, 3 * node_count]``.
+        sample_points: Body-local points [m] where the returned basis is
+            sampled. Defaults to ``node_positions``.
+        sample_node_indices: Optional node index for each sample point. When
+            provided, sample values are copied exactly from those FEM nodes.
+            Otherwise values are interpolated from nodal modes.
+        mode_count: Number of modes to retain.
+        fixed_node_indices: Nodes whose translational DOFs are fixed during the
+            eigen solve. Their modal displacement is zero in the returned basis.
+        fixed_dof_indices: Individual nodal DOF indices fixed during the solve.
+        discard_mode_count: Number of lowest eigenmodes to skip. Use this to
+            drop rigid modes in free-free models.
+        eigenvalue_tolerance: Minimum eigenvalue [1/s^2] retained after fixed
+            DOFs and discarded modes are removed.
+        damping_ratio: Modal damping ratio used when ``damping_matrix`` is not
+            provided.
+        label: Optional basis label.
+    """
+
+    def __init__(
+        self,
+        node_positions: Sequence[Sequence[float]] | np.ndarray,
+        mass_matrix: Sequence[Sequence[float]] | np.ndarray,
+        stiffness_matrix: Sequence[Sequence[float]] | np.ndarray,
+        damping_matrix: Sequence[Sequence[float]] | np.ndarray | None = None,
+        sample_points: Sequence[Sequence[float]] | np.ndarray | None = None,
+        sample_node_indices: Sequence[int] | np.ndarray | None = None,
+        mode_count: int | None = None,
+        fixed_node_indices: Sequence[int] | np.ndarray | None = None,
+        fixed_dof_indices: Sequence[int] | np.ndarray | None = None,
+        discard_mode_count: int = 0,
+        eigenvalue_tolerance: float = 1.0e-8,
+        damping_ratio: float = 0.0,
+        label: str | None = None,
+    ):
+        self.node_positions = np.asarray(node_positions, dtype=np.float32)
+        if self.node_positions.ndim != 2 or self.node_positions.shape[1] != 3:
+            raise ValueError(f"node_positions must have shape [node_count, 3], got {self.node_positions.shape}")
+
+        self.node_count = int(self.node_positions.shape[0])
+        self.dof_count = 3 * self.node_count
+        self.mass_matrix = self._coerce_square_matrix(mass_matrix, self.dof_count, "mass_matrix")
+        self.stiffness_matrix = self._coerce_square_matrix(stiffness_matrix, self.dof_count, "stiffness_matrix")
+        self.damping_matrix = (
+            None
+            if damping_matrix is None
+            else self._coerce_square_matrix(damping_matrix, self.dof_count, "damping_matrix")
+        )
+
+        if sample_points is None:
+            self.sample_points = np.array(self.node_positions, dtype=np.float32, copy=True)
+        else:
+            self.sample_points = np.asarray(sample_points, dtype=np.float32)
+            if self.sample_points.ndim != 2 or self.sample_points.shape[1] != 3:
+                raise ValueError(f"sample_points must have shape [sample_count, 3], got {self.sample_points.shape}")
+
+        self.sample_node_indices = None
+        if sample_node_indices is not None:
+            sample_node_indices = np.asarray(sample_node_indices, dtype=np.int32).reshape((-1,))
+            if sample_node_indices.shape[0] != self.sample_points.shape[0]:
+                raise ValueError(
+                    "sample_node_indices must have one entry per sample point, "
+                    f"got {sample_node_indices.shape[0]} for {self.sample_points.shape[0]} samples"
+                )
+            if np.any(sample_node_indices < 0) or np.any(sample_node_indices >= self.node_count):
+                raise ValueError("sample_node_indices contains out-of-range node indices")
+            self.sample_node_indices = sample_node_indices
+
+        self.mode_count = None if mode_count is None else int(mode_count)
+        if self.mode_count is not None and self.mode_count < 0:
+            raise ValueError(f"mode_count must be non-negative, got {self.mode_count}")
+
+        fixed: set[int] = set()
+        if fixed_node_indices is not None:
+            for node_value in np.asarray(fixed_node_indices, dtype=np.int32).reshape((-1,)):
+                node = int(node_value)
+                if node < 0 or node >= self.node_count:
+                    raise ValueError(f"fixed_node_indices contains out-of-range node index {node}")
+                fixed.update((3 * node, 3 * node + 1, 3 * node + 2))
+        if fixed_dof_indices is not None:
+            for dof_value in np.asarray(fixed_dof_indices, dtype=np.int32).reshape((-1,)):
+                dof = int(dof_value)
+                if dof < 0 or dof >= self.dof_count:
+                    raise ValueError(f"fixed_dof_indices contains out-of-range DOF index {dof}")
+                fixed.add(dof)
+        self.fixed_dof_indices = np.asarray(sorted(fixed), dtype=np.int32)
+        self.discard_mode_count = int(discard_mode_count)
+        if self.discard_mode_count < 0:
+            raise ValueError(f"discard_mode_count must be non-negative, got {self.discard_mode_count}")
+        self.eigenvalue_tolerance = float(eigenvalue_tolerance)
+        self.damping_ratio = float(damping_ratio)
+        self.label = label
+
+        self.eigenvalues = np.zeros(0, dtype=np.float64)
+        self.frequencies = np.zeros(0, dtype=np.float64)
+        self.modal_matrix = np.zeros((self.dof_count, 0), dtype=np.float64)
+
+    @staticmethod
+    def _coerce_square_matrix(matrix: Sequence[Sequence[float]] | np.ndarray, size: int, name: str) -> np.ndarray:
+        array = np.asarray(matrix, dtype=np.float64)
+        if array.shape != (size, size):
+            raise ValueError(f"{name} must have shape ({size}, {size}), got {array.shape}")
+        return 0.5 * (array + array.T)
+
+    def build(self) -> ModalBasis:
+        """Build a sampled modal basis."""
+        free_dofs = np.ones(self.dof_count, dtype=bool)
+        free_dofs[self.fixed_dof_indices] = False
+        free = np.nonzero(free_dofs)[0]
+        if free.shape[0] == 0:
+            raise ValueError("At least one free DOF is required to build FEM modes")
+
+        mass = self.mass_matrix[np.ix_(free, free)]
+        stiffness = self.stiffness_matrix[np.ix_(free, free)]
+        try:
+            chol = np.linalg.cholesky(mass)
+        except np.linalg.LinAlgError as exc:
+            raise ValueError("mass_matrix must be symmetric positive definite on free DOFs") from exc
+
+        inv_chol_stiffness = np.linalg.solve(chol, stiffness)
+        standard = np.linalg.solve(chol, inv_chol_stiffness.T).T
+        standard = 0.5 * (standard + standard.T)
+        eigenvalues, eigenvectors = np.linalg.eigh(standard)
+        order = np.argsort(eigenvalues)
+        eigenvalues = eigenvalues[order]
+        eigenvectors = eigenvectors[:, order]
+
+        valid = eigenvalues > self.eigenvalue_tolerance
+        valid_indices = np.nonzero(valid)[0]
+        if self.discard_mode_count:
+            valid_indices = valid_indices[self.discard_mode_count :]
+        if self.mode_count is not None:
+            valid_indices = valid_indices[: self.mode_count]
+        if valid_indices.shape[0] == 0:
+            raise ValueError("No eigenmodes remain after filtering")
+
+        free_modes = np.linalg.solve(chol.T, eigenvectors[:, valid_indices])
+        full_modes = np.zeros((self.dof_count, valid_indices.shape[0]), dtype=np.float64)
+        full_modes[free, :] = free_modes
+
+        mode_mass = np.zeros(valid_indices.shape[0], dtype=np.float64)
+        mode_stiffness = np.zeros(valid_indices.shape[0], dtype=np.float64)
+        mode_damping = np.zeros(valid_indices.shape[0], dtype=np.float64)
+        for i in range(valid_indices.shape[0]):
+            phi = full_modes[:, i]
+            modal_mass = float(phi @ self.mass_matrix @ phi)
+            if modal_mass <= 0.0:
+                raise ValueError(f"Mode {i} has non-positive modal mass {modal_mass}")
+            scale = 1.0 / math.sqrt(modal_mass)
+            full_modes[:, i] *= scale
+            phi = full_modes[:, i]
+            mode_mass[i] = float(phi @ self.mass_matrix @ phi)
+            mode_stiffness[i] = max(float(phi @ self.stiffness_matrix @ phi), 0.0)
+            if self.damping_matrix is not None:
+                mode_damping[i] = max(float(phi @ self.damping_matrix @ phi), 0.0)
+            elif self.damping_ratio > 0.0:
+                mode_damping[i] = 2.0 * self.damping_ratio * math.sqrt(mode_mass[i] * mode_stiffness[i])
+
+        nodal_phi = np.transpose(full_modes.reshape((self.node_count, 3, -1)), (0, 2, 1))
+        if self.sample_node_indices is None:
+            nodal_basis = ModalBasis(
+                self.node_positions,
+                nodal_phi,
+                mode_mass,
+                mode_stiffness,
+                mode_damping,
+                label=self.label,
+            )
+            sample_phi = np.asarray([nodal_basis.evaluate(point) for point in self.sample_points], dtype=np.float32)
+        else:
+            sample_phi = nodal_phi[self.sample_node_indices]
+
+        self.eigenvalues = mode_stiffness / np.maximum(mode_mass, 1.0e-12)
+        self.frequencies = np.sqrt(np.maximum(self.eigenvalues, 0.0)) / (2.0 * math.pi)
+        self.modal_matrix = np.array(full_modes, dtype=np.float64, copy=True)
+        return ModalBasis(
+            self.sample_points,
+            sample_phi,
+            mode_mass,
+            mode_stiffness,
+            mode_damping,
+            label=self.label,
+        )
+
+
 class ModalGeneratorBeam:
     """Build sampled linear modes for a straight Euler-Bernoulli beam.
 
@@ -655,6 +854,7 @@ class ModalGeneratorBeam:
 __all__ = [
     "ModalBasis",
     "ModalGeneratorBeam",
+    "ModalGeneratorFEM",
     "ModalGeneratorPOD",
     "ModalGeneratorSampled",
 ]

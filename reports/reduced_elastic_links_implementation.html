@@ -146,15 +146,17 @@
         <span class="tag">Deformed mesh rendering</span>
         <span class="tag">Optional displacement colors</span>
         <span class="tag">Euler-Bernoulli modes</span>
+        <span class="tag">Matrix ROM modes</span>
+        <span class="tag">Flexible dipper arm</span>
         <span class="tag">Analytic beam test</span>
       </div>
     </section>
 
     <section class="summary">
       <div class="metric"><strong>3</strong><span>new builder entry points</span></div>
-      <div class="metric"><strong>50</strong><span>focused CPU/CUDA unit cases</span></div>
-      <div class="metric"><strong>10</strong><span>headless ViewerGL MP4s</span></div>
-      <div class="metric"><strong>10</strong><span>public reduced-elastic examples</span></div>
+      <div class="metric"><strong>56</strong><span>focused CPU/CUDA unit cases</span></div>
+      <div class="metric"><strong>12</strong><span>headless ViewerGL MP4s</span></div>
+      <div class="metric"><strong>12</strong><span>public reduced-elastic examples</span></div>
     </section>
 
     <h2>What Changed</h2>
@@ -166,7 +168,7 @@
           <li><code>ModelBuilder.add_link_elastic()</code> creates an elastic link for articulated mechanisms.</li>
           <li><code>ModelBuilder.add_body_elastic()</code> mirrors <code>add_body()</code> for stand-alone floating elastic bodies.</li>
           <li><code>ModelBuilder.add_joint_elastic()</code> is the state-owner joint used by those helpers.</li>
-          <li><code>ModalBasis</code> stores sampled linear mode values; <code>ModalGeneratorBeam</code>, <code>ModalGeneratorPOD</code>, and <code>ModalGeneratorSampled</code> construct reusable bases.</li>
+          <li><code>ModalBasis</code> stores sampled linear mode values; <code>ModalGeneratorBeam</code>, <code>ModalGeneratorPOD</code>, <code>ModalGeneratorFEM</code>, and <code>ModalGeneratorSampled</code> construct reusable bases.</li>
           <li>The viewer now deforms elastic shape meshes from sampled modal basis values during <code>log_state()</code>, with an optional Matlab jet displacement-color diagnostic.</li>
         </ul>
       </section>
@@ -221,11 +223,13 @@
     <h2>Mode Basis</h2>
     <div class="section">
       <p>The demo modes are now generated through <code>ModalBasis</code> rather than per-body Python callables. <code>ModalBasis</code> stores GPU-friendly samples <code>phi[sample, mode]</code>; builders add attachment and surface sample points locally to that basis, then flatten the values into the current VBD arrays.</p>
+      <p><code>ModalGeneratorFEM</code> covers the Simscape-style matrix ROM path: users provide nodal coordinates plus <code>M</code>, <code>K</code>, and optional <code>C</code> matrices, Newton solves <code>K phi = lambda M phi</code>, mass-normalizes the selected eigenvectors, projects damping into modal space, and samples the resulting linear mode shapes at render vertices and joint interface nodes.</p>
       <p>The beam generator produces standard small-deflection fields. The four-bar coupler uses one axial extension mode and the first two pinned-pinned Euler-Bernoulli bending modes. The bending displacement includes the plane-section axial term <code>u_x = -y dw/dx</code>, so the rendered beam cross-section rotates consistently with the neutral-axis deflection. The elastic box render cache now subdivides the visible surface in <code>x</code>, <code>y</code>, and <code>z</code> at roughly 1 cm spacing, and the beam examples seed each modal basis with those exact render-surface vertices, diagnostic line points, and attachment points.</p>
       <p>The revolute endpoint fixture now uses eight independent linear POD modes extracted from finite-rotation torsion exemplar shapes. The initial 90 degree twist is a least-squares projection into that basis, so the held shape is nearly volume preserving without any example-side <code>q_twist^2</code> coordinate coupling. After release, all modal coordinates evolve through the solver as ordinary linear modal DOFs. The example test tracks deformed mesh volume and fails if the visible shaft gains or loses too much volume.</p>
       <p>The prismatic compression fixture uses an axial strain field with Poisson lateral strain. Its modal coordinate is driven from the same command as the prismatic actuator, so the doubled carriage stroke produces visible lateral bulging in compression and necking in extension while the fixed endpoints keep the elastic body in the joint hierarchy.</p>
       <p>The mechanism set now includes three mixed rigid/elastic textbook-style articulations. A slider-crank uses the analytic closure equation for a connecting rod with elastic axial extension. A Watt straight-line linkage, historically used to approximate straight-line guided motion from rotary links, attaches both endpoints and a guided midpoint follower to one elastic coupler. The Watt drive is only the ground-to-left-rocker revolute target; the elastic modal DOFs are passive. A bell-crank transfer, a standard lever mechanism for redirecting motion through an angle, uses two separate elastic pushrods between rigid rockers; only the input rocker joint is actuated, and the elastic modes respond through the joint constraints. The Watt target is now tripled and the bell-crank target doubled, with longer clips to make the coupled rigid/elastic motion easier to read.</p>
       <p>The gravity examples attach rigid weights to elastic bodies with ordinary fixed joints in a gravity-enabled model. A horizontal cantilever starts from an undeformed horizontal pose, drops under the attached weight, then runs with zero post-release modal damping while approaching the Euler-Bernoulli static tip displacement <code>delta = P L^3 / (3 E I)</code>. A vertical bar is fixed at a raised top fixture, carries a heavier lower suspended weight, starts unextended, and checks the measured end-to-end stretch <code>delta = |x_bottom - x_top| - L = P / k</code>.</p>
+      <p>The flexible dipper example is currently set up as a static horizontal sag diagnostic. The elastic arm starts perfectly straight, is pinned at an interior fulcrum roughly two-thirds up a shortened vertical post, and is held by a fixed-length lower hydraulic link with zero actuator stroke. This isolates the gravity-loaded response of the reduced beam. The modal solve now projects the same translational joint damping force used by the rigid VBD joint evaluator, so the arm reaches its gravity sag quickly and settles instead of creeping slowly.</p>
       <p>The vibration example uses a stiffer, lightly damped finite-mass mode and releases the beam from an initial deflection, producing a quick underdamped ring-down. <code>ModalGeneratorPOD</code> starts the exemplar-deformation path by extracting linear modes from sampled displacement snapshots.</p>
     </div>
 
@@ -246,6 +250,8 @@
         <tr><td>Elastic Slider-Crank</td><td>3</td><td>3</td></tr>
         <tr><td>Elastic Watt Linkage</td><td>3</td><td>3</td></tr>
         <tr><td>Elastic Bell-Crank Transfer</td><td>4</td><td>2 + 2</td></tr>
+        <tr><td>Matrix ROM Bracket</td><td>6</td><td>6</td></tr>
+        <tr><td>Flexible Dipper Arm</td><td>4</td><td>4</td></tr>
         <tr><td>Cantilever Tip Load</td><td>1</td><td>1</td></tr>
         <tr><td>Cantilever Vibration</td><td>1</td><td>1</td></tr>
         <tr><td>Cantilever With Rigid Weight</td><td>1</td><td>1</td></tr>
@@ -256,7 +262,7 @@
 
     <h2>Displacement Coloring</h2>
     <div class="section">
-      <p><code>ViewerBase.show_elastic_strain</code> is available as an optional diagnostic that colors each elastic render vertex by modal displacement magnitude relative to the rest shape. This is not true mechanical strain. The report videos leave the diagnostic disabled and use the default orange elastic mesh color so the examples show the deformed geometry directly.</p>
+      <p><code>ViewerBase.show_elastic_strain</code> is available as an optional diagnostic that colors each elastic render vertex by modal displacement magnitude relative to the rest shape. This is not true mechanical strain. The matrix ROM bracket and flexible dipper arm enable it to highlight where the modal response concentrates; the other report videos leave the diagnostic disabled and use the default orange elastic mesh color so the examples show the deformed geometry directly.</p>
     </div>
 
     <h2>Videos</h2>
@@ -264,52 +270,62 @@
       <section class="section">
         <h3>Elastic 4-Bar Linkage</h3>
         <p>The coupler is an elastic link in a revolute-jointed four-bar. The orange coupler mesh is deformed directly from axial and Euler-Bernoulli bending modes; the cyan centerline is only a diagnostic overlay.</p>
-        <video controls preload="metadata" data-video-src="assets/reduced_elastic_fourbar.mp4?datetime=20260504T021508Z"></video>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_fourbar.mp4?datetime=20260504T192431Z"></video>
       </section>
       <section class="section">
         <h3>Revolute Torsion Fixture</h3>
         <p>A revolute endpoint aligned with the shaft axis leaves the centerline unchanged. The rectangular shaft starts from held 90 degree finite-rotation torsion fields, then releases with low modal damping while tracking mesh volume drift.</p>
-        <video controls preload="metadata" data-video-src="assets/elastic_revolute_endpoint_fixture.mp4?datetime=20260504T021508Z"></video>
+        <video controls preload="metadata" data-video-src="assets/elastic_revolute_endpoint_fixture.mp4?datetime=20260504T192431Z"></video>
       </section>
       <section class="section">
         <h3>Prismatic Compression Fixture</h3>
         <p>A rotating base drives a prismatic carriage through a doubled stroke attached to an elastic bar. The axial mode includes Poisson lateral strain, so the mesh visibly bulges under compression and necks under extension while rotating with the parent frame.</p>
-        <video controls preload="metadata" data-video-src="assets/reduced_elastic_prismatic_compression.mp4?datetime=20260504T021508Z"></video>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_prismatic_compression.mp4?datetime=20260504T192431Z"></video>
       </section>
       <section class="section">
         <h3>Elastic Slider-Crank</h3>
         <p>A rigid crank drives a rigid slider through an elastic connecting rod. The test compares slider position to the analytic slider-crank closure using the rod's current axial modal coordinate.</p>
-        <video controls preload="metadata" data-video-src="assets/reduced_elastic_crank_slider.mp4?datetime=20260504T021508Z"></video>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_crank_slider.mp4?datetime=20260504T192431Z"></video>
       </section>
       <section class="section">
         <h3>Elastic Watt Linkage</h3>
         <p>A Watt-style straight-line linkage constrains the elastic coupler endpoints through rigid rockers and attaches a guided midpoint follower to the same elastic body. Driven DOF: ground-to-left-rocker revolute target with tripled displacement. Elastic modal DOFs are passive.</p>
-        <video controls preload="metadata" data-video-src="assets/reduced_elastic_watt_linkage.mp4?datetime=20260504T021508Z"></video>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_watt_linkage.mp4?datetime=20260504T192431Z"></video>
       </section>
       <section class="section">
         <h3>Elastic Bell-Crank Transfer</h3>
         <p>Two elastic pushrods transmit motion from an actuated input rocker through a rigid bell crank to an output rocker, redirecting the input rotation through the central lever. The input rocker displacement is doubled, the elastic modes are not directly driven, and each pushrod is checked against its analytic modal length.</p>
-        <video controls preload="metadata" data-video-src="assets/reduced_elastic_bellcrank.mp4?datetime=20260504T021508Z"></video>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_bellcrank.mp4?datetime=20260504T192431Z"></video>
+      </section>
+      <section class="section">
+        <h3>Matrix ROM Bracket</h3>
+        <p>A perforated bracket starts from nodal mass, stiffness, and damping matrices. <code>ModalGeneratorFEM</code> extracts six mass-normalized modes; a low-damping kinematic gripper drives the fixed left interface through fast vertical move-and-hold segments, a rigid payload hangs from the right interface, and displacement coloring highlights the transient matrix-derived modal response.</p>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_matrix_rom.mp4?datetime=20260504T192431Z"></video>
+      </section>
+      <section class="section">
+        <h3>Flexible Dipper Arm</h3>
+        <p>A straight-start dipper arm is pinned at an interior fulcrum on a shortened support post, held by a fixed-length lower hydraulic link, and loaded at the tool end. With piston actuation disabled, the clip shows the gravity sag settling response after the modal solve includes the same translational joint damping force as the rigid joint path.</p>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_dipper_arm.mp4?datetime=20260505T034057Z"></video>
       </section>
       <section class="section">
         <h3>Cantilever Tip Load</h3>
         <p>A single elastic link uses the exact Euler-Bernoulli cantilever tip-load shape. The modal coordinate tracks the analytic static solution as the load varies.</p>
-        <video controls preload="metadata" data-video-src="assets/reduced_elastic_cantilever_beam.mp4?datetime=20260504T021508Z"></video>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_cantilever_beam.mp4?datetime=20260504T192431Z"></video>
       </section>
       <section class="section">
         <h3>Cantilever Vibration</h3>
         <p>The same reduced beam formulation is given finite modal mass and released from an initial deflection, so the visible motion comes from modal dynamics rather than a prescribed load.</p>
-        <video controls preload="metadata" data-video-src="assets/reduced_elastic_cantilever_vibration.mp4?datetime=20260504T021508Z"></video>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_cantilever_vibration.mp4?datetime=20260504T192431Z"></video>
       </section>
       <section class="section">
         <h3>Cantilever With Rigid Weight</h3>
         <p>A fixed elastic beam starts horizontal, carries a rigid tip mass in gravity, and uses zero post-release modal damping. The reduced coordinate uses the exact Euler-Bernoulli tip-load shape, and the final deflection is checked against <code>P L^3 / (3 E I)</code>.</p>
-        <video controls preload="metadata" data-video-src="assets/reduced_elastic_cantilever_weight.mp4?datetime=20260504T021508Z"></video>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_cantilever_weight.mp4?datetime=20260504T192431Z"></video>
       </section>
       <section class="section">
         <h3>Vertical Suspended Weight</h3>
         <p>A vertical elastic bar is fixed at a raised top fixture and supports a much heavier rigid block under gravity. It starts unextended, visibly stretches, and the top-fixed axial mode includes Poisson lateral contraction while the example checks measured total stretch rather than compression.</p>
-        <video controls preload="metadata" data-video-src="assets/reduced_elastic_vertical_weight.mp4?datetime=20260504T021508Z"></video>
+        <video controls preload="metadata" data-video-src="assets/reduced_elastic_vertical_weight.mp4?datetime=20260504T192431Z"></video>
       </section>
     </div>
 
@@ -326,6 +342,7 @@
         <tr><td><code>test_modal_basis_add_sample</code></td><td>Basis-local sampled linear mode storage and duplicate sample handling.</td></tr>
         <tr><td><code>test_modal_generator_beam_samples</code></td><td>Analytic axial, pinned-pinned bending, and torsion samples from <code>ModalGeneratorBeam</code>.</td></tr>
         <tr><td><code>test_modal_generator_pod_rank_one</code></td><td>POD basis extraction from exemplar displacement samples with heuristic mass/stiffness.</td></tr>
+        <tr><td><code>test_modal_generator_fem_matrix_rom</code></td><td>Generalized matrix eigen solve, mass normalization, and modal damping projection for a nodal <code>M/K/C</code> model.</td></tr>
         <tr><td><code>test_elastic_fk_sync</code></td><td>FFRF pose/twist transfer through <code>eval_fk</code>.</td></tr>
         <tr><td><code>test_elastic_endpoint_shape_sampling</code></td><td>Sampling mode shapes at ordinary joint child transforms.</td></tr>
         <tr><td><code>test_elastic_endpoint_modal_basis_sampling</code></td><td>Sampling a <code>ModalBasis</code> at a revolute attachment and storing the basis-local sample index.</td></tr>
@@ -346,6 +363,8 @@
         <tr><td><code>test_vbd_prismatic_rotates_elastic_child</code></td><td>A prismatic joint from a rotating rigid parent carries the parent orientation onto an elastic child.</td></tr>
         <tr><td><code>test_crank_slider_elastic_analytic_geometry</code></td><td>Textbook slider-crank closure with elastic axial extension in the connecting rod.</td></tr>
         <tr><td><code>test_elastic_multiple_attachment_samples</code></td><td>Independent endpoint and midpoint attachment samples on one elastic body.</td></tr>
+        <tr><td><code>test_matrix_rom_example</code></td><td>Matrix-derived perforated bracket with fixed-joint interfaces, rigid payload, and visible modal excitation.</td></tr>
+        <tr><td><code>test_dipper_arm_example</code></td><td>Flexible dipper arm with revolute root, prismatic actuator loop, suspended payload, visible passive bending, and bounded volume drift.</td></tr>
       </tbody>
     </table>
 
