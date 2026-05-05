@@ -44,3 +44,7 @@ uvx --with virtualenv asv run --launch-method spawn main^!
   - Implement `test_final()` — runs after the example completes to verify simulation state is valid.
   - Optionally implement `test_post_step()` — runs after every `step()` for per-step validation.
 - Register in `README.md` with uv command and a 320x320 jpg screenshot.
+
+## Reduced Elastic Work
+
+- Before changing reduced elastic bodies, modal bases, or VBD coupling, read `docs/guide/reduced_elastic_agent_notes.md`.
