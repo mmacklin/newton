@@ -112,7 +112,8 @@ class SolverVBD(SolverBase):
         - Coupled particle-rigid body systems
 
     For rigid bodies, the AVBD algorithm uses **soft constraints** with adaptive penalty parameters
-    for joints and contacts. Hard constraints are not currently enforced.
+    for contacts and, by default, for joints. Joint penalties can also be pinned to fixed stiffness
+    values with ``rigid_joint_adaptive_stiffness=False``. Hard constraints are not currently enforced.
 
     Joint limitations:
         - Supported joint types: BALL, FIXED, FREE, REVOLUTE, PRISMATIC, D6, CABLE, ELASTIC.
@@ -205,6 +206,7 @@ class SolverVBD(SolverBase):
         rigid_joint_angular_ke: float = 1.0e9,  # AVBD: stiffness cap for non-cable angular joint constraints (FIXED/REVOLUTE/PRISMATIC/D6)
         rigid_joint_linear_kd: float = 1.0e-2,  # AVBD: Rayleigh damping coefficient for non-cable linear joint constraints
         rigid_joint_angular_kd: float = 0.0,  # AVBD: Rayleigh damping coefficient for non-cable angular joint constraints
+        rigid_joint_adaptive_stiffness: bool = True,
         rigid_body_contact_buffer_size: int = 64,
         rigid_body_particle_contact_buffer_size: int = 256,
         rigid_enable_dahl_friction: bool = False,  # Cable bending plasticity/hysteresis
@@ -274,6 +276,9 @@ class SolverVBD(SolverBase):
                 ``rigid_joint_linear_ke``).
             rigid_joint_angular_kd: Rayleigh damping coefficient for non-cable angular joint constraints (paired with
                 ``rigid_joint_angular_ke``).
+            rigid_joint_adaptive_stiffness: Whether to use AVBD adaptive penalty growth for joint constraints.
+                If False, joint penalties are fixed at their per-constraint stiffness caps and joint penalty warmstart
+                and dual updates are skipped. Contact penalties remain adaptive.
             rigid_body_contact_buffer_size: Max body-body (rigid-rigid) contacts per rigid body for per-body contact lists (tune based on expected body-body contact density).
             rigid_body_particle_contact_buffer_size: Max body-particle (rigid-particle) contacts per rigid body for per-body soft-contact lists (tune based on expected body-particle contact density).
             rigid_enable_dahl_friction: Enable Dahl hysteresis friction model for cable bending (default: False).
@@ -333,6 +338,7 @@ class SolverVBD(SolverBase):
             rigid_joint_angular_ke,
             rigid_joint_linear_kd,
             rigid_joint_angular_kd,
+            rigid_joint_adaptive_stiffness,
             rigid_body_contact_buffer_size,
             rigid_body_particle_contact_buffer_size,
             rigid_enable_dahl_friction,
@@ -463,6 +469,7 @@ class SolverVBD(SolverBase):
         rigid_joint_angular_ke: float,
         rigid_joint_linear_kd: float,
         rigid_joint_angular_kd: float,
+        rigid_joint_adaptive_stiffness: bool,
         rigid_body_contact_buffer_size: int,
         rigid_body_particle_contact_buffer_size: int,
         rigid_enable_dahl_friction: bool,
@@ -485,6 +492,7 @@ class SolverVBD(SolverBase):
         self.rigid_joint_angular_ke = max(0.0, rigid_joint_angular_ke)
         self.rigid_joint_linear_kd = max(0.0, rigid_joint_linear_kd)
         self.rigid_joint_angular_kd = max(0.0, rigid_joint_angular_kd)
+        self.rigid_joint_adaptive_stiffness = rigid_joint_adaptive_stiffness
 
         # -------------------------------------------------------------
         # Rigid-only AVBD state (used when SolverVBD integrates bodies)
@@ -914,6 +922,12 @@ class SolverVBD(SolverBase):
                 else:
                     # Layout builder already validated supported types; nothing to do for FREE.
                     pass
+
+            if not self.rigid_joint_adaptive_stiffness:
+                # Fixed joint stiffness mode: pin every joint penalty to the configured cap.
+                # This leaves contact AVBD untouched and avoids residual-dependent joint penalty growth.
+                joint_k_min_np = joint_k_max_np.copy()
+                joint_k0_np = joint_k_max_np.copy()
 
             # Upload to device: initial penalties, per-constraint caps, damping, and warmstart floors.
             self.joint_penalty_k_min = wp.array(joint_k_min_np, dtype=float, device=self.device)
@@ -1503,6 +1517,7 @@ class SolverVBD(SolverBase):
                 model.elastic_max_mode_count,
                 model.body_elastic_index,
                 state_out.body_q,
+                self.body_q_prev,
                 model.joint_type,
                 model.joint_enabled,
                 model.joint_parent,
@@ -1514,6 +1529,7 @@ class SolverVBD(SolverBase):
                 model.joint_qd_start,
                 self.joint_constraint_start,
                 self.joint_penalty_k,
+                self.joint_penalty_kd,
                 model.joint_parent_elastic_endpoint,
                 model.joint_child_elastic_endpoint,
                 control.joint_f,
@@ -1751,7 +1767,7 @@ class SolverVBD(SolverBase):
 
                 # Warmstart AVBD penalty parameters for joints using the same cadence
                 # as rigid history updates.
-                if model.joint_count > 0:
+                if model.joint_count > 0 and self.rigid_joint_adaptive_stiffness:
                     wp.launch(
                         kernel=warmstart_joints,
                         inputs=[
@@ -2305,7 +2321,7 @@ class SolverVBD(SolverBase):
                 )
 
         # Update joint penalties at new positions
-        if model.joint_count > 0:
+        if model.joint_count > 0 and self.rigid_joint_adaptive_stiffness:
             wp.launch(
                 kernel=update_duals_joint,
                 dim=model.joint_count,

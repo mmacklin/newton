@@ -162,6 +162,7 @@ def solve_elastic_modes_from_joint_constraints(
     elastic_max_mode_count: int,
     body_elastic_index: wp.array(dtype=wp.int32),
     body_q: wp.array(dtype=wp.transform),
+    body_q_prev: wp.array(dtype=wp.transform),
     joint_type: wp.array(dtype=int),
     joint_enabled: wp.array(dtype=bool),
     joint_parent: wp.array(dtype=int),
@@ -173,6 +174,7 @@ def solve_elastic_modes_from_joint_constraints(
     joint_qd_start: wp.array(dtype=wp.int32),
     joint_constraint_start: wp.array(dtype=wp.int32),
     joint_penalty_k: wp.array(dtype=float),
+    joint_penalty_kd: wp.array(dtype=float),
     joint_parent_elastic_endpoint: wp.array(dtype=wp.int32),
     joint_child_elastic_endpoint: wp.array(dtype=wp.int32),
     joint_f: wp.array(dtype=float),
@@ -230,6 +232,7 @@ def solve_elastic_modes_from_joint_constraints(
             k = joint_penalty_k[c_start]
             if k <= 0.0:
                 continue
+            kd = joint_penalty_kd[c_start]
 
             parent = joint_parent[joint]
             child = joint_child[joint]
@@ -263,16 +266,52 @@ def solve_elastic_modes_from_joint_constraints(
                 elastic_endpoint_phi,
                 elastic_max_mode_count,
             )
+            X_pj_prev = _elastic_endpoint_xform(
+                joint,
+                parent,
+                True,
+                joint_X_p[joint],
+                body_elastic_index,
+                elastic_joint,
+                elastic_mode_count,
+                joint_q_prev,
+                joint_q_start,
+                joint_parent_elastic_endpoint,
+                joint_child_elastic_endpoint,
+                elastic_endpoint_phi,
+                elastic_max_mode_count,
+            )
+            X_cj_prev = _elastic_endpoint_xform(
+                joint,
+                child,
+                False,
+                joint_X_c[joint],
+                body_elastic_index,
+                elastic_joint,
+                elastic_mode_count,
+                joint_q_prev,
+                joint_q_start,
+                joint_parent_elastic_endpoint,
+                joint_child_elastic_endpoint,
+                elastic_endpoint_phi,
+                elastic_max_mode_count,
+            )
 
             if parent >= 0:
                 X_wp = body_q[parent] * X_pj
+                X_wp_prev = body_q_prev[parent] * X_pj_prev
             else:
                 X_wp = X_pj
+                X_wp_prev = X_pj_prev
             X_wc = body_q[child] * X_cj
+            X_wc_prev = body_q_prev[child] * X_cj_prev
 
             x_p = wp.transform_get_translation(X_wp)
             x_c = wp.transform_get_translation(X_wc)
             C = x_c - x_p
+            x_p_prev = wp.transform_get_translation(X_wp_prev)
+            x_c_prev = wp.transform_get_translation(X_wc_prev)
+            C_prev = x_c_prev - x_p_prev
 
             P = wp.identity(3, float)
             if jt == JointType.PRISMATIC:
@@ -288,8 +327,15 @@ def solve_elastic_modes_from_joint_constraints(
 
             PC = P * C
             PdC = P * dC
-            grad = grad + k * wp.dot(PC, PdC)
-            h = h + k * wp.dot(PdC, PdC)
+            joint_force = k * PC
+            joint_h = k * wp.dot(PdC, PdC)
+            if kd > 0.0:
+                dC_dt = (C - C_prev) * inv_dt
+                joint_force = joint_force + (kd * k) * (P * dC_dt)
+                joint_h = joint_h + (kd * inv_dt) * k * wp.dot(PdC, PdC)
+
+            grad = grad + wp.dot(joint_force, PdC)
+            h = h + joint_h
 
         if h > 0.0:
             q_new = q - grad / h
