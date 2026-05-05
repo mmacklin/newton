@@ -92,6 +92,28 @@ def signed_arc_length(
     return angle * radius * float(orientation)
 
 
+@wp.func
+def advance_point_on_circle(
+    old_pt: wp.vec3,
+    center: wp.vec3,
+    radius: float,
+    plane_normal: wp.vec3,
+    orientation: int,
+    signed_arc: float,
+) -> wp.vec3:
+    """Move old_pt along the rolling surface by a signed arc length."""
+    r_old = old_pt - center
+    r_old = r_old - wp.dot(r_old, plane_normal) * plane_normal
+    len_old = wp.length(r_old)
+    if len_old < 1.0e-8 or radius <= 0.0:
+        return old_pt
+
+    u_old = r_old / len_old
+    angle = -signed_arc / (radius * float(orientation))
+    tangent = wp.cross(plane_normal, u_old)
+    return center + radius * (wp.cos(angle) * u_old + wp.sin(angle) * tangent)
+
+
 @wp.kernel
 def update_tendon_attachments(
     body_q: wp.array(dtype=wp.transform),
@@ -168,7 +190,7 @@ def update_tendon_attachments(
             # case where adjacent pulley planes do not coincide.
             new_al = old_al
             new_ar = old_ar
-            for _iter in range(4):
+            for _iter in range(10):
                 new_ar = tangent_point_circle(new_al, center_r, radius_r, normal_r, orient_r)
                 new_al = tangent_point_circle(new_ar, center_l, radius_l, normal_l, -orient_l)
         elif type_l == int(TendonLinkType.ROLLING) and radius_l > 0.0:
@@ -180,14 +202,29 @@ def update_tendon_attachments(
 
         if apply_rolling_transfer != 0:
             rest = seg_rest_length[seg]
+            min_rest = 1.0e-6
 
             if type_l == int(TendonLinkType.ROLLING) and radius_l > 0.0:
-                rest = rest + signed_arc_length(old_al, new_al, center_l, radius_l, normal_l, orient_l)
+                delta_l = signed_arc_length(old_al, new_al, center_l, radius_l, normal_l, orient_l)
+                candidate = rest + delta_l
+                if candidate < min_rest:
+                    delta_l = min_rest - rest
+                    new_al = advance_point_on_circle(old_al, center_l, radius_l, normal_l, orient_l, delta_l)
+                    rest = min_rest
+                else:
+                    rest = candidate
 
             if type_r == int(TendonLinkType.ROLLING) and radius_r > 0.0:
-                rest = rest - signed_arc_length(old_ar, new_ar, center_r, radius_r, normal_r, orient_r)
+                delta_r = signed_arc_length(old_ar, new_ar, center_r, radius_r, normal_r, orient_r)
+                candidate = rest - delta_r
+                if candidate < min_rest:
+                    delta_r = rest - min_rest
+                    new_ar = advance_point_on_circle(old_ar, center_r, radius_r, normal_r, orient_r, delta_r)
+                    rest = min_rest
+                else:
+                    rest = candidate
 
-            seg_rest_length[seg] = wp.max(rest, 1.0e-6)
+            seg_rest_length[seg] = rest
 
         seg_attachment_l[seg] = new_al
         seg_attachment_r[seg] = new_ar
@@ -197,24 +234,35 @@ def update_tendon_attachments(
     if apply_pinhole_slip == 0:
         return
 
-    for i in range(num_links):
-        if i < 1 or i >= num_links - 1:
-            continue
-        link_idx = link_start + i
-        if tendon_link_type[link_idx] != int(TendonLinkType.PINHOLE):
-            continue
+    for s in range(num_segs):
+        seg = seg_offset + s
+        update = float(0.0)
 
-        seg_left = seg_offset + i - 1
-        seg_right = seg_offset + i
-        rest_sum = seg_rest_length[seg_left] + seg_rest_length[seg_right]
-        len_l = wp.length(seg_attachment_r[seg_left] - seg_attachment_l[seg_left])
-        len_r = wp.length(seg_attachment_r[seg_right] - seg_attachment_l[seg_right])
-        len_sum = len_l + len_r
+        for i in range(1, num_links - 1):
+            link_idx = link_start + i
+            if tendon_link_type[link_idx] != int(TendonLinkType.PINHOLE):
+                continue
 
-        if len_sum > 1.0e-8:
-            rest_l = rest_sum * len_l / len_sum
-            seg_rest_length[seg_left] = rest_l
-            seg_rest_length[seg_right] = rest_sum - rest_l
+            seg_left = seg_offset + i - 1
+            seg_right = seg_offset + i
+            len_l = wp.length(seg_attachment_r[seg_left] - seg_attachment_l[seg_left])
+            len_r = wp.length(seg_attachment_r[seg_right] - seg_attachment_l[seg_right])
+            d_l = len_l - seg_rest_length[seg_left]
+            d_r = len_r - seg_rest_length[seg_right]
+
+            if d_l < 0.0:
+                d_l = 0.0
+            if d_r < 0.0:
+                d_r = 0.0
+
+            if seg == seg_left:
+                update = update + d_l - d_r
+            elif seg == seg_right:
+                update = update - d_l + d_r
+
+        seg_rest_length[seg] = seg_rest_length[seg] + update
+
+
 @wp.kernel
 def solve_tendon_segments(
     body_q: wp.array(dtype=wp.transform),

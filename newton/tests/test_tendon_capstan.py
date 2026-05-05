@@ -86,6 +86,39 @@ def build_pinhole_atwood(mass_left=1.0, mass_right=3.0):
     return builder.finalize(), left, right
 
 
+def build_slack_pinhole_route():
+    builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=0.0)
+
+    left = builder.add_body(xform=wp.transform(p=wp.vec3(-1.0, 0.0, 0.0)), mass=0.0, is_kinematic=True)
+    pin = builder.add_body(xform=wp.transform(p=wp.vec3(0.0, 0.0, 0.0)), mass=0.0, is_kinematic=True)
+    right = builder.add_body(xform=wp.transform(p=wp.vec3(2.0, 0.0, 0.0)), mass=0.0, is_kinematic=True)
+    for body in (left, pin, right):
+        builder.add_shape_sphere(body, radius=0.01)
+
+    builder.add_tendon()
+    builder.add_tendon_link(
+        body=left,
+        link_type=int(TendonLinkType.ATTACHMENT),
+        offset=(0.0, 0.0, 0.0),
+    )
+    builder.add_tendon_link(
+        body=pin,
+        link_type=int(TendonLinkType.PINHOLE),
+        offset=(0.0, 0.0, 0.0),
+        compliance=1.0e-6,
+        rest_length=3.0,
+    )
+    builder.add_tendon_link(
+        body=right,
+        link_type=int(TendonLinkType.ATTACHMENT),
+        offset=(0.0, 0.0, 0.0),
+        compliance=1.0e-6,
+        rest_length=3.0,
+    )
+
+    return builder.finalize()
+
+
 def build_dynamic_pulley_atwood(mu=0.0, mass_left=1.0, mass_right=3.0, pulley_mass=5.0, pulley_radius=0.15):
     builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=-9.81)
 
@@ -298,6 +331,29 @@ def test_pinhole_slip_atwood(test, device):
         test.assertLess(right_z, 1.95, f"Heavy side should descend through pinhole slip: z={right_z:.4f}")
 
 
+def test_slack_pinhole_does_not_redistribute(test, device):
+    """Pinholes should transfer only taut excess, not proportionally repartition slack."""
+    with wp.ScopedDevice(device):
+        model = build_slack_pinhole_route()
+        solver = newton.solvers.SolverXPBD(model, iterations=4, joint_linear_relaxation=0.8)
+        state_0 = model.state()
+        state_1 = model.state()
+        control = model.control()
+        contacts = model.contacts()
+
+        initial = solver.tendon_seg_rest_length.numpy().copy()
+        solver.step(state_0, state_1, control, contacts, 1.0 / 60.0)
+        final = solver.tendon_seg_rest_length.numpy()
+
+        np.testing.assert_allclose(
+            final,
+            initial,
+            rtol=0.0,
+            atol=1.0e-6,
+            err_msg=f"Slack pinhole rest lengths should not be repartitioned: {initial} -> {final}",
+        )
+
+
 def test_dynamic_pulley_uses_angular_jacobian(test, device):
     """The baseline stretch row includes the rolling body's angular Jacobian."""
     with wp.ScopedDevice(device):
@@ -314,6 +370,32 @@ def test_dynamic_pulley_uses_angular_jacobian(test, device):
         test.assertGreater(left_z, 2.05, f"Light side should rise: z={left_z:.4f}")
         test.assertLess(right_z, 1.95, f"Heavy side should descend: z={right_z:.4f}")
         test.assertGreater(theta, 0.05, f"Pulley should rotate from the full angular Jacobian: theta={theta:.4f}")
+
+
+def test_pulley_inertia_limit_locks_cable_travel(test, device):
+    """As pulley inertia tends to infinity, no-slip cable travel tends to zero."""
+    with wp.ScopedDevice(device):
+        radius = 0.15
+        model, _, _, pulley_idx = build_dynamic_pulley_atwood(
+            mu=0.0,
+            mass_left=1.0,
+            mass_right=3.0,
+            pulley_mass=5000.0,
+            pulley_radius=radius,
+        )
+        state = run_model(model, num_frames=80)
+        body_q = state.body_q.numpy()
+        test.assertTrue(np.isfinite(body_q).all(), "Non-finite high-inertia pulley state")
+
+        q = body_q[pulley_idx]
+        theta = abs(2.0 * np.arctan2(float(q[4]), float(q[6])))
+        rim_travel = theta * radius
+
+        test.assertLess(
+            rim_travel,
+            5.0e-3,
+            f"High-inertia no-slip pulley should lock cable travel: R*theta={rim_travel:.6f}, theta={theta:.6f}",
+        )
 
 
 def test_mu_is_ignored_in_baseline(test, device):
@@ -380,15 +462,91 @@ def test_motorized_pulley_couples_without_delay(test, device):
         test.assertGreater(slider_dx, 0.02, f"Pulley rotation should immediately pull cable: dx={slider_dx:.4f}")
 
 
+def test_motorized_pulley_updates_rest_in_first_step(test, device):
+    """Rolling surface transfer should happen in the same XPBD step as pulley rotation."""
+    with wp.ScopedDevice(device):
+        model, _, pulley_idx, drive_joint = build_motorized_pulley_drive(mu=0.0)
+        solver = newton.solvers.SolverXPBD(model, iterations=12, joint_linear_relaxation=0.8)
+        state_0 = model.state()
+        state_1 = model.state()
+        control = model.control()
+        contacts = model.contacts()
+        newton.eval_fk(model, model.joint_q, model.joint_qd, state_0)
+
+        dof_start = int(model.joint_qd_start.numpy()[drive_joint])
+        initial_rest = solver.tendon_seg_rest_length.numpy().copy()
+        control.joint_target_pos[dof_start : dof_start + 1].fill_(1.0)
+
+        state_0.clear_forces()
+        model.collide(state_0, contacts)
+        solver.step(state_0, state_1, control, contacts, 1.0 / 60.0 / 10.0)
+
+        body_q = state_1.body_q.numpy()
+        theta = abs(2.0 * np.arctan2(float(body_q[pulley_idx][5]), float(body_q[pulley_idx][6])))
+        rest_delta = solver.tendon_seg_rest_length.numpy() - initial_rest
+
+        test.assertGreater(theta, 1.0e-3, f"Drive pulley should rotate in the first step: theta={theta:.6f}")
+        test.assertGreater(
+            float(np.max(np.abs(rest_delta))),
+            1.0e-4,
+            f"Pulley rotation should transfer rolling rest length in the first step: delta={rest_delta}",
+        )
+
+
+def test_rolling_transfer_saturates_at_zero_span(test, device):
+    """Rolling transfer should clamp before a free span goes negative."""
+    with wp.ScopedDevice(device):
+        model, slider_idx, _, drive_joint = build_motorized_pulley_drive(mu=0.0)
+        solver = newton.solvers.SolverXPBD(model, iterations=12, joint_linear_relaxation=0.8)
+        state_0 = model.state()
+        state_1 = model.state()
+        control = model.control()
+        contacts = model.contacts()
+        newton.eval_fk(model, model.joint_q, model.joint_qd, state_0)
+
+        dof_start = int(model.joint_qd_start.numpy()[drive_joint])
+        dt = 1.0 / 60.0 / 10.0
+        saturated_x = None
+
+        for frame in range(60):
+            control.joint_target_pos[dof_start : dof_start + 1].fill_(8.0)
+            for _ in range(10):
+                state_0.clear_forces()
+                model.collide(state_0, contacts)
+                solver.step(state_0, state_1, control, contacts, dt)
+                state_0, state_1 = state_1, state_0
+
+            rest = solver.tendon_seg_rest_length.numpy()
+            if saturated_x is None and np.min(rest) <= 1.1e-6:
+                body_q = state_0.body_q.numpy()
+                saturated_x = float(body_q[slider_idx][0])
+
+        body_q = state_0.body_q.numpy()
+        final_x = float(body_q[slider_idx][0])
+        rest = solver.tendon_seg_rest_length.numpy()
+
+        test.assertIsNotNone(saturated_x, "Driven pulley should exhaust one adjacent free span")
+        test.assertGreaterEqual(float(np.min(rest)), 0.99e-6, f"Rest lengths must stay non-negative: {rest}")
+        test.assertLess(
+            abs(final_x - saturated_x),
+            1.0e-2,
+            f"Slider should lock once a free span is exhausted: {final_x:.6f} vs {saturated_x:.6f}",
+        )
+
+
 devices = ["cpu"]
 if wp.is_cuda_available():
     devices.append("cuda:0")
 
 add_test(TestTendonCapstan, "pinhole_slip_atwood", devices, test_pinhole_slip_atwood)
+add_test(TestTendonCapstan, "slack_pinhole_does_not_redistribute", devices, test_slack_pinhole_does_not_redistribute)
 add_test(TestTendonCapstan, "dynamic_pulley_uses_angular_jacobian", devices, test_dynamic_pulley_uses_angular_jacobian)
+add_test(TestTendonCapstan, "pulley_inertia_limit_locks_cable_travel", devices, test_pulley_inertia_limit_locks_cable_travel)
 add_test(TestTendonCapstan, "mu_is_ignored_in_baseline", devices, test_mu_is_ignored_in_baseline)
 add_test(TestTendonCapstan, "motorized_pulley_drives_slider", devices, test_motorized_pulley_drives_slider)
 add_test(TestTendonCapstan, "motorized_pulley_couples_without_delay", devices, test_motorized_pulley_couples_without_delay)
+add_test(TestTendonCapstan, "motorized_pulley_updates_rest_in_first_step", devices, test_motorized_pulley_updates_rest_in_first_step)
+add_test(TestTendonCapstan, "rolling_transfer_saturates_at_zero_span", devices, test_rolling_transfer_saturates_at_zero_span)
 
 
 if __name__ == "__main__":

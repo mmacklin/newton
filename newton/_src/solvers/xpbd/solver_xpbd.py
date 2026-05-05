@@ -522,32 +522,11 @@ class SolverXPBD(SolverBase):
                 edge_constraint_lambdas = wp.empty_like(model.edge_rest_angle)
 
             # Tendon constraints are solved with the baseline Cable Joints
-            # path: update route geometry/rest lengths, then solve segment
-            # stretch constraints with the full angular Jacobian.
+            # path: each solver iteration updates route geometry/rest lengths,
+            # then solves segment stretch constraints with the full angular
+            # Jacobian.
             if model.tendon_segment_count > 0 and body_q is not None:
                 self.tendon_seg_lambda.zero_()
-                wp.launch(
-                    kernel=update_tendon_attachments,
-                    dim=model.tendon_count,
-                    inputs=[
-                        body_q,
-                        model.tendon_start,
-                        model.tendon_link_body,
-                        model.tendon_link_type,
-                        model.tendon_link_radius,
-                        model.tendon_link_orientation,
-                        model.tendon_link_offset,
-                        model.tendon_link_axis,
-                        self.tendon_seg_rest_length,
-                        self.tendon_seg_attachment_l,
-                        self.tendon_seg_attachment_r,
-                        self.tendon_seg_attachment_l_local,
-                        self.tendon_seg_attachment_r_local,
-                        1,
-                        1,
-                    ],
-                    device=model.device,
-                )
 
             for i in range(self.iterations):
                 with wp.ScopedTimer(f"iteration_{i}", False):
@@ -812,6 +791,29 @@ class SolverXPBD(SolverBase):
 
                     # solve tendon segment distance constraints
                     if model.tendon_segment_count > 0 and body_q is not None:
+                        wp.launch(
+                            kernel=update_tendon_attachments,
+                            dim=model.tendon_count,
+                            inputs=[
+                                body_q,
+                                model.tendon_start,
+                                model.tendon_link_body,
+                                model.tendon_link_type,
+                                model.tendon_link_radius,
+                                model.tendon_link_orientation,
+                                model.tendon_link_offset,
+                                model.tendon_link_axis,
+                                self.tendon_seg_rest_length,
+                                self.tendon_seg_attachment_l,
+                                self.tendon_seg_attachment_r,
+                                self.tendon_seg_attachment_l_local,
+                                self.tendon_seg_attachment_r_local,
+                                1,
+                                1,
+                            ],
+                            device=model.device,
+                        )
+
                         if requires_grad:
                             body_deltas = wp.zeros_like(body_deltas)
                         else:

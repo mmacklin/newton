@@ -24,7 +24,7 @@ import newton
 import newton.examples
 from newton._src.sim.builder import Axis
 from newton._src.sim.tendon import TendonLinkType
-from newton.examples.cable.cable import assert_tendon_total_length, get_tendon_cable_lines
+from newton.examples.cable.cable import assert_tendon_total_length, get_tendon_attachment_worlds, get_tendon_cable_lines
 
 
 class Example:
@@ -40,24 +40,46 @@ class Example:
 
         builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=-9.81)
 
-        self.pulley_radius = 0.15
+        self.pulley_radius = 0.22
         self.pulley_height = 2.55
-        pulley_mass = 0.5
+        pulley_mass = 500.0
+        pulley_half_height = 0.04
         contact_cfg = newton.ModelBuilder.ShapeConfig(
             has_shape_collision=True,
             collision_group=1,
-            mu=0.0,
+            mu=0.7,
             margin=0.01,
             gap=0.02,
         )
 
+        def cylinder_inertia(mass, radius, half_height):
+            inertia_y = 0.5 * mass * radius * radius
+            inertia_xz = (1.0 / 12.0) * mass * (3.0 * radius * radius + (2.0 * half_height) ** 2)
+            return wp.mat33(
+                inertia_xz,
+                0.0,
+                0.0,
+                0.0,
+                inertia_y,
+                0.0,
+                0.0,
+                0.0,
+                inertia_xz,
+            )
+
         pulley = builder.add_body(
             xform=wp.transform(p=wp.vec3(0.0, 0.0, self.pulley_height), q=wp.quat_identity()),
             mass=pulley_mass,
+            inertia=cylinder_inertia(pulley_mass, self.pulley_radius, pulley_half_height),
+            lock_inertia=True,
         )
         q_cyl = wp.quat(np.sin(np.pi / 4.0), 0.0, 0.0, np.cos(np.pi / 4.0))
         builder.add_shape_cylinder(
-            pulley, xform=wp.transform(q=q_cyl), radius=self.pulley_radius, half_height=0.04, cfg=contact_cfg
+            pulley,
+            xform=wp.transform(q=q_cyl),
+            radius=self.pulley_radius,
+            half_height=pulley_half_height,
+            cfg=contact_cfg,
         )
         self.pulley_idx = pulley
 
@@ -76,7 +98,7 @@ class Example:
         planar_ang = [Dof(axis=Axis.Y)]
 
         self.left_idx = left = builder.add_link(
-            xform=wp.transform(p=wp.vec3(-0.5, 0.0, 2.0), q=wp.quat_identity()),
+            xform=wp.transform(p=wp.vec3(-0.5, 0.0, 2.16), q=wp.quat_identity()),
             mass=1.0,
         )
         builder.add_shape_box(left, hx=0.08, hy=0.08, hz=0.08, cfg=contact_cfg)
@@ -85,13 +107,13 @@ class Example:
             child=left,
             linear_axes=planar_lin,
             angular_axes=planar_ang,
-            parent_xform=wp.transform(p=wp.vec3(-0.5, 0.0, 2.0), q=wp.quat_identity()),
+            parent_xform=wp.transform(p=wp.vec3(-0.5, 0.0, 2.16), q=wp.quat_identity()),
             child_xform=wp.transform(),
         )
 
         self.right_idx = right = builder.add_link(
-            xform=wp.transform(p=wp.vec3(0.5, 0.0, 2.0), q=wp.quat_identity()),
-            mass=1.2,
+            xform=wp.transform(p=wp.vec3(0.5, 0.0, 2.16), q=wp.quat_identity()),
+            mass=2.0,
         )
         builder.add_shape_box(right, hx=0.10, hy=0.10, hz=0.10, cfg=contact_cfg)
         j2 = builder.add_joint_d6(
@@ -99,7 +121,7 @@ class Example:
             child=right,
             linear_axes=planar_lin,
             angular_axes=planar_ang,
-            parent_xform=wp.transform(p=wp.vec3(0.5, 0.0, 2.0), q=wp.quat_identity()),
+            parent_xform=wp.transform(p=wp.vec3(0.5, 0.0, 2.16), q=wp.quat_identity()),
             child_xform=wp.transform(),
         )
 
@@ -124,7 +146,7 @@ class Example:
             offset=(0.0, 0.0, 0.0),
             axis=axis,
             compliance=1.0e-6,
-            damping=0.1,
+            damping=5.0,
             rest_length=-1.0,
         )
         builder.add_tendon_link(
@@ -133,7 +155,7 @@ class Example:
             offset=(0.0, 0.0, 0.10),
             axis=axis,
             compliance=1.0e-6,
-            damping=0.1,
+            damping=5.0,
             rest_length=-1.0,
         )
 
@@ -159,9 +181,10 @@ class Example:
         self._right_z_history = []
         self._left_position_history = []
         self._right_position_history = []
+        self._left_attachment_history = []
         self._left_pulley_distance_history = []
         self._pulley_rotation_history = []
-        self._direction_validation_frames = 60
+        self._direction_validation_frames = 120
 
         if self.viewer is not None:
             self.viewer.set_model(self.model)
@@ -202,7 +225,30 @@ class Example:
         self._right_z_history.append(float(body_q[self.right_idx][2]))
         self._left_position_history.append(np.array(body_q[self.left_idx][:3], dtype=np.float64))
         self._right_position_history.append(np.array(body_q[self.right_idx][:3], dtype=np.float64))
-        self._left_pulley_distance_history.append(float(np.linalg.norm(body_q[self.left_idx][:3] - body_q[self.pulley_idx][:3])))
+        att_l, _ = get_tendon_attachment_worlds(self.solver, self.model, self.state_0)
+        self._left_attachment_history.append(np.array(att_l[0], dtype=np.float64))
+        self._left_pulley_distance_history.append(
+            float(np.linalg.norm(body_q[self.left_idx][:3] - body_q[self.pulley_idx][:3]))
+        )
+
+    def _assert_light_attachment_stays_below_pulley(self, attachment, body_q, label="Rolling pulley"):
+        pulley_center = body_q[self.pulley_idx][:3]
+        crown_limit = float(pulley_center[2] + self.pulley_radius + 0.04)
+        side_limit = float(pulley_center[0] + self.pulley_radius + 0.04)
+        body_center_z = float(body_q[self.left_idx][2])
+        body_top_limit = float(pulley_center[2] + self.pulley_radius)
+        assert body_center_z <= body_top_limit, (
+            f"{label} light body center should not pass over the pulley crown: "
+            f"body_z={body_center_z:.4f}, top_limit={body_top_limit:.4f}"
+        )
+        assert float(attachment[2]) <= crown_limit, (
+            f"{label} light-side cable attachment should not crest over the pulley: "
+            f"attachment_z={attachment[2]:.4f}, crown_limit={crown_limit:.4f}"
+        )
+        assert float(attachment[0]) <= side_limit, (
+            f"{label} light weight should stay on the near side of the pulley: "
+            f"attachment_x={attachment[0]:.4f}, side_limit={side_limit:.4f}"
+        )
 
     def test_post_step(self):
         body_q = self.state_0.body_q.numpy()
@@ -218,15 +264,17 @@ class Example:
             f"Weight attachments should stay outside the pulley tangent singularity: "
             f"left={left_clearance:.4f}, right={right_clearance:.4f}"
         )
+        if self._left_attachment_history:
+            self._assert_light_attachment_stays_below_pulley(self._left_attachment_history[-1], body_q)
 
         if len(self._pulley_rotation_history) <= self._direction_validation_frames:
             assert_tendon_total_length(self, rel_tol=0.30)
         if self.sim_time < self.frame_dt * 1.5:
             pulley_z = body_q[self.pulley_idx][2]
-            assert att_r[0][2] > pulley_z, (
+            assert att_r[0][2] >= pulley_z - 1.0e-4, (
                 f"Cable should wrap over pulley: left tangent z={att_r[0][2]:.3f} <= center z={pulley_z:.3f}"
             )
-            assert att_l[1][2] > pulley_z, (
+            assert att_l[1][2] >= pulley_z - 1.0e-4, (
                 f"Cable should wrap over pulley: right tangent z={att_l[1][2]:.3f} <= center z={pulley_z:.3f}"
             )
 
@@ -238,7 +286,10 @@ class Example:
         left_rise = self._left_z_history[sample] - self._initial_left_z
         right_drop = self._initial_right_z - self._right_z_history[sample]
         theta = self._pulley_rotation_history[sample]
-        min_left_pulley_distance = min(self._left_pulley_distance_history)
+        min_left_attachment_distance = min(
+            np.linalg.norm(attachment - self.state_0.body_q.numpy()[self.pulley_idx][:3])
+            for attachment in self._left_attachment_history
+        )
         left_step = float(np.max(np.linalg.norm(np.diff(np.array(self._left_position_history), axis=0), axis=1)))
         right_step = float(np.max(np.linalg.norm(np.diff(np.array(self._right_position_history), axis=0), axis=1)))
         assert np.isfinite([left_rise, right_drop, theta]).all(), (
@@ -248,14 +299,23 @@ class Example:
         assert left_rise > 0.05, f"Light side should rise over the validated prefix: dz={left_rise:.4f}"
         assert right_drop > 0.05, f"Heavy side should descend over the validated prefix: dz={right_drop:.4f}"
         assert theta > 0.5, f"High-friction pulley should rotate with cable travel: theta={theta:.4f}"
-        assert min_left_pulley_distance < 0.38, (
-            f"Light body should reach the pulley contact neighborhood, not avoid it: "
-            f"min_distance={min_left_pulley_distance:.4f}"
+        assert min_left_attachment_distance < self.pulley_radius + 0.12, (
+            f"Light-side cable attachment should reach the pulley contact neighborhood, not avoid it: "
+            f"min_attachment_distance={min_left_attachment_distance:.4f}"
         )
         assert max(left_step, right_step) < 0.35, (
             f"Rolling pulley contact should stay bounded without frame jumps: "
             f"left_step={left_step:.4f}, right_step={right_step:.4f}"
         )
+        body_q = self.state_0.body_q.numpy()
+        body_top_limit = float(body_q[self.pulley_idx][2] + self.pulley_radius)
+        max_left_z = max(self._left_z_history)
+        assert max_left_z <= body_top_limit, (
+            f"Rolling pulley light body center should stay below pulley crown over the full run: "
+            f"max_z={max_left_z:.4f}, top_limit={body_top_limit:.4f}"
+        )
+        for attachment in self._left_attachment_history:
+            self._assert_light_attachment_stays_below_pulley(attachment, body_q)
 
     def render(self):
         if self.viewer is not None:

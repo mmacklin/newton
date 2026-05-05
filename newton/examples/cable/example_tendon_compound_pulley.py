@@ -19,7 +19,7 @@ import newton
 import newton.examples
 from newton._src.sim.builder import Axis
 from newton._src.sim.tendon import TendonLinkType
-from newton.examples.cable.cable import assert_tendon_total_length, get_tendon_cable_lines
+from newton.examples.cable.cable import assert_tendon_total_length, get_tendon_attachment_worlds, get_tendon_cable_lines
 
 
 class Example:
@@ -39,7 +39,7 @@ class Example:
         self.r2 = 0.20
         self.p1_pos = wp.vec3(-0.5, 0.0, 4.6)
         self.p2_pos = wp.vec3(0.5, 0.0, 4.2)
-        pulley_mass = 5.0
+        pulley_mass = 80.0
         self.pulley_mass = pulley_mass
         self.mass_light = 1.5
         self.mass_heavy = 4.0
@@ -53,9 +53,15 @@ class Example:
             inertia_y = 0.5 * mass * radius * radius
             inertia_xz = (1.0 / 12.0) * mass * (3.0 * radius * radius + (2.0 * half_height) ** 2)
             return wp.mat33(
-                inertia_xz, 0.0, 0.0,
-                0.0, inertia_y, 0.0,
-                0.0, 0.0, inertia_xz,
+                inertia_xz,
+                0.0,
+                0.0,
+                0.0,
+                inertia_y,
+                0.0,
+                0.0,
+                0.0,
+                inertia_xz,
             )
 
         def box_inertia(mass, hx, hy, hz):
@@ -63,9 +69,15 @@ class Example:
             sy = 2.0 * hy
             sz = 2.0 * hz
             return wp.mat33(
-                (1.0 / 12.0) * mass * (sy * sy + sz * sz), 0.0, 0.0,
-                0.0, (1.0 / 12.0) * mass * (sx * sx + sz * sz), 0.0,
-                0.0, 0.0, (1.0 / 12.0) * mass * (sx * sx + sy * sy),
+                (1.0 / 12.0) * mass * (sy * sy + sz * sz),
+                0.0,
+                0.0,
+                0.0,
+                (1.0 / 12.0) * mass * (sx * sx + sz * sz),
+                0.0,
+                0.0,
+                0.0,
+                (1.0 / 12.0) * mass * (sx * sx + sy * sy),
             )
 
         p1 = builder.add_body(
@@ -75,7 +87,9 @@ class Example:
             lock_inertia=True,
         )
         q_cyl = wp.quat(np.sin(np.pi / 4.0), 0.0, 0.0, np.cos(np.pi / 4.0))
-        builder.add_shape_cylinder(p1, xform=wp.transform(q=q_cyl), radius=self.r1, half_height=pulley_half_height, cfg=shape_cfg)
+        builder.add_shape_cylinder(
+            p1, xform=wp.transform(q=q_cyl), radius=self.r1, half_height=pulley_half_height, cfg=shape_cfg
+        )
         self.p1_idx = p1
         self._p1_theta = 0.0
         self._p2_theta = 0.0
@@ -84,6 +98,9 @@ class Example:
         self._pulley_rotation_history = []
         self._left_z_history = []
         self._right_z_history = []
+        self._left_position_history = []
+        self._right_position_history = []
+        self._left_attachment_history = []
         self._pulley_axis_error_history = []
         self._direction_validation_frames = 60
         self._axis_validation_frames = 60
@@ -94,7 +111,9 @@ class Example:
             inertia=cylinder_inertia(pulley_mass, self.r2, pulley_half_height),
             lock_inertia=True,
         )
-        builder.add_shape_cylinder(p2, xform=wp.transform(q=q_cyl), radius=self.r2, half_height=pulley_half_height, cfg=shape_cfg)
+        builder.add_shape_cylinder(
+            p2, xform=wp.transform(q=q_cyl), radius=self.r2, half_height=pulley_half_height, cfg=shape_cfg
+        )
         self.p2_idx = p2
 
         Dof = newton.ModelBuilder.JointDofConfig
@@ -116,7 +135,7 @@ class Example:
         )
 
         planar_lin = [Dof(axis=Axis.X), Dof(axis=Axis.Z)]
-        planar_ang = [Dof(axis=Axis.Y)]
+        planar_ang = []
 
         self.left_idx = left = builder.add_link(
             xform=wp.transform(p=wp.vec3(-0.8, 0.0, 2.0), q=wp.quat_identity()),
@@ -306,6 +325,10 @@ class Example:
         self._pulley_rotation_history.append((self._p1_theta, self._p2_theta))
         self._left_z_history.append(float(body_q[self.left_idx][2]))
         self._right_z_history.append(float(body_q[self.right_idx][2]))
+        self._left_position_history.append(np.array(body_q[self.left_idx][:3], dtype=np.float64))
+        self._right_position_history.append(np.array(body_q[self.right_idx][:3], dtype=np.float64))
+        att_l, _ = get_tendon_attachment_worlds(self.solver, self.model, self.state_0)
+        self._left_attachment_history.append(np.array(att_l[0], dtype=np.float64))
         pulley_positions = np.array(
             [
                 body_q[self.p1_idx][:3],
@@ -315,6 +338,19 @@ class Example:
         )
         axis_error = np.linalg.norm(pulley_positions - self._pulley_anchor_positions, axis=1)
         self._pulley_axis_error_history.append(tuple(axis_error))
+
+    def _assert_light_attachment_stays_below_p1(self, attachment, body_q):
+        p1_center = body_q[self.p1_idx][:3]
+        crown_limit = float(p1_center[2] + self.r1 + 0.04)
+        side_limit = float(p1_center[0] + self.r1)
+        assert float(attachment[2]) <= crown_limit, (
+            f"Compound pulley light-side cable attachment should not crest over P1: "
+            f"attachment_z={attachment[2]:.4f}, crown_limit={crown_limit:.4f}"
+        )
+        assert float(attachment[0]) <= side_limit, (
+            f"Compound pulley light weight should stay on the near side of P1: "
+            f"attachment_x={attachment[0]:.4f}, side_limit={side_limit:.4f}"
+        )
 
     def test_post_step(self):
         body_q = self.state_0.body_q.numpy()
@@ -331,6 +367,8 @@ class Example:
             f"Weight attachments should stay outside pulley tangent singularities: "
             f"left={left_clearance:.4f}, right={right_clearance:.4f}"
         )
+        if self._left_attachment_history:
+            self._assert_light_attachment_stays_below_p1(self._left_attachment_history[-1], body_q)
 
         if self._pulley_axis_error_history:
             frame = len(self._pulley_axis_error_history)
@@ -373,6 +411,8 @@ class Example:
         history = np.array(self._pulley_rotation_history[: sample + 1])
         left_prefix = np.array(self._left_z_history[: sample + 1])
         right_prefix = np.array(self._right_z_history[: sample + 1])
+        left_positions = np.array(self._left_position_history)
+        right_positions = np.array(self._right_position_history)
         axis_prefix_end = min(len(self._pulley_axis_error_history), self._axis_validation_frames)
         axis_prefix = np.array(self._pulley_axis_error_history[:axis_prefix_end])
         assert np.isfinite(history).all(), "Non-finite compound pulley rotation inside validated prefix"
@@ -380,8 +420,7 @@ class Example:
             "Non-finite compound pulley body motion inside validated prefix"
         )
         assert axis_prefix_end >= self._axis_validation_frames, (
-            f"Compound pulley axis validation expected {self._axis_validation_frames} frames, "
-            f"got {axis_prefix_end}"
+            f"Compound pulley axis validation expected {self._axis_validation_frames} frames, got {axis_prefix_end}"
         )
         assert np.isfinite(axis_prefix).all(), "Non-finite compound pulley axis drift inside validated window"
         max_axis_error = float(axis_prefix.max())
@@ -397,6 +436,16 @@ class Example:
             f"Compound pulley heavy weight should fall, not rise: "
             f"initial={self._initial_right_z:.4f}, z={right_z:.4f}, dz={right_dz:.4f}"
         )
+        body_q = self.state_0.body_q.numpy()
+        for attachment in self._left_attachment_history:
+            self._assert_light_attachment_stays_below_p1(attachment, body_q)
+        if len(left_positions) > 1 and len(right_positions) > 1:
+            left_step = float(np.max(np.linalg.norm(np.diff(left_positions, axis=0), axis=1)))
+            right_step = float(np.max(np.linalg.norm(np.diff(right_positions, axis=0), axis=1)))
+            assert max(left_step, right_step) < 0.40, (
+                f"Compound pulley weights should not jump per frame: "
+                f"left_step={left_step:.4f}, right_step={right_step:.4f}"
+            )
 
         p1_theta, p2_theta = history[sample]
         assert abs(p1_theta) > 0.03 and abs(p2_theta) > 0.10, (

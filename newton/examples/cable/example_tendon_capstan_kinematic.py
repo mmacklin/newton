@@ -5,17 +5,16 @@
 # Example Tendon Capstan Kinematic
 #
 # Three side-by-side asymmetric Atwood machines (3:1 mass ratio) with
-# kinematic (fixed) pulleys and different capstan friction coefficients:
+# kinematic (fixed) pulleys and different placeholder capstan friction
+# coefficients:
 #
-#   Left:   mu = 0.0   (frictionless — masses move freely)
-#   Center: mu = 0.05  (subcritical — visible partial slip)
-#   Right:  mu = 10.0  (locked — cable cannot slide over pulley)
+#   Left:   mu = 0.0
+#   Center: mu = 0.05
+#   Right:  mu = 10.0
 #
-# With kinematic pulleys (inv_mass=0, cannot rotate), the capstan
-# equation directly bounds the tension ratio:
-#   T_tight / T_slack <= exp(mu * theta)
-# For a half-wrap (theta=pi) and 3:1 mass ratio, mu_crit = ln(3)/pi ≈ 0.35.
-# Below mu_crit the masses still move; at mu_crit and above, they lock.
+# The current clean Cable Joints baseline intentionally has no capstan
+# friction model.  ``mu`` is ignored, and a kinematic rolling pulley cannot
+# rotate, so the no-slip angular Jacobian locks all three cases.
 #
 # Command: python -m newton.examples tendon_capstan_kinematic
 #
@@ -212,17 +211,10 @@ class Example:
         assert np.all(left_disp > -0.04), f"Light weights should not sink in kinematic capstan: dz={left_disp}"
         assert np.all(right_disp > -0.02), f"Heavy weights should not rise in kinematic capstan: dz={right_disp}"
 
-        free_disp, mid_disp, locked_disp = right_disp
-        assert free_disp > 0.20, f"Frictionless kinematic capstan should slide freely: dz={free_disp:.4f}"
-        assert mid_disp > locked_disp + 0.08, (
-            f"Subcritical friction should still slide relative to locked case: mid={mid_disp:.4f}, "
-            f"locked={locked_disp:.4f}"
+        assert np.max(right_disp) < 0.12, f"Kinematic no-slip pulleys should lock: dz={right_disp}"
+        assert np.max(right_disp) - np.min(right_disp) < 0.03, (
+            f"Baseline should ignore capstan mu until slip support is reintroduced: dz={right_disp}"
         )
-        assert abs(free_disp - mid_disp) > 0.08, (
-            f"Kinematic capstan friction coefficients must produce distinct motion: free={free_disp:.4f}, "
-            f"mid={mid_disp:.4f}"
-        )
-        assert locked_disp < 0.12, f"High-friction kinematic capstan should lock: dz={locked_disp:.4f}"
 
     def render(self):
         if self.viewer is not None:

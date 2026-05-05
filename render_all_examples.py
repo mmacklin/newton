@@ -16,7 +16,7 @@ EXAMPLES = [
     ("tendon_rolling_pulley", "newton.examples.cable.example_tendon_rolling_pulley", 180),
     ("tendon_compound_pulley", "newton.examples.cable.example_tendon_compound_pulley", 220),
     ("tendon_cable_machine", "newton.examples.cable.example_tendon_cable_machine", 100),
-    ("tendon_3d_routing", "newton.examples.cable.example_tendon_3d_routing", 70),
+    ("tendon_3d_routing", "newton.examples.cable.example_tendon_3d_routing", 140),
     ("tendon_xy_table", "newton.examples.cable.example_tendon_xy_table", 480),
 ]
 
@@ -35,16 +35,18 @@ class FakeArgs:
 
 
 def render_example(name, module_path, num_frames, viewer):
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Rendering: {name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     mod = importlib.import_module(module_path)
     example = mod.Example(viewer, FakeArgs(num_frames))
 
     mp4_path = os.path.join(REPORT_DIR, f"{name}.mp4")
     writer = imageio.get_writer(
-        mp4_path, fps=FPS, codec="libx264",
+        mp4_path,
+        fps=FPS,
+        codec="libx264",
         output_params=["-crf", "20", "-pix_fmt", "yuv420p"],
     )
 
@@ -90,7 +92,7 @@ def main():
             print(f"  FAILED: {e}")
             traceback.print_exc()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Done. Videos:")
     for name, path in paths.items():
         url = f"https://reports.mmacklin.com/cable-sim-research/{os.path.basename(path)}"
