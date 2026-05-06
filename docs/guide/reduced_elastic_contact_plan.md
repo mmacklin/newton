@@ -352,6 +352,11 @@ Start with tests that fail before implementation.
   - Two elastic pads squeeze a rigid object and lift it for a short sequence with
     bounded penetration and finite modal amplitudes.
 
+- `test_plastic_chair_leg_stick_slip`
+  - A diagonal elastic chair-leg proxy is dragged along a high-friction ground
+    plane. Modal elastic energy should rise during sticking intervals, then drop
+    when the contact slips.
+
 ## Examples
 
 ### Rubber End Effector Against Wall
@@ -376,20 +381,25 @@ Start with tests that fail before implementation.
   - object remains between grippers for the checked interval
   - modal amplitudes stay bounded
 
-### Stick-Slip Elastic Scraper
+### Plastic Chair Leg Stick-Slip
 
-- A diagonal elastic beam or rubber chair-leg proxy is pushed laterally along a
-  ground plane.
+- A diagonal plastic chair-leg proxy is pushed laterally along a high-friction
+  ground plane, with the leg angled so the contact point loads bending modes as
+  the frame advances.
+- The top of the leg is driven by a kinematic rigid body or prismatic actuator;
+  the bottom contact patch is an elastic surface sample set against the ground.
 - The contact should stick while tangential friction can hold, building elastic
   bending energy in the modes, then slip once the accumulated tangential load
   exceeds friction.
 - This is a good qualitative test for contact friction plus modal contact
-  projection because the visible motion should alternate between elastic loading
-  and rapid release.
+  projection because the visible motion should look like a plastic chair leg
+  scraping: slow elastic wind-up, sudden release, then repeated stick/slip.
 - Validation:
   - tangential motion has alternating low-slip and high-slip intervals
   - modal elastic energy rises before each slip event and drops after release
   - contact penetration remains bounded
+  - the average forward speed of the top drive remains larger than the average
+    forward speed of the contact point during sticking intervals
 
 ## Follow-Up: Face Contact
 
