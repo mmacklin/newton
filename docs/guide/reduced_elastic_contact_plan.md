@@ -178,7 +178,6 @@ x_prev = X_body_prev * x_local_prev(q_prev)
 This affects:
 
 - `accumulate_body_body_contacts_per_body`
-- `update_duals_body_body_contacts`
 - `compute_rigid_contact_forces`
 
 The rigid body update should still receive the full contact force and moment at
@@ -205,7 +204,8 @@ For each contact that touches an elastic body:
 
 1. Reconstruct the same deformed contact point and previous contact point used by
    the rigid contact path.
-2. Evaluate the same contact force model as rigid VBD:
+2. Evaluate the same fixed-stiffness contact force model as the rigid contact
+   path used for elastic contacts:
 
    ```text
    penetration = margin_sum - dot(n, x1 - x0)
@@ -233,22 +233,28 @@ The sign convention must be locked by tests. The invariant is that increasing a
 modal coordinate in the direction of contact force should reduce the modal
 energy gradient.
 
-## Contact Stiffness And AVBD Penalties
+## Contact Stiffness
 
-Reuse existing contact material arrays:
+Do not use AVBD adaptive contact penalties for the initial elastic contact pass.
+Use fixed contact material properties from the shapes:
 
 - `model.shape_material_ke`
 - `model.shape_material_kd`
 - `model.shape_material_mu`
-- `body_body_contact_penalty_k`
-- `body_body_contact_material_ke/kd/mu`
 
-Elastic sampled contacts should warmstart and update duals like rigid contacts.
-The only difference is how contact points are reconstructed from local data.
+For the first implementation, compute an effective pair value directly from the
+two shapes. Matching the current rigid VBD material convention is a reasonable
+default:
 
-`update_duals_body_body_contacts()` must use the deformed elastic contact point
-when computing penetration. Otherwise the adaptive penalty sees a different
-constraint than the rigid/modal solve.
+```text
+ke = 0.5 * (shape_material_ke[shape0] + shape_material_ke[shape1])
+kd = 0.5 * (shape_material_kd[shape0] + shape_material_kd[shape1])
+mu = sqrt(shape_material_mu[shape0] * shape_material_mu[shape1])
+```
+
+This removes contact warmstart and dual-update concerns from the MVP. Once
+fixed-stiffness elastic contact is correct, adaptive penalties can be revisited
+as a separate convergence improvement.
 
 ## Collision And Solver Ordering
 
@@ -266,7 +272,8 @@ from `state_in.joint_q` for elastic bodies, rather than relying on possibly stal
 Inside `SolverVBD.step()`:
 
 1. Initialize elastic bodies and sync owner joints to body frames.
-2. Initialize rigid bodies and contact warmstarts.
+2. Initialize rigid bodies. Elastic sampled contacts use fixed shape-material
+   stiffness, so they do not need AVBD contact warmstarts in the initial pass.
 3. Per iteration:
    - solve rigid bodies using elastic-aware contact point reconstruction
    - solve elastic modes from joints
@@ -294,7 +301,8 @@ Inside `SolverVBD.step()`:
     elastic sample ids.
   - Refactor contact force/Hessian evaluation so rigid and modal paths share the
     same force model.
-  - Update rigid contact accumulation, dual update, and force collection.
+  - Update rigid contact accumulation and force collection. Skip elastic-contact
+    AVBD dual updates in the first pass.
 
 - `newton/_src/solvers/vbd/reduced_elastic_kernels.py`
   - Add a separate `solve_elastic_modes_from_contacts()` kernel. Keep it
@@ -332,6 +340,10 @@ Start with tests that fail before implementation.
   - Modal contact projection includes damping consistently with the rigid
     contact path.
 
+- `test_vbd_elastic_contact_uses_fixed_shape_stiffness`
+  - Changing `ShapeConfig.ke/kd/mu` changes the elastic contact response
+    directly, without relying on AVBD warmstart or dual update state.
+
 - `test_vbd_elastic_contact_no_rest_geometry_duplicate`
   - An elastic shape does not emit both undeformed rigid narrow-phase contacts
     and deformed elastic surface contacts.
@@ -363,6 +375,21 @@ Start with tests that fail before implementation.
   - object height increases after squeeze
   - object remains between grippers for the checked interval
   - modal amplitudes stay bounded
+
+### Stick-Slip Elastic Scraper
+
+- A diagonal elastic beam or rubber chair-leg proxy is pushed laterally along a
+  ground plane.
+- The contact should stick while tangential friction can hold, building elastic
+  bending energy in the modes, then slip once the accumulated tangential load
+  exceeds friction.
+- This is a good qualitative test for contact friction plus modal contact
+  projection because the visible motion should alternate between elastic loading
+  and rapid release.
+- Validation:
+  - tangential motion has alternating low-slip and high-slip intervals
+  - modal elastic energy rises before each slip event and drops after release
+  - contact penetration remains bounded
 
 ## Follow-Up: Face Contact
 
