@@ -187,9 +187,19 @@ body DOF.
 
 ## Modal Contact Projection
 
-Add an elastic modal contact solve pass after the joint modal solve in each VBD
-iteration, or fold contact projection into the existing reduced elastic modal
-kernel once the code is stable.
+Add a separate elastic modal contact solve pass after the joint modal solve in
+each VBD iteration. Do not fold contact projection into
+`solve_elastic_modes_from_joint_constraints()` for the initial implementation;
+that would make the joint kernel too broad and harder to validate. The first
+pass should keep the solver split explicit:
+
+```text
+solve_elastic_modes_from_joint_constraints()
+solve_elastic_modes_from_contacts()
+```
+
+If the two paths later share substantial code, factor the common force/Jacobian
+helpers into device functions rather than merging the launch kernels.
 
 For each contact that touches an elastic body:
 
@@ -287,8 +297,9 @@ Inside `SolverVBD.step()`:
   - Update rigid contact accumulation, dual update, and force collection.
 
 - `newton/_src/solvers/vbd/reduced_elastic_kernels.py`
-  - Add `solve_elastic_modes_from_contacts()` or fold contact projection into a
-    generalized modal constraint solve.
+  - Add a separate `solve_elastic_modes_from_contacts()` kernel. Keep it
+    separate from the joint modal solve for the first pass; share only small
+    device helpers if needed.
 
 - `newton/_src/solvers/vbd/solver_vbd.py`
   - Allocate/forward new contact arrays.
