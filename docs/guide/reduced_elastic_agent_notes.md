@@ -82,6 +82,16 @@ force and the matching diagonal damping Hessian term.
 - Example `test_final()` checks for finite state, bounded residuals, bounded
   modal amplitudes, and expected visible deformation.
 
+## Contact Plan
+
+The current contact design is serialized in
+`docs/guide/reduced_elastic_contact_plan.md`. The first pass should use existing
+elastic surface samples only: deform each surface vertex on the fly during
+contact generation, query it against rigid/static shapes, and store one scalar
+elastic sample id on the contact side so the VBD solver can recover
+`phi[sample, mode]` directly. Do not add a separate contact-sample API for this
+pass. Elastic-vs-elastic and barycentric face contact are follow-ups.
+
 ## Modeling Pitfalls
 
 - Do not add modal gravity unless the modal coordinate represents an absolute
@@ -110,4 +120,3 @@ force and the matching diagonal damping Hessian term.
   reviewing through `reports.mmacklin.com`.
 - If using generated CSV data, write LF line endings so `git diff --check` stays
   clean.
-
