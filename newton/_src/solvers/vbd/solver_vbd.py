@@ -62,10 +62,11 @@ from .particle_vbd_kernels import (
     update_velocity,
 )
 from .reduced_elastic_kernels import (
+    compute_elastic_contact_force_hessian,
     copy_body_frame_to_elastic_joint,
     copy_elastic_joint_frame_to_body,
     integrate_elastic_modes_implicit,
-    solve_elastic_modes_from_joint_constraints,
+    solve_elastic_modes_from_sources_block,
 )
 from .rigid_vbd_kernels import (
     _NUM_CONTACT_THREADS_PER_BODY,
@@ -210,6 +211,7 @@ class SolverVBD(SolverBase):
         rigid_body_contact_buffer_size: int = 64,
         rigid_body_particle_contact_buffer_size: int = 256,
         rigid_enable_dahl_friction: bool = False,  # Cable bending plasticity/hysteresis
+        elastic_contact_relaxation: float = 0.6,
     ):
         """
         Args:
@@ -284,6 +286,9 @@ class SolverVBD(SolverBase):
             rigid_enable_dahl_friction: Enable Dahl hysteresis friction model for cable bending (default: False).
                 Configure per-joint Dahl parameters via the solver-registered custom model attributes
                 ``model.vbd.dahl_eps_max`` and ``model.vbd.dahl_tau``.
+            elastic_contact_relaxation: Under-relaxation factor for reduced elastic modal block updates when rigid
+                contacts are present. Values below 1 damp nonsmooth contact and friction fixed-point iterations while
+                preserving zero-residual updates.
 
         Note:
             - The `integrate_with_external_rigid_solver` argument enables one-way coupling between rigid body and soft body
@@ -302,6 +307,7 @@ class SolverVBD(SolverBase):
         # Common parameters
         self.iterations = iterations
         self.friction_epsilon = friction_epsilon
+        self.elastic_contact_relaxation = elastic_contact_relaxation
 
         # Rigid integration mode: when True, rigid bodies are integrated by an external
         # solver (one-way coupling). SolverVBD will not move rigid bodies, but can still
@@ -355,6 +361,18 @@ class SolverVBD(SolverBase):
 
         # Cached empty arrays for kernels that require wp.array arguments even when counts are zero.
         self._empty_body_q = wp.empty(0, dtype=wp.transform, device=self.device)
+        max_rigid_contacts = int(getattr(model, "rigid_contact_max", 0) or 0)
+        self.elastic_contact_body = wp.empty(max_rigid_contacts, dtype=wp.int32, device=self.device)
+        self.elastic_contact_sample = wp.empty(max_rigid_contacts, dtype=wp.int32, device=self.device)
+        self.elastic_contact_force = wp.empty(max_rigid_contacts, dtype=wp.vec3, device=self.device)
+        self.elastic_contact_hessian = wp.empty(max_rigid_contacts, dtype=wp.mat33, device=self.device)
+        self.elastic_contact_count_zero = wp.zeros(1, dtype=int, device=self.device)
+        elastic_block_width = int(getattr(model, "elastic_max_mode_count", 0) or 0)
+        elastic_block_vec_count = int(getattr(model, "elastic_body_count", 0) or 0) * elastic_block_width
+        elastic_block_mat_count = elastic_block_vec_count * elastic_block_width
+        self.elastic_mode_block_grad = wp.empty(elastic_block_vec_count, dtype=float, device=self.device)
+        self.elastic_mode_block_delta = wp.empty(elastic_block_vec_count, dtype=float, device=self.device)
+        self.elastic_mode_block_matrix = wp.empty(elastic_block_mat_count, dtype=float, device=self.device)
 
     def _init_particle_system(
         self,
@@ -1409,7 +1427,7 @@ class SolverVBD(SolverBase):
 
         for iter_num in range(self.iterations):
             self._solve_rigid_body_iteration(state_in, state_out, control, contacts, dt)
-            self._solve_elastic_body_iteration(state_in, state_out, control, dt)
+            self._solve_elastic_body_iteration(state_in, state_out, control, contacts, dt)
             self._solve_particle_iteration(state_in, state_out, contacts, dt, iter_num)
 
         self._finalize_rigid_bodies(state_out, dt)
@@ -1491,14 +1509,72 @@ class SolverVBD(SolverBase):
             device=self.device,
         )
 
-    def _solve_elastic_body_iteration(self, state_in: State, state_out: State, control: Control, dt: float):
-        """Update reduced elastic modes from ordinary joint attachment residuals."""
+    def _solve_elastic_body_iteration(
+        self, state_in: State, state_out: State, control: Control, contacts: Contacts | None, dt: float
+    ):
+        """Update reduced elastic modes from all modal sources in one block solve."""
         model = self.model
-        if getattr(model, "elastic_body_count", 0) == 0 or getattr(model, "elastic_endpoint_count", 0) == 0:
+        if getattr(model, "elastic_body_count", 0) == 0:
             return
 
+        rigid_contact_max = 0
+        rigid_contact_count = self.elastic_contact_count_zero
+        if (
+            contacts is not None
+            and getattr(model, "elastic_shape_vertex_total_count", 0) > 0
+            and contacts.rigid_contact_max > 0
+        ):
+            rigid_contact_max = contacts.rigid_contact_max
+            rigid_contact_count = contacts.rigid_contact_count
+            wp.launch(
+                kernel=compute_elastic_contact_force_hessian,
+                dim=rigid_contact_max,
+                inputs=[
+                    dt,
+                    model.elastic_joint,
+                    model.elastic_mode_count,
+                    model.elastic_max_mode_count,
+                    model.body_elastic_index,
+                    state_out.body_q,
+                    self.body_q_prev,
+                    model.body_com,
+                    model.shape_body,
+                    contacts.rigid_contact_max,
+                    contacts.rigid_contact_count,
+                    contacts.rigid_contact_shape0,
+                    contacts.rigid_contact_shape1,
+                    contacts.rigid_contact_point0,
+                    contacts.rigid_contact_point1,
+                    contacts.rigid_contact_normal,
+                    contacts.rigid_contact_margin0,
+                    contacts.rigid_contact_margin1,
+                    contacts.rigid_contact_elastic_sample0,
+                    contacts.rigid_contact_elastic_sample1,
+                    self.body_body_contact_material_ke,
+                    self.body_body_contact_material_kd,
+                    self.body_body_contact_material_mu,
+                    self.friction_epsilon,
+                    model.joint_q_start,
+                    model.elastic_shape_vertex_local,
+                    model.elastic_shape_vertex_phi,
+                    state_in.joint_q,
+                    state_out.joint_q,
+                ],
+                outputs=[
+                    self.elastic_contact_body,
+                    self.elastic_contact_sample,
+                    self.elastic_contact_force,
+                    self.elastic_contact_hessian,
+                ],
+                device=self.device,
+            )
+
+        elastic_mode_relaxation = 1.0
+        if rigid_contact_max > 0:
+            elastic_mode_relaxation = self.elastic_contact_relaxation
+
         wp.launch(
-            kernel=solve_elastic_modes_from_joint_constraints,
+            kernel=solve_elastic_modes_from_sources_block,
             dim=model.elastic_body_count,
             inputs=[
                 dt,
@@ -1525,16 +1601,29 @@ class SolverVBD(SolverBase):
                 model.joint_X_p,
                 model.joint_X_c,
                 model.joint_axis,
-                model.joint_q_start,
-                model.joint_qd_start,
                 self.joint_constraint_start,
                 self.joint_penalty_k,
                 self.joint_penalty_kd,
                 model.joint_parent_elastic_endpoint,
                 model.joint_child_elastic_endpoint,
+                rigid_contact_max,
+                rigid_contact_count,
+                model.joint_q_start,
+                model.joint_qd_start,
+                model.elastic_shape_vertex_phi,
                 control.joint_f,
                 state_in.joint_q,
                 state_in.joint_qd,
+                self.elastic_contact_body,
+                self.elastic_contact_sample,
+                self.elastic_contact_force,
+                self.elastic_contact_hessian,
+                self.elastic_mode_block_grad,
+                self.elastic_mode_block_delta,
+                self.elastic_mode_block_matrix,
+                elastic_mode_relaxation,
+            ],
+            outputs=[
                 state_out.joint_q,
                 state_out.joint_qd,
             ],
@@ -2186,7 +2275,19 @@ class SolverVBD(SolverBase):
                         contacts.rigid_contact_normal,
                         contacts.rigid_contact_margin0,
                         contacts.rigid_contact_margin1,
+                        contacts.rigid_contact_elastic_sample0,
+                        contacts.rigid_contact_elastic_sample1,
                         model.shape_body,
+                        self.body_body_contact_material_ke,
+                        model.body_elastic_index,
+                        model.elastic_joint,
+                        model.elastic_mode_count,
+                        state_out.joint_q,
+                        state_in.joint_q,
+                        model.joint_q_start,
+                        model.elastic_shape_vertex_local,
+                        model.elastic_shape_vertex_phi,
+                        model.elastic_max_mode_count,
                         self.body_body_contact_buffer_pre_alloc,
                         self.body_body_contact_counts,
                         self.body_body_contact_indices,
@@ -2286,6 +2387,8 @@ class SolverVBD(SolverBase):
                     contacts.rigid_contact_normal,
                     contacts.rigid_contact_margin0,
                     contacts.rigid_contact_margin1,
+                    contacts.rigid_contact_elastic_sample0,
+                    contacts.rigid_contact_elastic_sample1,
                     model.shape_body,
                     state_out.body_q,
                     self.body_body_contact_material_ke,
@@ -2408,6 +2511,7 @@ class SolverVBD(SolverBase):
             for arr in (
                 getattr(self, "body_q_prev", None),
                 getattr(self, "body_body_contact_penalty_k", None),
+                getattr(self, "body_body_contact_material_ke", None),
                 getattr(self, "body_body_contact_material_kd", None),
                 getattr(self, "body_body_contact_material_mu", None),
             )
@@ -2459,11 +2563,23 @@ class SolverVBD(SolverBase):
                 contacts.rigid_contact_normal,
                 contacts.rigid_contact_margin0,
                 contacts.rigid_contact_margin1,
+                contacts.rigid_contact_elastic_sample0,
+                contacts.rigid_contact_elastic_sample1,
                 self.model.shape_body,
                 state.body_q,
                 self.body_q_prev,
                 self.model.body_com,
+                self.model.body_elastic_index,
+                self.model.elastic_joint,
+                self.model.elastic_mode_count,
+                state.joint_q,
+                state.joint_q,
+                self.model.joint_q_start,
+                self.model.elastic_shape_vertex_local,
+                self.model.elastic_shape_vertex_phi,
+                self.model.elastic_max_mode_count,
                 self.body_body_contact_penalty_k,
+                self.body_body_contact_material_ke,
                 self.body_body_contact_material_kd,
                 self.body_body_contact_material_mu,
                 float(self.friction_epsilon),

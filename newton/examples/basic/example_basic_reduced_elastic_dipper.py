@@ -205,8 +205,8 @@ class Example:
             inertia=arm_inertia,
             mode_q=[0.0, 0.0, 0.0, 0.0],
             mode_mass=[0.16, 0.09, 0.07, 0.055],
-            mode_stiffness=[1.8e5, 18.0, 80000.0, 2.4e5],
-            mode_damping=[4.0, 0.35, 0.35, 0.55],
+            mode_stiffness=[1.8e5, 11.0, 6.4e4, 2.0e5],
+            mode_damping=[4.0, 0.95, 0.60, 0.85],
             modal_basis=arm_basis,
             label="flexible_dipper_arm",
         )
@@ -326,11 +326,11 @@ class Example:
 
         self.solver = newton.solvers.SolverVBD(
             self.model,
-            iterations=72,
-            rigid_joint_linear_k_start=3.0e6,
-            rigid_joint_angular_k_start=3.0e6,
-            rigid_joint_linear_ke=3.0e6,
-            rigid_joint_angular_ke=3.0e6,
+            iterations=32,
+            rigid_joint_linear_k_start=5.0e5,
+            rigid_joint_angular_k_start=5.0e5,
+            rigid_joint_linear_ke=5.0e5,
+            rigid_joint_angular_ke=5.0e5,
             rigid_joint_linear_kd=3.0e-5,
             rigid_joint_angular_kd=0.0,
             rigid_joint_adaptive_stiffness=False,
@@ -488,15 +488,15 @@ class Example:
             raise AssertionError("body transforms contain non-finite values")
         if not np.isfinite(self.state_0.joint_q.numpy()).all():
             raise AssertionError("joint coordinates contain non-finite values")
-        if self.max_joint_residual > 4.0e-2:
+        if self.max_joint_residual > 5.0e-3:
             raise AssertionError(f"dipper arm joint residual too large: {self.max_joint_residual}")
         if self.max_drive_error > 1.4e-1:
             raise AssertionError(f"hydraulic drive stroke error too large: {self.max_drive_error}")
-        if self.max_tip_bend < 4.0e-3:
+        if self.max_tip_bend < 2.5e-2:
             raise AssertionError(f"dipper arm bending was too small: {self.max_tip_bend}")
         if self.max_tip_bend > 1.2e-1:
             raise AssertionError(f"dipper arm bending was too large: {self.max_tip_bend}")
-        if self.max_tip_vertical_motion < 2.5e-1:
+        if self.max_tip_vertical_motion < 2.3e-1:
             raise AssertionError("dipper tip did not move under the driven actuator and payload")
         if self.max_tip_vertical_motion > 6.5e-1:
             raise AssertionError(f"dipper tip vertical motion was too large: {self.max_tip_vertical_motion}")

@@ -16,8 +16,12 @@ from newton.examples.basic._reduced_elastic import (
     joint_endpoint_world,
     mesh_volume,
 )
+from newton.examples.basic.example_basic_reduced_elastic_chair_stick_slip import Example as ChairStickSlipExample
 from newton.examples.basic.example_basic_reduced_elastic_dipper import Example as DipperExample
+from newton.examples.basic.example_basic_reduced_elastic_gripper_contact import Example as GripperContactExample
 from newton.examples.basic.example_basic_reduced_elastic_matrix_rom import Example as MatrixROMExample
+from newton.examples.basic.example_basic_reduced_elastic_scraper_contact import Example as ScraperContactExample
+from newton.examples.basic.example_basic_reduced_elastic_wall_contact import Example as WallContactExample
 from newton.tests.unittest_utils import add_function_test, get_test_devices
 
 devices = get_test_devices()
@@ -624,6 +628,101 @@ def test_elastic_shape_box_exact_modal_samples(test, device):
     np.testing.assert_allclose(phi, expected_phi, atol=1.0e-7)
 
 
+def _build_elastic_ground_contact_model(device, z: float, q0: float = 0.0):
+    def downward_shape_fn(_x):
+        return np.array([[0.0, 0.0, -1.0]], dtype=np.float32)
+
+    cfg = newton.ModelBuilder.ShapeConfig()
+    cfg.ke = 1000.0
+    cfg.kd = 0.0
+    cfg.mu = 0.0
+    cfg.margin = 0.0
+    cfg.gap = 0.0
+
+    builder = newton.ModelBuilder(gravity=0.0, up_axis="Z")
+    builder.add_ground_plane(cfg=cfg)
+    body = builder.add_body_elastic(
+        xform=wp.transform(wp.vec3(0.0, 0.0, z), wp.quat_identity()),
+        mass=1.0,
+        inertia=_identity_inertia(),
+        mode_count=1,
+        mode_mass=[0.0],
+        mode_stiffness=[0.0],
+        mode_damping=[0.0],
+        mode_q=[q0],
+        mode_shape_fn=downward_shape_fn,
+        is_kinematic=True,
+    )
+    builder.add_shape_box(body, hx=0.05, hy=0.05, hz=0.05, cfg=cfg)
+    builder.color()
+    return builder.finalize(device=device), body
+
+
+def test_elastic_surface_contact_generation(test, device):
+    model, body = _build_elastic_ground_contact_model(device, z=0.04)
+    state = model.state()
+    contacts = model.contacts()
+    model.collide(state, contacts)
+
+    count = int(contacts.rigid_contact_count.numpy()[0])
+    test.assertGreater(count, 0)
+
+    samples0 = contacts.rigid_contact_elastic_sample0.numpy()[:count]
+    samples1 = contacts.rigid_contact_elastic_sample1.numpy()[:count]
+    shapes0 = contacts.rigid_contact_shape0.numpy()[:count]
+    shapes1 = contacts.rigid_contact_shape1.numpy()[:count]
+    shape_body = model.shape_body.numpy()
+    active = np.logical_and(shapes0 >= 0, shapes1 >= 0)
+    test.assertTrue(bool(np.any(active)))
+
+    np.testing.assert_array_equal(samples0[active], -np.ones_like(samples0[active]))
+    test.assertTrue(bool(np.any(samples1[active] >= 0)))
+    test.assertTrue(bool(np.all(shape_body[shapes0[active]] == -1)))
+    test.assertTrue(bool(np.all(shape_body[shapes1[active]] == body)))
+
+
+def test_elastic_surface_contact_uses_deformed_vertex(test, device):
+    model, _body = _build_elastic_ground_contact_model(device, z=0.07)
+    state = model.state()
+    contacts = model.contacts()
+
+    model.collide(state, contacts)
+    test.assertEqual(int(contacts.rigid_contact_count.numpy()[0]), 0)
+
+    owner_joint = int(model.elastic_joint.numpy()[0])
+    q_start = int(model.joint_q_start.numpy()[owner_joint])
+    q = state.joint_q.numpy()
+    q[q_start + 7] = 0.03
+    state.joint_q.assign(q)
+
+    model.collide(state, contacts)
+    test.assertGreater(int(contacts.rigid_contact_count.numpy()[0]), 0)
+
+
+def test_vbd_elastic_contact_solves_modal_penetration(test, device):
+    q0 = 0.005
+    model, _body = _build_elastic_ground_contact_model(device, z=0.05, q0=q0)
+    state_0 = model.state()
+    state_1 = model.state()
+    contacts = model.contacts()
+    control = model.control()
+
+    model.collide(state_0, contacts)
+    test.assertGreater(int(contacts.rigid_contact_count.numpy()[0]), 0)
+
+    solver = newton.solvers.SolverVBD(
+        model,
+        iterations=1,
+        rigid_contact_k_start=1000.0,
+        elastic_contact_relaxation=1.0,
+    )
+    solver.step(state_0, state_1, control, contacts, 0.01)
+
+    owner_joint = int(model.elastic_joint.numpy()[0])
+    q_start = int(model.joint_q_start.numpy()[owner_joint])
+    test.assertLess(abs(float(state_1.joint_q.numpy()[q_start + 7])), 1.0e-5)
+
+
 def test_elastic_strain_visualization_colors(test, device):
     length = 1.0
 
@@ -992,7 +1091,11 @@ def test_vbd_revolute_constraint_solves_elastic_mode(test, device):
     q_start = int(model.joint_q_start.numpy()[owner_joint])
 
     solver = newton.solvers.SolverVBD(
-        model, iterations=4, rigid_joint_linear_k_start=1.0e6, rigid_joint_linear_ke=1.0e6
+        model,
+        iterations=4,
+        rigid_joint_linear_k_start=1.0e6,
+        rigid_joint_linear_ke=1.0e6,
+        rigid_joint_linear_kd=0.0,
     )
     solver.step(state_0, state_1, control, None, 0.01)
 
@@ -1370,6 +1473,32 @@ def test_dipper_arm_example(test, device):
         example.test_final()
 
 
+def _run_reduced_elastic_contact_example(example_cls, frame_count: int, device):
+    with wp.ScopedDevice(device):
+        viewer = newton.viewer.ViewerNull()
+        example = example_cls(viewer, None)
+        for _ in range(frame_count):
+            example.step()
+            example.render()
+        example.test_final()
+
+
+def test_elastic_wall_contact_example(test, device):
+    _run_reduced_elastic_contact_example(WallContactExample, 90, device)
+
+
+def test_elastic_gripper_contact_example(test, device):
+    _run_reduced_elastic_contact_example(GripperContactExample, 120, device)
+
+
+def test_elastic_scraper_contact_example(test, device):
+    _run_reduced_elastic_contact_example(ScraperContactExample, 120, device)
+
+
+def test_elastic_chair_stick_slip_example(test, device):
+    _run_reduced_elastic_contact_example(ChairStickSlipExample, 240, device)
+
+
 class TestReducedElasticBody(unittest.TestCase):
     pass
 
@@ -1438,6 +1567,24 @@ for device in devices:
         TestReducedElasticBody,
         "test_elastic_shape_box_exact_modal_samples",
         test_elastic_shape_box_exact_modal_samples,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_surface_contact_generation",
+        test_elastic_surface_contact_generation,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_surface_contact_uses_deformed_vertex",
+        test_elastic_surface_contact_uses_deformed_vertex,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_vbd_elastic_contact_solves_modal_penetration",
+        test_vbd_elastic_contact_solves_modal_penetration,
         devices=[device],
     )
     add_function_test(
@@ -1548,6 +1695,31 @@ for device in devices:
         test_dipper_arm_example,
         devices=[device],
     )
+    if wp.get_device(device).is_cuda:
+        add_function_test(
+            TestReducedElasticBody,
+            "test_elastic_wall_contact_example",
+            test_elastic_wall_contact_example,
+            devices=[device],
+        )
+        add_function_test(
+            TestReducedElasticBody,
+            "test_elastic_gripper_contact_example",
+            test_elastic_gripper_contact_example,
+            devices=[device],
+        )
+        add_function_test(
+            TestReducedElasticBody,
+            "test_elastic_scraper_contact_example",
+            test_elastic_scraper_contact_example,
+            devices=[device],
+        )
+        add_function_test(
+            TestReducedElasticBody,
+            "test_elastic_chair_stick_slip_example",
+            test_elastic_chair_stick_slip_example,
+            devices=[device],
+        )
 
 
 if __name__ == "__main__":

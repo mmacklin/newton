@@ -560,7 +560,7 @@ class ViewerBase(ABC):
             indices_wp = wp.array(
                 indices[i_start : i_start + i_count].astype(np.int32), dtype=wp.int32, device=self.device
             )
-            self.log_mesh(name, points_wp, indices_wp, hidden=not visible, backface_culling=True, colors=colors_wp)
+            self.log_mesh(name, points_wp, indices_wp, hidden=not visible, backface_culling=False, colors=colors_wp)
 
     @staticmethod
     def _matlab_jet(values: np.ndarray) -> np.ndarray:
