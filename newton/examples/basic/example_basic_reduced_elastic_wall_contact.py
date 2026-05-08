@@ -33,8 +33,8 @@ from newton.examples.basic._reduced_elastic_contact import (
     contact_shape_config,
     finite_difference_target_velocities,
     identity_inertia,
-    owner_qd_starts,
     owner_q_starts,
+    owner_qd_starts,
     rubber_contact_modes,
     run_example_test,
     validate_elastic_vertices,
@@ -157,9 +157,7 @@ class Example:
             targets = self._drive_targets(t)
             previous_targets = self._drive_targets(max(t - self.sim_dt, 0.0))
             velocities = finite_difference_target_velocities(targets, previous_targets, self.sim_dt)
-            apply_kinematic_targets(
-                self.state_0, self._owner_q_starts, targets, velocities, self._owner_qd_starts
-            )
+            apply_kinematic_targets(self.state_0, self._owner_q_starts, targets, velocities, self._owner_qd_starts)
             self.model.collide(self.state_0, self.contacts)
             self.solver.step(self.state_0, self.state_1, self.control, self.contacts, self.sim_dt)
             self.state_0, self.state_1 = self.state_1, self.state_0
