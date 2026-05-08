@@ -244,11 +244,12 @@ The sign convention must be locked by tests. The invariant is that increasing a
 modal coordinate in the direction of contact force should reduce the modal
 energy gradient.
 
-## Follow-Up: Unified Modal Source Projection
+## Follow-Up: Modal Block Assembly Optimization
 
-Contacts, joint attachments, and future point loads should use the same reduced
-projection abstraction. Treat every elastic force input `f` as a Cartesian
-source on an elastic body:
+Contacts, joint attachments, and future point loads all use the same projection
+identity, but they do not need to share one generic implementation path. Treat
+the following as the common math model for checking signs, dimensions, residuals,
+and optimized kernels:
 
 ```text
 F_f       Cartesian force on the elastic source point [N], shape [3]
@@ -267,15 +268,23 @@ g += -J_f^T F_f
 H +=  J_f^T K_f J_f
 ```
 
-This lets contacts and joint attachments share one projection path. Source
-generation can remain specialized: contact code computes contact force terms,
-joint code computes constraint endpoint force terms, and the elastic solver only
-projects Cartesian sources into modal coordinates.
+Keep contacts and joints specialized where that is clearer or faster. Contact
+code can exploit normal-force rank-1 structure and contact-specific friction
+state. Joint code can exploit endpoint signs, joint type, and projection rank.
+The shared requirement is that each path contributes to the same per-body modal
+gradient and Hessian with consistent signs.
 
-### Source Representation
+### Later: Optional Source Representation
 
-Prefer a compact source buffer over baking source-specific loops into the block
-solve:
+A compact source buffer is not part of the near-term optimization plan. First
+optimize the existing specialized contact and joint paths directly: local-space
+projection, projector-aware Hessian assembly, triangular block fill, tile
+accumulation, and Cholesky/LDLT solves.
+
+After those pieces are validated, a compact source buffer may still be useful
+for point loads or future interpolated face contact. It should not force joints
+through a generic record format if a joint-specific kernel is simpler. A future
+source record could look like:
 
 ```text
 source_body
@@ -285,13 +294,14 @@ source_force         F_f
 source_hessian       K_f, or a structured/factored representation
 ```
 
-Build or sort compact per-elastic-body source ranges so each body processes only
-its own sources. This avoids the current body-by-all-contacts scan and gives a
-natural place to add residual reporting per source type.
+For contacts, a narrower near-term data-structure improvement is to build or
+sort compact per-elastic-body contact ranges so each body processes only its own
+contacts. This avoids the current body-by-all-contacts scan without committing
+to a general source representation.
 
-### Structured 1D And Low-Rank Forces
+### Structured Contact And Joint Forces
 
-Normal contact is the common cheap case. The Cartesian stiffness is rank 1:
+Normal contact is the common 1D cheap case. The Cartesian stiffness is rank 1:
 
 ```text
 K_f = k n n^T
@@ -309,9 +319,19 @@ K_f = D W D^T
 H += (J_f^T D) W (D^T J_f)
 ```
 
-where `D` contains one or more Cartesian force directions. Prefer storing this
-factored representation for normal contact and simple joint projections instead
-of materializing a dense `3 x 3` Hessian when the source is low rank.
+where `D` contains one or more Cartesian force directions. Joint attachments are
+usually not 1D:
+
+```text
+fixed translational endpoint: P = I          rank 3
+prismatic endpoint:           P = I - aa^T   rank 2
+normal contact:               P = n n^T      rank 1
+```
+
+So the optimization should be rank- or projector-aware, not contact-only and not
+purely generic dense `3 x 3`. Prefer factored/projector forms for contact
+normals and simple joint projections when they are clearer and cheaper than
+materializing a dense Hessian.
 
 ### Local Space Projection
 
@@ -334,7 +354,8 @@ H += k a a^T
 ```
 
 This keeps `Phi_f` local and avoids repeatedly rotating every modal column for
-every force source.
+every force source. Apply this inside each specialized contact or joint path,
+rather than requiring a single shared source-projection kernel.
 
 ### Dense Block Assembly
 
@@ -343,14 +364,13 @@ Assemble the modal block in local scratch storage per elastic body:
 - Accumulate `g` and `H` into per-body tiles.
 - Fill only one triangle of the symmetric block during assembly, then mirror
   only if a later solve path requires full storage.
-- For low-rank sources, use modal outer products directly instead of generic
-  `3 x mode_count` by `mode_count x mode_count` multiplies.
+- For low-rank/projector sources, use modal outer products directly instead of
+  generic `3 x mode_count` by `mode_count x mode_count` multiplies.
 - For dense `K_f` sources, compute `B = K_f Phi_f` and then
   `H += Phi_f^T B` using tiled operations.
 
-The source projection kernel should make source type explicit enough to choose
-the cheap low-rank path for contact normals and the generic dense path only when
-needed.
+Specialized contact and joint kernels should make source type explicit enough to
+choose rank-1, rank-2, rank-3 projector, or generic dense paths as appropriate.
 
 ### Tile-Based Solve
 
