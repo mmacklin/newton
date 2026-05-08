@@ -533,6 +533,135 @@ def get_body_adjacent_joint_id(adjacency: RigidForceElementAdjacencyInfo, body: 
 
 
 @wp.func
+def evaluate_contact_point_world(
+    body_index: int,
+    contact_point_local: wp.vec3,
+    elastic_sample: int,
+    body_q: wp.array(dtype=wp.transform),
+    body_q_prev: wp.array(dtype=wp.transform),
+    body_elastic_index: wp.array(dtype=wp.int32),
+    elastic_joint: wp.array(dtype=wp.int32),
+    elastic_mode_count: wp.array(dtype=wp.int32),
+    joint_q: wp.array(dtype=float),
+    joint_q_prev: wp.array(dtype=float),
+    joint_q_start: wp.array(dtype=wp.int32),
+    elastic_shape_vertex_local: wp.array(dtype=wp.vec3),
+    elastic_shape_vertex_phi: wp.array(dtype=wp.vec3),
+    elastic_max_mode_count: int,
+) -> tuple[wp.vec3, wp.vec3]:
+    if body_index < 0:
+        return contact_point_local, contact_point_local
+
+    local_now = contact_point_local
+    local_prev = contact_point_local
+    if elastic_sample >= 0:
+        elastic_index = body_elastic_index[body_index]
+        if elastic_index >= 0:
+            owner_joint = elastic_joint[elastic_index]
+            mode_q_start = joint_q_start[owner_joint] + 7
+            mode_count = elastic_mode_count[elastic_index]
+            local_now = elastic_shape_vertex_local[elastic_sample]
+            local_prev = local_now
+            for mode in range(elastic_max_mode_count):
+                if mode < mode_count:
+                    phi = elastic_shape_vertex_phi[elastic_sample * elastic_max_mode_count + mode]
+                    local_now = local_now + phi * joint_q[mode_q_start + mode]
+                    local_prev = local_prev + phi * joint_q_prev[mode_q_start + mode]
+
+    return wp.transform_point(body_q[body_index], local_now), wp.transform_point(body_q_prev[body_index], local_prev)
+
+
+@wp.func
+def evaluate_rigid_contact_from_world_points(
+    body_a_index: int,
+    body_b_index: int,
+    body_q: wp.array(dtype=wp.transform),
+    body_com: wp.array(dtype=wp.vec3),
+    x_c_a_now: wp.vec3,
+    x_c_b_now: wp.vec3,
+    x_c_a_prev: wp.vec3,
+    x_c_b_prev: wp.vec3,
+    contact_normal: wp.vec3,
+    penetration_depth: float,
+    contact_ke: float,
+    contact_kd: float,
+    friction_mu: float,
+    friction_epsilon: float,
+    dt: float,
+):
+    if penetration_depth <= 0.0 or contact_ke <= 0.0:
+        zero_vec = wp.vec3(0.0)
+        zero_mat = wp.mat33(0.0)
+        return (zero_vec, zero_vec, zero_mat, zero_mat, zero_mat, zero_vec, zero_vec, zero_mat, zero_mat, zero_mat)
+
+    body_a_com_local = wp.vec3(0.0)
+    body_b_com_local = wp.vec3(0.0)
+    X_wa = wp.transform_identity()
+    X_wb = wp.transform_identity()
+    if body_a_index >= 0:
+        X_wa = body_q[body_a_index]
+        body_a_com_local = body_com[body_a_index]
+    if body_b_index >= 0:
+        X_wb = body_q[body_b_index]
+        body_b_com_local = body_com[body_b_index]
+
+    x_com_a_now = wp.transform_point(X_wa, body_a_com_local)
+    x_com_b_now = wp.transform_point(X_wb, body_b_com_local)
+
+    dx_a = x_c_a_now - x_c_a_prev
+    dx_b = x_c_b_now - x_c_b_prev
+    dx_rel = dx_b - dx_a
+
+    n_outer = wp.outer(contact_normal, contact_normal)
+    f_total = contact_normal * (contact_ke * penetration_depth)
+    K_total = contact_ke * n_outer
+
+    v_rel = dx_rel / dt
+    v_dot_n = wp.dot(contact_normal, v_rel)
+
+    if contact_kd > 0.0 and v_dot_n < 0.0:
+        damping_coeff = contact_kd * contact_ke
+        damping_force = -damping_coeff * v_dot_n * contact_normal
+        damping_hessian = (damping_coeff / dt) * n_outer
+        f_total = f_total + damping_force
+        K_total = K_total + damping_hessian
+
+    normal_load = contact_ke * penetration_depth
+    if friction_mu > 0.0 and normal_load > 0.0:
+        v_n = contact_normal * v_dot_n
+        v_t = v_rel - v_n
+        u = v_t * dt
+        eps_u = friction_epsilon * dt
+        f_friction, K_friction = compute_projected_isotropic_friction(
+            friction_mu, normal_load, contact_normal, u, eps_u
+        )
+        f_total = f_total + f_friction
+        K_total = K_total + K_friction
+
+    force_a = -f_total
+    force_b = f_total
+
+    r_a = x_c_a_now - x_com_a_now
+    r_b = x_c_b_now - x_com_b_now
+
+    r_a_skew = wp.skew(r_a)
+    r_a_skew_T_K = wp.transpose(r_a_skew) * K_total
+    torque_a = wp.cross(r_a, force_a)
+    h_aa_a = r_a_skew_T_K * r_a_skew
+    h_al_a = -r_a_skew_T_K
+    h_ll_a = K_total
+
+    r_b_skew = wp.skew(r_b)
+    r_b_skew_T_K = wp.transpose(r_b_skew) * K_total
+    torque_b = wp.cross(r_b, force_b)
+    h_aa_b = r_b_skew_T_K * r_b_skew
+    h_al_b = -r_b_skew_T_K
+    h_ll_b = K_total
+
+    return (force_a, torque_a, h_ll_a, h_al_a, h_aa_a, force_b, torque_b, h_ll_b, h_al_b, h_aa_b)
+
+
+@wp.func
 def evaluate_rigid_contact_from_collision(
     body_a_index: int,
     body_b_index: int,
@@ -1968,6 +2097,12 @@ def warmstart_body_body_contacts(
     # Read shape indices
     shape_id_0 = rigid_contact_shape0[i]
     shape_id_1 = rigid_contact_shape1[i]
+    if shape_id_0 < 0 or shape_id_1 < 0:
+        contact_material_ke[i] = 0.0
+        contact_material_kd[i] = 0.0
+        contact_material_mu[i] = 0.0
+        contact_penalty_k[i] = 0.0
+        return
 
     # Cache averaged material properties (arithmetic mean for stiffness/damping, geometric for friction)
     avg_ke = 0.5 * (shape_material_ke[shape_id_0] + shape_material_ke[shape_id_1])
@@ -2184,7 +2319,19 @@ def accumulate_body_body_contacts_per_body(
     rigid_contact_normal: wp.array(dtype=wp.vec3),
     rigid_contact_margin0: wp.array(dtype=float),
     rigid_contact_margin1: wp.array(dtype=float),
+    rigid_contact_elastic_sample0: wp.array(dtype=wp.int32),
+    rigid_contact_elastic_sample1: wp.array(dtype=wp.int32),
     shape_body: wp.array(dtype=wp.int32),
+    contact_material_ke: wp.array(dtype=float),
+    body_elastic_index: wp.array(dtype=wp.int32),
+    elastic_joint: wp.array(dtype=wp.int32),
+    elastic_mode_count: wp.array(dtype=wp.int32),
+    joint_q: wp.array(dtype=float),
+    joint_q_prev: wp.array(dtype=float),
+    joint_q_start: wp.array(dtype=wp.int32),
+    elastic_shape_vertex_local: wp.array(dtype=wp.vec3),
+    elastic_shape_vertex_phi: wp.array(dtype=wp.vec3),
+    elastic_max_mode_count: int,
     body_contact_buffer_pre_alloc: int,
     body_contact_counts: wp.array(dtype=wp.int32),
     body_contact_indices: wp.array(dtype=wp.int32),
@@ -2237,8 +2384,40 @@ def accumulate_body_body_contacts_per_body(
         cp0_local = rigid_contact_point0[contact_idx]
         cp1_local = rigid_contact_point1[contact_idx]
         contact_normal = rigid_contact_normal[contact_idx]
-        cp0_world = wp.transform_point(body_q[b0], cp0_local) if b0 >= 0 else cp0_local
-        cp1_world = wp.transform_point(body_q[b1], cp1_local) if b1 >= 0 else cp1_local
+        elastic_sample0 = rigid_contact_elastic_sample0[contact_idx]
+        elastic_sample1 = rigid_contact_elastic_sample1[contact_idx]
+        cp0_world, cp0_world_prev = evaluate_contact_point_world(
+            b0,
+            cp0_local,
+            elastic_sample0,
+            body_q,
+            body_q_prev,
+            body_elastic_index,
+            elastic_joint,
+            elastic_mode_count,
+            joint_q,
+            joint_q_prev,
+            joint_q_start,
+            elastic_shape_vertex_local,
+            elastic_shape_vertex_phi,
+            elastic_max_mode_count,
+        )
+        cp1_world, cp1_world_prev = evaluate_contact_point_world(
+            b1,
+            cp1_local,
+            elastic_sample1,
+            body_q,
+            body_q_prev,
+            body_elastic_index,
+            elastic_joint,
+            elastic_mode_count,
+            joint_q,
+            joint_q_prev,
+            joint_q_start,
+            elastic_shape_vertex_local,
+            elastic_shape_vertex_phi,
+            elastic_max_mode_count,
+        )
         thickness = rigid_contact_margin0[contact_idx] + rigid_contact_margin1[contact_idx]
         dist = wp.dot(contact_normal, cp1_world - cp0_world)
         penetration = thickness - dist
@@ -2248,6 +2427,8 @@ def accumulate_body_body_contacts_per_body(
             continue
 
         contact_ke = contact_penalty_k[contact_idx]
+        if elastic_sample0 >= 0 or elastic_sample1 >= 0:
+            contact_ke = contact_material_ke[contact_idx]
         contact_kd = contact_material_kd[contact_idx]
         contact_mu = contact_material_mu[contact_idx]
         (
@@ -2261,14 +2442,15 @@ def accumulate_body_body_contacts_per_body(
             h_ll_1,
             h_al_1,
             h_aa_1,
-        ) = evaluate_rigid_contact_from_collision(
+        ) = evaluate_rigid_contact_from_world_points(
             b0,
             b1,
             body_q,
-            body_q_prev,
             body_com,
-            cp0_local,
-            cp1_local,
+            cp0_world,
+            cp1_world,
+            cp0_world_prev,
+            cp1_world_prev,
             contact_normal,
             penetration,
             contact_ke,
@@ -2312,13 +2494,25 @@ def compute_rigid_contact_forces(
     rigid_contact_normal: wp.array(dtype=wp.vec3),
     rigid_contact_thickness0: wp.array(dtype=float),
     rigid_contact_thickness1: wp.array(dtype=float),
+    rigid_contact_elastic_sample0: wp.array(dtype=wp.int32),
+    rigid_contact_elastic_sample1: wp.array(dtype=wp.int32),
     # Model/state
     shape_body: wp.array(dtype=wp.int32),
     body_q: wp.array(dtype=wp.transform),
     body_q_prev: wp.array(dtype=wp.transform),
     body_com: wp.array(dtype=wp.vec3),
+    body_elastic_index: wp.array(dtype=wp.int32),
+    elastic_joint: wp.array(dtype=wp.int32),
+    elastic_mode_count: wp.array(dtype=wp.int32),
+    joint_q: wp.array(dtype=float),
+    joint_q_prev: wp.array(dtype=float),
+    joint_q_start: wp.array(dtype=wp.int32),
+    elastic_shape_vertex_local: wp.array(dtype=wp.vec3),
+    elastic_shape_vertex_phi: wp.array(dtype=wp.vec3),
+    elastic_max_mode_count: int,
     # Contact material properties (per-contact)
     contact_penalty_k: wp.array(dtype=float),
+    contact_material_ke: wp.array(dtype=float),
     contact_material_kd: wp.array(dtype=float),
     contact_material_mu: wp.array(dtype=float),
     friction_epsilon: float,
@@ -2370,10 +2564,40 @@ def compute_rigid_contact_forces(
 
     contact_normal = rigid_contact_normal[contact_idx]
 
-    # Static/kinematic shapes use shape_body == -1. In that case, contact points are already in world
-    # frame for that side and must not index into body_q[-1].
-    cp0_world = wp.transform_point(body_q[b0], cp0_local) if b0 >= 0 else cp0_local
-    cp1_world = wp.transform_point(body_q[b1], cp1_local) if b1 >= 0 else cp1_local
+    elastic_sample0 = rigid_contact_elastic_sample0[contact_idx]
+    elastic_sample1 = rigid_contact_elastic_sample1[contact_idx]
+    cp0_world, cp0_world_prev = evaluate_contact_point_world(
+        b0,
+        cp0_local,
+        elastic_sample0,
+        body_q,
+        body_q_prev,
+        body_elastic_index,
+        elastic_joint,
+        elastic_mode_count,
+        joint_q,
+        joint_q_prev,
+        joint_q_start,
+        elastic_shape_vertex_local,
+        elastic_shape_vertex_phi,
+        elastic_max_mode_count,
+    )
+    cp1_world, cp1_world_prev = evaluate_contact_point_world(
+        b1,
+        cp1_local,
+        elastic_sample1,
+        body_q,
+        body_q_prev,
+        body_elastic_index,
+        elastic_joint,
+        elastic_mode_count,
+        joint_q,
+        joint_q_prev,
+        joint_q_start,
+        elastic_shape_vertex_local,
+        elastic_shape_vertex_phi,
+        elastic_max_mode_count,
+    )
     out_point0_world[contact_idx] = cp0_world
     out_point1_world[contact_idx] = cp1_world
 
@@ -2386,6 +2610,8 @@ def compute_rigid_contact_forces(
         return
 
     contact_ke = contact_penalty_k[contact_idx]
+    if elastic_sample0 >= 0 or elastic_sample1 >= 0:
+        contact_ke = contact_material_ke[contact_idx]
     contact_kd = contact_material_kd[contact_idx]
     contact_mu = contact_material_mu[contact_idx]
 
@@ -2401,14 +2627,15 @@ def compute_rigid_contact_forces(
         _h_ll_1,
         _h_al_1,
         _h_aa_1,
-    ) = evaluate_rigid_contact_from_collision(
+    ) = evaluate_rigid_contact_from_world_points(
         int(b0),
         int(b1),
         body_q,
-        body_q_prev,
         body_com,
-        cp0_local,
-        cp1_local,
+        cp0_world,
+        cp1_world,
+        cp0_world_prev,
+        cp1_world_prev,
         contact_normal,
         penetration,
         contact_ke,
@@ -3321,6 +3548,8 @@ def update_duals_body_body_contacts(
     rigid_contact_normal: wp.array(dtype=wp.vec3),
     rigid_contact_margin0: wp.array(dtype=float),
     rigid_contact_margin1: wp.array(dtype=float),
+    rigid_contact_elastic_sample0: wp.array(dtype=wp.int32),
+    rigid_contact_elastic_sample1: wp.array(dtype=wp.int32),
     shape_body: wp.array(dtype=int),
     body_q: wp.array(dtype=wp.transform),
     contact_material_ke: wp.array(dtype=float),
@@ -3348,10 +3577,15 @@ def update_duals_body_body_contacts(
     idx = wp.tid()
     if idx >= rigid_contact_count[0]:
         return
+    if rigid_contact_elastic_sample0[idx] >= 0 or rigid_contact_elastic_sample1[idx] >= 0:
+        return
 
     # Read contact geometry
     shape_id_0 = rigid_contact_shape0[idx]
     shape_id_1 = rigid_contact_shape1[idx]
+    if shape_id_0 < 0 or shape_id_1 < 0:
+        return
+
     body_id_0 = shape_body[shape_id_0]
     body_id_1 = shape_body[shape_id_1]
 

@@ -4,13 +4,24 @@ This note captures the agreed plan for adding contact support to reduced elastic
 links. It is intentionally scoped to the first useful implementation: elastic
 surface samples contacting rigid or static geometry through the VBD path.
 
+## Implementation Status
+
+The first pass is implemented. Reduced elastic shapes now generate point-sampled
+contacts from their deformed surface vertices against rigid/static shapes, VBD
+uses the deformed contact point for rigid body contact forces, and a separate
+modal contact pass projects the same fixed-stiffness contact model into the
+elastic coordinates. The initial examples are
+`basic_reduced_elastic_wall_contact`, `basic_reduced_elastic_gripper_contact`,
+and `basic_reduced_elastic_scraper_contact`, each with its own behavior test.
+
 ## Goals
 
 - Let reduced elastic links participate in contact without turning them into
   full particle or FEM bodies.
 - Support a rubber end effector pressed into a wall, with visible modal
   compression/bulging.
-- Support two rubber end effectors squeezing and lifting a rigid object.
+- Support two rubber end effectors squeezing a free dynamic rigid object while
+  it friction-lifts under gravity.
 - Reuse the existing reduced elastic surface samples. Do not add a separate
   contact-sample API or storage for the first pass.
 - Keep the solver force model consistent between the rigid body update and the
@@ -349,8 +360,9 @@ Start with tests that fail before implementation.
     and deformed elastic surface contacts.
 
 - `test_rubber_gripper_lift_smoke`
-  - Two elastic pads squeeze a rigid object and lift it for a short sequence with
-    bounded penetration and finite modal amplitudes.
+  - Two elastic pads squeeze a dynamic rigid object and lift it for a short
+    sequence with bounded penetration, finite modal amplitudes, visible
+    compression on both pads, and bounded relative motion under gravity.
 
 - `test_plastic_chair_leg_stick_slip`
   - A diagonal elastic chair-leg proxy is dragged along a high-friction ground
@@ -373,12 +385,16 @@ Start with tests that fail before implementation.
 ### Two Rubber End Effectors Pick Up Object
 
 - Two prismatic rigid fingers carry elastic pads.
-- Pads squeeze a rigid box or cylinder, then lift.
-- Friction must be enabled so the object is carried through contact.
+- Pads squeeze a free dynamic rigid sphere or rounded object, then lift and
+  optionally shake it.
+- There is no object guide or prescribed object path. Friction must hold the
+  object under gravity while the gripper pads carry the contact load.
 - Validation:
   - both pads generate contacts
   - object height increases after squeeze
+  - both pads have visible modal compression
   - object remains between grippers for the checked interval
+  - object has bounded relative motion under lift/shake
   - modal amplitudes stay bounded
 
 ### Plastic Chair Leg Stick-Slip

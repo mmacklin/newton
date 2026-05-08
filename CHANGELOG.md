@@ -18,6 +18,9 @@
 - Add reduced elastic gravity examples for a tip-weight cantilever and a suspended vertical bar
 - Add a reduced elastic matrix ROM bracket example driven through rigid fixed-joint interfaces
 - Add a flexible dipper arm example with a prismatic actuator loop and suspended rigid payload
+- Add a UR10 reduced elastic car-panel handling example with offline-decimated STL mesh loading support
+- Add reduced elastic surface contacts in VBD, including separate wall-pad, two-gripper pickup, and scraper contact examples
+- Add a reduced elastic monobloc chair stick-slip example using a cached CC0 Poly Haven asset
 - Add a fixed joint stiffness mode to `SolverVBD` for non-adaptive joint penalty solves
 - Add optional per-vertex elastic displacement coloring in ViewerGL
 - Add brick stacking example
@@ -54,6 +57,7 @@
 - Fix loop joint coordinate mapping in the MuJoCo solver so joints after a loop joint read/write at correct qpos/qvel offsets
 - Fix viewer crash when contact buffer overflows by clamping contact count to buffer size
 - Decompose loop joint constraints by DOF type (WELD for fixed, CONNECT-pair for revolute, single CONNECT for ball) instead of always emitting 2x CONNECT
+- Render reduced elastic shape meshes double-sided so thin imported shells remain visible in ViewerGL
 
 ## [1.0.0] - 2026-03-10
 

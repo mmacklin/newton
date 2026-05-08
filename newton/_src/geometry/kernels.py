@@ -1113,7 +1113,7 @@ def create_soft_contacts(
         face_v = float(0.0)
         sign = float(0.0)
 
-        min_scale = wp.min(geo_scale)
+        min_scale = wp.max(wp.min(geo_scale), 1.0e-8)
         if wp.mesh_query_point_sign_normal(
             mesh, wp.cw_div(x_local, geo_scale), margin + radius / min_scale, sign, face_index, face_u, face_v
         ):
@@ -1152,6 +1152,229 @@ def create_soft_contacts(
             soft_contact_body_vel[index] = body_vel
             soft_contact_particle[index] = particle_index
             soft_contact_normal[index] = world_normal
+
+
+@wp.kernel
+def create_elastic_shape_contacts(
+    body_q: wp.array(dtype=wp.transform),
+    joint_q: wp.array(dtype=float),
+    joint_q_start: wp.array(dtype=wp.int32),
+    body_elastic_index: wp.array(dtype=wp.int32),
+    elastic_joint: wp.array(dtype=wp.int32),
+    elastic_mode_count: wp.array(dtype=wp.int32),
+    elastic_max_mode_count: int,
+    elastic_shape_count: int,
+    elastic_shape_shape: wp.array(dtype=wp.int32),
+    elastic_shape_body: wp.array(dtype=wp.int32),
+    elastic_shape_vertex_start: wp.array(dtype=wp.int32),
+    elastic_shape_vertex_count: wp.array(dtype=wp.int32),
+    elastic_shape_vertex_local: wp.array(dtype=wp.vec3),
+    elastic_shape_vertex_phi: wp.array(dtype=wp.vec3),
+    elastic_shape_vertex_total_count: int,
+    shape_pairs: wp.array(dtype=wp.vec2i),
+    shape_pair_count: wp.array(dtype=wp.int32),
+    shape_transform: wp.array(dtype=wp.transform),
+    shape_body: wp.array(dtype=wp.int32),
+    shape_type: wp.array(dtype=wp.int32),
+    shape_scale: wp.array(dtype=wp.vec3),
+    shape_source_ptr: wp.array(dtype=wp.uint64),
+    shape_world: wp.array(dtype=wp.int32),
+    shape_flags: wp.array(dtype=wp.int32),
+    shape_margin: wp.array(dtype=float),
+    shape_gap: wp.array(dtype=float),
+    shape_heightfield_index: wp.array(dtype=wp.int32),
+    heightfield_data: wp.array(dtype=HeightfieldData),
+    heightfield_elevations: wp.array(dtype=wp.float32),
+    rigid_contact_max: int,
+    # outputs
+    rigid_contact_count: wp.array(dtype=int),
+    rigid_contact_shape0: wp.array(dtype=wp.int32),
+    rigid_contact_shape1: wp.array(dtype=wp.int32),
+    rigid_contact_point0: wp.array(dtype=wp.vec3),
+    rigid_contact_point1: wp.array(dtype=wp.vec3),
+    rigid_contact_offset0: wp.array(dtype=wp.vec3),
+    rigid_contact_offset1: wp.array(dtype=wp.vec3),
+    rigid_contact_normal: wp.array(dtype=wp.vec3),
+    rigid_contact_margin0: wp.array(dtype=float),
+    rigid_contact_margin1: wp.array(dtype=float),
+    rigid_contact_tids: wp.array(dtype=wp.int32),
+    rigid_contact_elastic_sample0: wp.array(dtype=wp.int32),
+    rigid_contact_elastic_sample1: wp.array(dtype=wp.int32),
+):
+    tid = wp.tid()
+    if elastic_shape_vertex_total_count <= 0:
+        return
+
+    pair_index = tid // elastic_shape_vertex_total_count
+    vertex_index = tid - pair_index * elastic_shape_vertex_total_count
+    if pair_index >= shape_pair_count[0]:
+        return
+
+    elastic_shape = wp.int32(-1)
+    elastic_body = wp.int32(-1)
+    for elastic_shape_index in range(elastic_shape_count):
+        start = elastic_shape_vertex_start[elastic_shape_index]
+        count = elastic_shape_vertex_count[elastic_shape_index]
+        if vertex_index >= start and vertex_index < start + count:
+            elastic_shape = elastic_shape_shape[elastic_shape_index]
+            elastic_body = elastic_shape_body[elastic_shape_index]
+            break
+
+    if elastic_shape < 0 or elastic_body < 0:
+        return
+    if (shape_flags[elastic_shape] & ShapeFlags.COLLIDE_SHAPES) == 0:
+        return
+
+    pair = shape_pairs[pair_index]
+    shape_a = pair[0]
+    shape_b = pair[1]
+    rigid_shape = wp.int32(-1)
+    if shape_a == elastic_shape:
+        rigid_shape = shape_b
+    elif shape_b == elastic_shape:
+        rigid_shape = shape_a
+    else:
+        return
+
+    if rigid_shape < 0:
+        return
+    if (shape_flags[rigid_shape] & ShapeFlags.COLLIDE_SHAPES) == 0:
+        return
+
+    rigid_body = shape_body[rigid_shape]
+    if rigid_body == elastic_body:
+        return
+    if rigid_body >= 0 and body_elastic_index[rigid_body] >= 0:
+        return
+
+    elastic_world = shape_world[elastic_shape]
+    rigid_world = shape_world[rigid_shape]
+    if elastic_world != -1 and rigid_world != -1 and elastic_world != rigid_world:
+        return
+
+    elastic_index = body_elastic_index[elastic_body]
+    if elastic_index < 0:
+        return
+
+    owner_joint = elastic_joint[elastic_index]
+    owner_q_start = joint_q_start[owner_joint]
+    mode_q_start = owner_q_start + 7
+    mode_count = elastic_mode_count[elastic_index]
+
+    X_we = wp.transform(
+        wp.vec3(joint_q[owner_q_start + 0], joint_q[owner_q_start + 1], joint_q[owner_q_start + 2]),
+        wp.quat(
+            joint_q[owner_q_start + 3],
+            joint_q[owner_q_start + 4],
+            joint_q[owner_q_start + 5],
+            joint_q[owner_q_start + 6],
+        ),
+    )
+
+    elastic_point_local_rest = elastic_shape_vertex_local[vertex_index]
+    elastic_point_local = elastic_point_local_rest
+    for mode in range(elastic_max_mode_count):
+        if mode < mode_count:
+            elastic_point_local = (
+                elastic_point_local
+                + elastic_shape_vertex_phi[vertex_index * elastic_max_mode_count + mode] * joint_q[mode_q_start + mode]
+            )
+
+    elastic_point_world = wp.transform_point(X_we, elastic_point_local)
+
+    X_wb = wp.transform_identity()
+    if rigid_body >= 0:
+        X_wb = body_q[rigid_body]
+    X_bs = shape_transform[rigid_shape]
+    X_ws = wp.transform_multiply(X_wb, X_bs)
+    X_sw = wp.transform_inverse(X_ws)
+    x_shape = wp.transform_point(X_sw, elastic_point_world)
+
+    geo_type = shape_type[rigid_shape]
+    geo_scale = shape_scale[rigid_shape]
+    d = 1.0e6
+    n = wp.vec3(0.0, 0.0, 1.0)
+
+    if geo_type == GeoType.SPHERE:
+        d = sdf_sphere(x_shape, geo_scale[0])
+        n = sdf_sphere_grad(x_shape, geo_scale[0])
+
+    if geo_type == GeoType.BOX:
+        d = sdf_box(x_shape, geo_scale[0], geo_scale[1], geo_scale[2])
+        n = sdf_box_grad(x_shape, geo_scale[0], geo_scale[1], geo_scale[2])
+
+    if geo_type == GeoType.CAPSULE:
+        d = sdf_capsule(x_shape, geo_scale[0], geo_scale[1], int(Axis.Z))
+        n = sdf_capsule_grad(x_shape, geo_scale[0], geo_scale[1], int(Axis.Z))
+
+    if geo_type == GeoType.CYLINDER:
+        d = sdf_cylinder(x_shape, geo_scale[0], geo_scale[1], int(Axis.Z))
+        n = sdf_cylinder_grad(x_shape, geo_scale[0], geo_scale[1], int(Axis.Z))
+
+    if geo_type == GeoType.CONE:
+        d = sdf_cone(x_shape, geo_scale[0], geo_scale[1], int(Axis.Z))
+        n = sdf_cone_grad(x_shape, geo_scale[0], geo_scale[1], int(Axis.Z))
+
+    if geo_type == GeoType.ELLIPSOID:
+        d = sdf_ellipsoid(x_shape, geo_scale)
+        n = sdf_ellipsoid_grad(x_shape, geo_scale)
+
+    if geo_type == GeoType.MESH or geo_type == GeoType.CONVEX_MESH:
+        mesh = shape_source_ptr[rigid_shape]
+
+        face_index = int(0)
+        face_u = float(0.0)
+        face_v = float(0.0)
+        sign = float(0.0)
+
+        min_scale = wp.max(wp.min(geo_scale), 1.0e-8)
+        query_radius = (
+            shape_margin[elastic_shape] + shape_margin[rigid_shape] + shape_gap[elastic_shape] + shape_gap[rigid_shape]
+        )
+        if wp.mesh_query_point_sign_normal(
+            mesh, wp.cw_div(x_shape, geo_scale), query_radius / min_scale, sign, face_index, face_u, face_v
+        ):
+            shape_p = wp.mesh_eval_position(mesh, face_index, face_u, face_v)
+            shape_p = wp.cw_mul(shape_p, geo_scale)
+
+            delta = x_shape - shape_p
+            d = wp.length(delta) * sign
+            n = wp.normalize(delta) * sign
+
+    if geo_type == GeoType.PLANE:
+        d = sdf_plane(x_shape, geo_scale[0] * 0.5, geo_scale[1] * 0.5)
+        n = wp.vec3(0.0, 0.0, 1.0)
+
+    if geo_type == GeoType.HFIELD:
+        hfd = heightfield_data[shape_heightfield_index[rigid_shape]]
+        d, n = sample_sdf_grad_heightfield(hfd, heightfield_elevations, x_shape)
+
+    margin0 = shape_margin[rigid_shape]
+    margin1 = shape_margin[elastic_shape]
+    gap = shape_gap[rigid_shape] + shape_gap[elastic_shape]
+    if d > margin0 + margin1 + gap:
+        return
+
+    contact_index = wp.atomic_add(rigid_contact_count, 0, 1)
+    if contact_index >= rigid_contact_max:
+        return
+
+    rigid_point_shape = x_shape - n * d
+    rigid_point_body = wp.transform_point(X_bs, rigid_point_shape)
+    normal_world = wp.normalize(wp.transform_vector(X_ws, n))
+
+    rigid_contact_shape0[contact_index] = rigid_shape
+    rigid_contact_shape1[contact_index] = elastic_shape
+    rigid_contact_point0[contact_index] = rigid_point_body
+    rigid_contact_point1[contact_index] = elastic_point_local_rest
+    rigid_contact_offset0[contact_index] = wp.transform_vector(X_bs, margin0 * n)
+    rigid_contact_offset1[contact_index] = wp.transform_vector(wp.transform_inverse(X_we), -margin1 * normal_world)
+    rigid_contact_normal[contact_index] = normal_world
+    rigid_contact_margin0[contact_index] = margin0
+    rigid_contact_margin1[contact_index] = margin1
+    rigid_contact_tids[contact_index] = tid
+    rigid_contact_elastic_sample0[contact_index] = -1
+    rigid_contact_elastic_sample1[contact_index] = vertex_index
 
 
 # --------------------------------------

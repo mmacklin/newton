@@ -25,7 +25,7 @@ from ..geometry.broad_phase_nxn import BroadPhaseAllPairs, BroadPhaseExplicit
 from ..geometry.broad_phase_sap import BroadPhaseSAP
 from ..geometry.collision_core import compute_tight_aabb_from_support
 from ..geometry.contact_data import ContactData
-from ..geometry.kernels import create_soft_contacts
+from ..geometry.kernels import create_elastic_shape_contacts, create_soft_contacts
 from ..geometry.narrow_phase import NarrowPhase
 from ..geometry.sdf_hydroelastic import HydroelasticSDF
 from ..geometry.support_function import (
@@ -47,6 +47,7 @@ class ContactWriterData:
     # Body information arrays (for transforming to body-local coordinates)
     body_q: wp.array(dtype=wp.transform)
     shape_body: wp.array(dtype=int)
+    body_elastic_index: wp.array(dtype=wp.int32)
     shape_gap: wp.array(dtype=float)
     # Output arrays
     contact_count: wp.array(dtype=int)
@@ -60,6 +61,8 @@ class ContactWriterData:
     out_margin0: wp.array(dtype=float)
     out_margin1: wp.array(dtype=float)
     out_tids: wp.array(dtype=int)
+    out_elastic_sample0: wp.array(dtype=wp.int32)
+    out_elastic_sample1: wp.array(dtype=wp.int32)
     # Per-contact shape properties, empty arrays if not enabled.
     # Zero-values indicate that no per-contact shape properties are set for this contact
     out_stiffness: wp.array(dtype=float)
@@ -81,10 +84,26 @@ def write_contact(
         writer_data: ContactWriterData struct containing body info and output arrays
         output_index: If -1, use atomic_add to get the next available index if contact distance is less than margin. If >= 0, use this index directly and skip margin check.
     """
+    body0 = writer_data.shape_body[contact_data.shape_a]
+    body1 = writer_data.shape_body[contact_data.shape_b]
+    if body0 >= 0 and writer_data.body_elastic_index[body0] >= 0:
+        if output_index >= 0 and output_index < writer_data.contact_max:
+            writer_data.out_shape0[output_index] = -1
+            writer_data.out_shape1[output_index] = -1
+            writer_data.out_elastic_sample0[output_index] = -1
+            writer_data.out_elastic_sample1[output_index] = -1
+        return
+    if body1 >= 0 and writer_data.body_elastic_index[body1] >= 0:
+        if output_index >= 0 and output_index < writer_data.contact_max:
+            writer_data.out_shape0[output_index] = -1
+            writer_data.out_shape1[output_index] = -1
+            writer_data.out_elastic_sample0[output_index] = -1
+            writer_data.out_elastic_sample1[output_index] = -1
+        return
+
     total_separation_needed = (
         contact_data.radius_eff_a + contact_data.radius_eff_b + contact_data.margin_a + contact_data.margin_b
     )
-
     offset_mag_a = contact_data.radius_eff_a + contact_data.margin_a
     offset_mag_b = contact_data.radius_eff_b + contact_data.margin_b
 
@@ -120,10 +139,6 @@ def write_contact(
     writer_data.out_shape0[index] = contact_data.shape_a
     writer_data.out_shape1[index] = contact_data.shape_b
 
-    # Get body indices for the shapes
-    body0 = writer_data.shape_body[contact_data.shape_a]
-    body1 = writer_data.shape_body[contact_data.shape_b]
-
     # Compute body inverse transforms
     X_bw_a = wp.transform_identity() if body0 == -1 else wp.transform_inverse(writer_data.body_q[body0])
     X_bw_b = wp.transform_identity() if body1 == -1 else wp.transform_inverse(writer_data.body_q[body1])
@@ -142,6 +157,8 @@ def write_contact(
     writer_data.out_margin0[index] = offset_mag_a
     writer_data.out_margin1[index] = offset_mag_b
     writer_data.out_tids[index] = 0  # tid not available in this context
+    writer_data.out_elastic_sample0[index] = -1
+    writer_data.out_elastic_sample1[index] = -1
 
     # Write stiffness/damping/friction only if per-contact shape properties are enabled
     if writer_data.out_stiffness.shape[0] > 0:
@@ -792,6 +809,7 @@ class CollisionPipeline:
             writer_data.contact_max = contacts.rigid_contact_max
             writer_data.body_q = state.body_q
             writer_data.shape_body = model.shape_body
+            writer_data.body_elastic_index = model.body_elastic_index
             writer_data.shape_gap = model.shape_gap
             writer_data.contact_count = contacts.rigid_contact_count
             writer_data.out_shape0 = contacts.rigid_contact_shape0
@@ -804,6 +822,8 @@ class CollisionPipeline:
             writer_data.out_margin0 = contacts.rigid_contact_margin0
             writer_data.out_margin1 = contacts.rigid_contact_margin1
             writer_data.out_tids = contacts.rigid_contact_tids
+            writer_data.out_elastic_sample0 = contacts.rigid_contact_elastic_sample0
+            writer_data.out_elastic_sample1 = contacts.rigid_contact_elastic_sample1
 
             writer_data.out_stiffness = contacts.rigid_contact_stiffness
             writer_data.out_damping = contacts.rigid_contact_damping
@@ -831,6 +851,64 @@ class CollisionPipeline:
                 writer_data=writer_data,
                 device=self.device,
             )
+
+            if (
+                getattr(model, "elastic_shape_count", 0) > 0
+                and getattr(model, "elastic_shape_vertex_total_count", 0) > 0
+                and self.shape_pairs_max > 0
+            ):
+                wp.launch(
+                    kernel=create_elastic_shape_contacts,
+                    dim=self.shape_pairs_max * model.elastic_shape_vertex_total_count,
+                    inputs=[
+                        state.body_q,
+                        state.joint_q,
+                        model.joint_q_start,
+                        model.body_elastic_index,
+                        model.elastic_joint,
+                        model.elastic_mode_count,
+                        model.elastic_max_mode_count,
+                        model.elastic_shape_count,
+                        model.elastic_shape_shape,
+                        model.elastic_shape_body,
+                        model.elastic_shape_vertex_start,
+                        model.elastic_shape_vertex_count,
+                        model.elastic_shape_vertex_local,
+                        model.elastic_shape_vertex_phi,
+                        model.elastic_shape_vertex_total_count,
+                        self.broad_phase_shape_pairs,
+                        self.broad_phase_pair_count,
+                        model.shape_transform,
+                        model.shape_body,
+                        model.shape_type,
+                        model.shape_scale,
+                        model.shape_source_ptr,
+                        model.shape_world,
+                        model.shape_flags,
+                        model.shape_margin,
+                        model.shape_gap,
+                        model.shape_heightfield_index,
+                        model.heightfield_data,
+                        model.heightfield_elevations,
+                        contacts.rigid_contact_max,
+                    ],
+                    outputs=[
+                        contacts.rigid_contact_count,
+                        contacts.rigid_contact_shape0,
+                        contacts.rigid_contact_shape1,
+                        contacts.rigid_contact_point0,
+                        contacts.rigid_contact_point1,
+                        contacts.rigid_contact_offset0,
+                        contacts.rigid_contact_offset1,
+                        contacts.rigid_contact_normal,
+                        contacts.rigid_contact_margin0,
+                        contacts.rigid_contact_margin1,
+                        contacts.rigid_contact_tids,
+                        contacts.rigid_contact_elastic_sample0,
+                        contacts.rigid_contact_elastic_sample1,
+                    ],
+                    device=self.device,
+                )
 
         # Generate soft contacts for particles and shapes
         particle_count = len(state.particle_q) if state.particle_q else 0

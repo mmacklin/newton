@@ -19,6 +19,28 @@ they are a checklist for future agentic work on this subsystem.
   not directly project fixed/revolute angular moments into modes because endpoint
   rotations/slopes are not represented yet.
 
+## Modal Mass Notes
+
+- Current VBD reduced elastic updates use one scalar modal mass per mode. This is
+  a diagonal approximation to the reduced mass matrix.
+- `ModalGeneratorPOD` currently builds modes with ordinary sampled-displacement
+  SVD, rescales each mode by maximum point displacement, then estimates
+  `mode_mass[i] = sample_mass * sum_j ||phi_i(x_j)||^2`. This is not strict
+  mass normalization, although it is close to a mass-orthogonal basis when sample
+  weights are uniform.
+- Prefer mass-normalizing POD modes when the goal is physical dynamics:
+  `phi_i <- phi_i / sqrt(phi_i^T M phi_i)`. If the modes are mass-orthogonal,
+  this makes the diagonal modal mass entries exactly one under the chosen lumped
+  mass model and improves the interpretation of stiffness and damping.
+- Mass normalization alone does not remove off-diagonal mass terms for arbitrary
+  nonuniform samples or nonorthogonal exemplar bases. A future dense reduced
+  model should store `M_ij = phi_i^T M phi_j` per modal basis.
+- VBD can still keep the current cheap diagonal update as a Jacobi-style
+  preconditioner while evaluating the RHS/residual with the full reduced mass
+  matrix. Under fixed-point convergence, that targets the coupled reduced system
+  rather than the diagonal approximation. The same pattern can later extend to
+  dense reduced `K` and `C` matrices.
+
 ## Force Consistency Invariants
 
 For a linear joint attachment:
