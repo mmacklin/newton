@@ -244,6 +244,140 @@ The sign convention must be locked by tests. The invariant is that increasing a
 modal coordinate in the direction of contact force should reduce the modal
 energy gradient.
 
+## Follow-Up: Unified Modal Source Projection
+
+Contacts, joint attachments, and future point loads should use the same reduced
+projection abstraction. Treat every elastic force input `f` as a Cartesian
+source on an elastic body:
+
+```text
+F_f       Cartesian force on the elastic source point [N], shape [3]
+K_f       Cartesian force derivative / stiffness [N/m], shape [3, 3]
+Phi_f     local modal displacement map at the source, shape [3, mode_count]
+J_f       world modal Jacobian, J_f = R_body Phi_f, shape [3, mode_count]
+```
+
+`Phi_f` is intentionally not tied to a single stored surface sample. It may be a
+vertex sample, a joint endpoint sample, a barycentric interpolation of triangle
+samples, or a future custom basis evaluation. The per-body modal block receives
+the source contribution:
+
+```text
+g += -J_f^T F_f
+H +=  J_f^T K_f J_f
+```
+
+This lets contacts and joint attachments share one projection path. Source
+generation can remain specialized: contact code computes contact force terms,
+joint code computes constraint endpoint force terms, and the elastic solver only
+projects Cartesian sources into modal coordinates.
+
+### Source Representation
+
+Prefer a compact source buffer over baking source-specific loops into the block
+solve:
+
+```text
+source_body
+source_phi_ref       sample id, endpoint id, or interpolated-source id
+source_side_sign     +1 or -1 when the endpoint convention needs it
+source_force         F_f
+source_hessian       K_f, or a structured/factored representation
+```
+
+Build or sort compact per-elastic-body source ranges so each body processes only
+its own sources. This avoids the current body-by-all-contacts scan and gives a
+natural place to add residual reporting per source type.
+
+### Structured 1D And Low-Rank Forces
+
+Normal contact is the common cheap case. The Cartesian stiffness is rank 1:
+
+```text
+K_f = k n n^T
+a = J_f^T n
+H += k a a^T
+```
+
+This only asks how much each mode moves the source point along the contact
+normal. Damping along the normal has the same structure and should be folded
+into the scalar `k` for the implicit step. More general projected constraints
+can use the same idea:
+
+```text
+K_f = D W D^T
+H += (J_f^T D) W (D^T J_f)
+```
+
+where `D` contains one or more Cartesian force directions. Prefer storing this
+factored representation for normal contact and simple joint projections instead
+of materializing a dense `3 x 3` Hessian when the source is low rank.
+
+### Local Space Projection
+
+For sources on the same elastic body, rotate source terms into the body-local
+frame once:
+
+```text
+F_local = R_body^T F_f
+K_local = R_body^T K_f R_body
+g += -Phi_f^T F_local
+H +=  Phi_f^T K_local Phi_f
+```
+
+For factored 1D sources, rotate the direction instead:
+
+```text
+n_local = R_body^T n
+a = Phi_f^T n_local
+H += k a a^T
+```
+
+This keeps `Phi_f` local and avoids repeatedly rotating every modal column for
+every force source.
+
+### Dense Block Assembly
+
+Assemble the modal block in local scratch storage per elastic body:
+
+- Accumulate `g` and `H` into per-body tiles.
+- Fill only one triangle of the symmetric block during assembly, then mirror
+  only if a later solve path requires full storage.
+- For low-rank sources, use modal outer products directly instead of generic
+  `3 x mode_count` by `mode_count x mode_count` multiplies.
+- For dense `K_f` sources, compute `B = K_f Phi_f` and then
+  `H += Phi_f^T B` using tiled operations.
+
+The source projection kernel should make source type explicit enough to choose
+the cheap low-rank path for contact normals and the generic dense path only when
+needed.
+
+### Tile-Based Solve
+
+Replace the fixed-sweep Gauss-Seidel dense modal solve with a small dense tile
+solve:
+
+1. Assemble the symmetric modal block tile.
+2. Add modal inertia, damping, stiffness, and all source Hessian terms.
+3. Compute a tile-local residual norm before the solve.
+4. Factor the tile with Cholesky or LDLT.
+5. Solve for the modal increment.
+6. Report the post-solve residual norm and update norm.
+
+The base reduced matrices are constant for a fixed basis:
+
+```text
+M_r = Phi^T M Phi
+C_r = Phi^T C Phi
+K_r = Phi^T K Phi
+```
+
+They can be precomputed. Contact and joint source Hessians remain state
+dependent, so the full block generally still needs per-iteration assembly and
+factorization. Since mode counts are small, the Cholesky/LDLT cost should be
+minor compared with contact generation and source assembly, and it removes the
+need to tune dense Gauss-Seidel sweep counts.
+
 ## Contact Stiffness
 
 Do not use AVBD adaptive contact penalties for the initial elastic contact pass.

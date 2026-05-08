@@ -749,7 +749,9 @@ class Example:
                 if self.stop_first_time < 0.0:
                     self.stop_first_time = self.sim_time
             if self.pusher_shape >= 0:
-                pusher_contact_count = int(np.count_nonzero((shape0 == self.pusher_shape) | (shape1 == self.pusher_shape)))
+                pusher_contact_count = int(
+                    np.count_nonzero((shape0 == self.pusher_shape) | (shape1 == self.pusher_shape))
+                )
                 self.max_pusher_contact_count = max(self.max_pusher_contact_count, pusher_contact_count)
                 if pusher_contact_count > 0:
                     self.pusher_contact_frames += 1

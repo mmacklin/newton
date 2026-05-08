@@ -34,8 +34,8 @@ from newton.examples.basic._reduced_elastic_contact import (
     contact_shape_config,
     finite_difference_target_velocities,
     identity_inertia,
-    owner_qd_starts,
     owner_q_starts,
+    owner_qd_starts,
     rubber_contact_modes,
     run_example_test,
     validate_elastic_vertices,
@@ -172,9 +172,7 @@ class Example:
         close = 0.5 * (1.0 - math.cos(min(t / self.close_duration, 1.0) * math.pi))
         lift = 0.0
         if t > self.lift_start_time:
-            lift = 0.22 * 0.5 * (
-                1.0 - math.cos(min((t - self.lift_start_time) / self.lift_duration, 1.0) * math.pi)
-            )
+            lift = 0.22 * 0.5 * (1.0 - math.cos(min((t - self.lift_start_time) / self.lift_duration, 1.0) * math.pi))
 
         left_grip_x = self.grip_initial_x + (self.left_grip_closed_x - self.grip_initial_x) * close
         right_grip_x = self.grip_initial_x + (self.right_grip_closed_x - self.grip_initial_x) * close
@@ -240,9 +238,7 @@ class Example:
             targets = self._drive_targets(t)
             previous_targets = self._drive_targets(max(t - self.sim_dt, 0.0))
             velocities = finite_difference_target_velocities(targets, previous_targets, self.sim_dt)
-            apply_kinematic_targets(
-                self.state_0, self._owner_q_starts, targets, velocities, self._owner_qd_starts
-            )
+            apply_kinematic_targets(self.state_0, self._owner_q_starts, targets, velocities, self._owner_qd_starts)
             self.model.collide(self.state_0, self.contacts)
             self.solver.step(self.state_0, self.state_1, self.control, self.contacts, self.sim_dt)
             self.state_0, self.state_1 = self.state_1, self.state_0
