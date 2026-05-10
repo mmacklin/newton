@@ -104,6 +104,49 @@ force and the matching diagonal damping Hessian term.
 - Example `test_final()` checks for finite state, bounded residuals, bounded
   modal amplitudes, and expected visible deformation.
 
+## Residual And Iteration Hygiene
+
+- Reduced elastic examples should record the solver's modal block metrics:
+  initial residual norm, unrelaxed solve residual norm, applied residual norm,
+  applied update norm, and maximum modal update.
+- Use the relative solve residual for cross-example comparisons:
+  `solve_residual_norm / max(initial_residual_norm, eps)`. Absolute residuals
+  are generalized force magnitudes and vary strongly by example.
+- Run the iteration sweep before changing default VBD iteration counts:
+
+  ```bash
+  uv run --extra examples python reports/sweep_reduced_elastic_iterations.py \
+      --iterations 8 12 16 22 32 48 72 \
+      --output reports/assets/reduced_elastic_iteration_sweep.csv
+  ```
+
+- The same sweep can override simulation substeps per rendered frame:
+
+  ```bash
+  uv run --extra examples python reports/sweep_reduced_elastic_iterations.py \
+      --cases wall gripper scraper \
+      --iterations 12 \
+      --substeps 2 4 \
+      --output reports/assets/reduced_elastic_substep_sweep_contacts.csv
+  ```
+
+- The May 8, 2026 sweep selected these conservative defaults:
+  - flexible dipper arm: 32 iterations
+  - wall contact: 12 iterations
+  - two-gripper contact: 12 iterations
+  - scraper contact: 12 iterations
+  - plastic chair stick-slip: 12 iterations
+- Higher iteration counts can change the fixed-point contact response rather
+  than simply improve convergence. In the sweep, wall contact developed settled
+  jitter at 16+ iterations, scraper deformation reduced at higher counts, and
+  chair contact normal motion/dropouts grew for several higher-count runs.
+- The May 8, 2026 substep check did not support a global 2-substep default.
+  Wall contact passed at 2 substeps, gripper was marginal but failed the
+  final-update guard, scraper had excessive settled rebound, dipper became too
+  stiff at its selected 32 iterations, and chair lost the intended stick/slip
+  regime. Keep the current example substeps unless each example is retuned and
+  re-swept.
+
 ## Contact Plan
 
 The current contact design is serialized in

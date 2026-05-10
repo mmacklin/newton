@@ -29,6 +29,10 @@ import warp as wp
 
 import newton
 import newton.examples
+from newton.examples.basic._reduced_elastic import (
+    init_elastic_solver_metric_tracking,
+    update_elastic_solver_metric_tracking,
+)
 from newton.examples.basic._reduced_elastic_contact import (
     apply_kinematic_targets,
     contact_shape_config,
@@ -44,6 +48,8 @@ from newton.examples.basic._reduced_elastic_contact import (
 
 
 class Example:
+    solver_iterations = 12
+
     def __init__(self, viewer, args):
         self.fps = 60
         self.frame_dt = 1.0 / self.fps
@@ -94,7 +100,7 @@ class Example:
         self.contacts = self.model.contacts()
         self.solver = newton.solvers.SolverVBD(
             self.model,
-            iterations=12,
+            iterations=self.solver_iterations,
             rigid_contact_k_start=8.0e4,
             friction_epsilon=2.0e-3,
         )
@@ -104,6 +110,12 @@ class Example:
         self.max_vertical_compression = 0.0
         self.max_lateral_bend = 0.0
         self.max_contact_count = 0
+        self.contact_dropouts_after_settle = 0
+        self.settled_modal_step_max = 0.0
+        self.settled_modal_accel_max = 0.0
+        self._settled_prev_q = None
+        self._settled_prev_prev_q = None
+        init_elastic_solver_metric_tracking(self)
 
         self.viewer.set_model(self.model)
         self.viewer.show_elastic_strain = True
@@ -118,11 +130,26 @@ class Example:
         return {self.scraper: (wp.vec3(scraper_x, 0.0, scraper_z), wp.quat_identity())}
 
     def _update_metrics(self):
+        update_elastic_solver_metric_tracking(self)
         q = self.state_0.joint_q.numpy()
         start = self._owner_q_starts[self.scraper]
-        self.max_vertical_compression = max(self.max_vertical_compression, abs(float(q[start + 7])))
-        self.max_lateral_bend = max(self.max_lateral_bend, abs(float(q[start + 8])))
-        self.max_contact_count = max(self.max_contact_count, int(self.contacts.rigid_contact_count.numpy()[0]))
+        modal_q = q[start + 7 : start + 9].copy()
+        self.max_vertical_compression = max(self.max_vertical_compression, abs(float(modal_q[0])))
+        self.max_lateral_bend = max(self.max_lateral_bend, abs(float(modal_q[1])))
+        contact_count = int(self.contacts.rigid_contact_count.numpy()[0])
+        self.max_contact_count = max(self.max_contact_count, contact_count)
+
+        if self.sim_time > 1.2:
+            if contact_count == 0:
+                self.contact_dropouts_after_settle += 1
+            if self._settled_prev_q is not None:
+                step = modal_q - self._settled_prev_q
+                self.settled_modal_step_max = max(self.settled_modal_step_max, float(max(abs(step))))
+            if self._settled_prev_q is not None and self._settled_prev_prev_q is not None:
+                accel = modal_q - 2.0 * self._settled_prev_q + self._settled_prev_prev_q
+                self.settled_modal_accel_max = max(self.settled_modal_accel_max, float(max(abs(accel))))
+            self._settled_prev_prev_q = self._settled_prev_q
+            self._settled_prev_q = modal_q
 
     def simulate(self):
         for substep in range(self.sim_substeps):
@@ -151,12 +178,28 @@ class Example:
     def test_final(self):
         if self.max_contact_count == 0:
             raise AssertionError("scraper contact example did not generate contacts")
+        if self.contact_dropouts_after_settle != 0:
+            raise AssertionError(f"scraper contact dropped out after settling: {self.contact_dropouts_after_settle}")
         if self.max_vertical_compression < 0.005:
             raise AssertionError(f"scraper vertical compression too small: {self.max_vertical_compression}")
-        if self.max_lateral_bend < 0.003:
+        if self.max_lateral_bend < 0.08:
             raise AssertionError(f"scraper lateral bend too small: {self.max_lateral_bend}")
         if self.max_lateral_bend > 0.16:
             raise AssertionError(f"scraper lateral bend too large: {self.max_lateral_bend}")
+        if self.settled_modal_step_max > 0.025 or self.settled_modal_accel_max > 0.03:
+            raise AssertionError(
+                "scraper settled modal rebound/chatter too high: "
+                f"step={self.settled_modal_step_max}, accel={self.settled_modal_accel_max}"
+            )
+        if self.final_modal_solve_residual_ratio > 0.02:
+            raise AssertionError(
+                f"scraper modal solve residual ratio too high: {self.final_modal_solve_residual_ratio}"
+            )
+        if self.final_modal_update_norm > 1.0e-6 or self.max_modal_update_norm > 1.0e-3:
+            raise AssertionError(
+                "scraper modal update too large: "
+                f"final={self.final_modal_update_norm}, max={self.max_modal_update_norm}"
+            )
         validate_elastic_vertices(self.model, self.state_0)
 
 

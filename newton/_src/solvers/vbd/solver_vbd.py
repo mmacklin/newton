@@ -373,6 +373,17 @@ class SolverVBD(SolverBase):
         self.elastic_mode_block_grad = wp.empty(elastic_block_vec_count, dtype=float, device=self.device)
         self.elastic_mode_block_delta = wp.empty(elastic_block_vec_count, dtype=float, device=self.device)
         self.elastic_mode_block_matrix = wp.empty(elastic_block_mat_count, dtype=float, device=self.device)
+        self.elastic_mode_block_initial_residual_norm = wp.zeros(
+            model.elastic_body_count, dtype=float, device=self.device
+        )
+        self.elastic_mode_block_solve_residual_norm = wp.zeros(
+            model.elastic_body_count, dtype=float, device=self.device
+        )
+        self.elastic_mode_block_applied_residual_norm = wp.zeros(
+            model.elastic_body_count, dtype=float, device=self.device
+        )
+        self.elastic_mode_block_update_norm = wp.zeros(model.elastic_body_count, dtype=float, device=self.device)
+        self.elastic_mode_block_update_max = wp.zeros(model.elastic_body_count, dtype=float, device=self.device)
 
     def _init_particle_system(
         self,
@@ -1385,6 +1396,25 @@ class SolverVBD(SolverBase):
         """
         self.update_rigid_history = update
 
+    def elastic_mode_solve_metrics(self) -> dict[str, np.ndarray]:
+        """Return the latest reduced elastic modal block solve metrics.
+
+        Metrics are written per elastic body during :meth:`step`.
+        ``initial_residual_norm`` measures the modal block gradient before the
+        block update. ``solve_residual_norm`` measures the linear residual after
+        the unrelaxed dense block solve, ``g + H delta``.
+        ``applied_residual_norm`` uses the relaxed update that was actually
+        applied. ``update_norm`` and ``update_max`` measure the applied modal
+        increment.
+        """
+        return {
+            "initial_residual_norm": self.elastic_mode_block_initial_residual_norm.numpy().copy(),
+            "solve_residual_norm": self.elastic_mode_block_solve_residual_norm.numpy().copy(),
+            "applied_residual_norm": self.elastic_mode_block_applied_residual_norm.numpy().copy(),
+            "update_norm": self.elastic_mode_block_update_norm.numpy().copy(),
+            "update_max": self.elastic_mode_block_update_max.numpy().copy(),
+        }
+
     @override
     def step(
         self,
@@ -1439,6 +1469,12 @@ class SolverVBD(SolverBase):
         model = self.model
         if getattr(model, "elastic_body_count", 0) == 0:
             return
+
+        self.elastic_mode_block_initial_residual_norm.zero_()
+        self.elastic_mode_block_solve_residual_norm.zero_()
+        self.elastic_mode_block_applied_residual_norm.zero_()
+        self.elastic_mode_block_update_norm.zero_()
+        self.elastic_mode_block_update_max.zero_()
 
         wp.copy(state_out.joint_q, state_in.joint_q)
         wp.copy(state_out.joint_qd, state_in.joint_qd)
@@ -1621,6 +1657,11 @@ class SolverVBD(SolverBase):
                 self.elastic_mode_block_grad,
                 self.elastic_mode_block_delta,
                 self.elastic_mode_block_matrix,
+                self.elastic_mode_block_initial_residual_norm,
+                self.elastic_mode_block_solve_residual_norm,
+                self.elastic_mode_block_applied_residual_norm,
+                self.elastic_mode_block_update_norm,
+                self.elastic_mode_block_update_max,
                 elastic_mode_relaxation,
             ],
             outputs=[

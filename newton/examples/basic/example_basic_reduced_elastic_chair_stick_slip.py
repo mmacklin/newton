@@ -38,7 +38,12 @@ import warp as wp
 
 import newton
 import newton.examples
-from newton.examples.basic._reduced_elastic import elastic_shape_deformed_vertices, transform_point
+from newton.examples.basic._reduced_elastic import (
+    elastic_shape_deformed_vertices,
+    init_elastic_solver_metric_tracking,
+    transform_point,
+    update_elastic_solver_metric_tracking,
+)
 from newton.examples.basic._reduced_elastic_contact import (
     contact_shape_config,
     run_example_test,
@@ -323,6 +328,8 @@ def _arg_float(args, name: str, default: float) -> float:
 
 
 class Example:
+    solver_iterations = 12
+
     def __init__(self, viewer, args):
         self.fps = 60
         self.frame_dt = 1.0 / self.fps
@@ -485,7 +492,7 @@ class Example:
         self.contacts = self.model.contacts()
         self.solver = newton.solvers.SolverVBD(
             self.model,
-            iterations=22,
+            iterations=self.solver_iterations,
             rigid_contact_k_start=5.0e3,
             friction_epsilon=1.5e-3,
         )
@@ -547,6 +554,7 @@ class Example:
         self.slide_start = self._slide_position()
         self.slide_end = self.slide_start
         self.previous_slide = self.slide_start
+        init_elastic_solver_metric_tracking(self)
 
         self.viewer.set_model(self.model)
         self.viewer.show_elastic_strain = False
@@ -735,6 +743,7 @@ class Example:
         self._was_contact_sticking = sticking or (self._was_contact_sticking and not slipping)
 
     def _update_metrics(self):
+        update_elastic_solver_metric_tracking(self)
         contact_count = min(int(self.contacts.rigid_contact_count.numpy()[0]), int(self.model.rigid_contact_max))
         self.max_contact_count = max(self.max_contact_count, contact_count)
         if self.sim_time > 0.75 and contact_count == 0:
@@ -860,6 +869,12 @@ class Example:
         normal_mean = self.contact_normal_speed_sum / max(self.contact_normal_speed_count, 1)
         if normal_mean > 0.16:
             raise AssertionError(f"chair contact normal motion is too bouncy: normal_speed_mean={normal_mean}")
+        if self.final_modal_solve_residual_ratio > 0.08:
+            raise AssertionError(f"chair modal solve residual ratio too high: {self.final_modal_solve_residual_ratio}")
+        if self.final_modal_update_norm > 5.0e-5 or self.max_modal_update_norm > 1.0e-3:
+            raise AssertionError(
+                f"chair modal update too large: final={self.final_modal_update_norm}, max={self.max_modal_update_norm}"
+            )
         validate_elastic_vertices(self.model, self.state_0)
 
 

@@ -10,6 +10,8 @@ from newton._src.solvers.vbd.rigid_vbd_kernels import (
     evaluate_rigid_contact_from_world_points,
 )
 
+wp.set_module_options({"enable_backward": False})
+
 
 @wp.func
 def _elastic_endpoint_xform(
@@ -348,6 +350,11 @@ def solve_elastic_modes_from_sources_block(
     elastic_mode_block_grad: wp.array(dtype=float),
     elastic_mode_block_delta: wp.array(dtype=float),
     elastic_mode_block_matrix: wp.array(dtype=float),
+    elastic_mode_block_initial_residual_norm: wp.array(dtype=float),
+    elastic_mode_block_solve_residual_norm: wp.array(dtype=float),
+    elastic_mode_block_applied_residual_norm: wp.array(dtype=float),
+    elastic_mode_block_update_norm: wp.array(dtype=float),
+    elastic_mode_block_update_max: wp.array(dtype=float),
     elastic_mode_relaxation: float,
     joint_q: wp.array(dtype=float),
     joint_qd: wp.array(dtype=float),
@@ -575,6 +582,34 @@ def solve_elastic_modes_from_sources_block(
                         * elastic_mode_block_delta[block_vec_start + j]
                     )
             elastic_mode_block_delta[block_vec_start + i] = rhs / diag
+
+    initial_residual_sq = float(0.0)
+    solve_residual_sq = float(0.0)
+    applied_residual_sq = float(0.0)
+    update_norm_sq = float(0.0)
+    update_max = float(0.0)
+    for i in range(mode_count):
+        grad_i = elastic_mode_block_grad[block_vec_start + i]
+        solve_residual_i = grad_i
+        applied_residual_i = grad_i
+        for j in range(mode_count):
+            h_ij = elastic_mode_block_matrix[block_mat_start + i * max_modes + j]
+            delta_j = elastic_mode_block_delta[block_vec_start + j]
+            solve_residual_i = solve_residual_i + h_ij * delta_j
+            applied_residual_i = applied_residual_i + h_ij * (elastic_mode_relaxation * delta_j)
+
+        applied_delta_i = elastic_mode_relaxation * elastic_mode_block_delta[block_vec_start + i]
+        initial_residual_sq = initial_residual_sq + grad_i * grad_i
+        solve_residual_sq = solve_residual_sq + solve_residual_i * solve_residual_i
+        applied_residual_sq = applied_residual_sq + applied_residual_i * applied_residual_i
+        update_norm_sq = update_norm_sq + applied_delta_i * applied_delta_i
+        update_max = wp.max(update_max, wp.abs(applied_delta_i))
+
+    elastic_mode_block_initial_residual_norm[elastic_index] = wp.sqrt(initial_residual_sq)
+    elastic_mode_block_solve_residual_norm[elastic_index] = wp.sqrt(solve_residual_sq)
+    elastic_mode_block_applied_residual_norm[elastic_index] = wp.sqrt(applied_residual_sq)
+    elastic_mode_block_update_norm[elastic_index] = wp.sqrt(update_norm_sq)
+    elastic_mode_block_update_max[elastic_index] = update_max
 
     for mode in range(mode_count):
         q_idx = q_start + mode

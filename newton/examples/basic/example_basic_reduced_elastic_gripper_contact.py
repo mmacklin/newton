@@ -29,6 +29,10 @@ import warp as wp
 
 import newton
 import newton.examples
+from newton.examples.basic._reduced_elastic import (
+    init_elastic_solver_metric_tracking,
+    update_elastic_solver_metric_tracking,
+)
 from newton.examples.basic._reduced_elastic_contact import (
     apply_kinematic_targets,
     contact_shape_config,
@@ -55,6 +59,7 @@ class Example:
     lift_start_time = 0.35
     lift_duration = 1.0
     settle_time = 1.45
+    solver_iterations = 12
 
     def __init__(self, viewer, args):
         self.fps = 60
@@ -135,7 +140,7 @@ class Example:
         self.contacts = self.model.contacts()
         self.solver = newton.solvers.SolverVBD(
             self.model,
-            iterations=16,
+            iterations=self.solver_iterations,
             rigid_contact_k_start=self.contact_ke,
             friction_epsilon=3.0e-3,
             elastic_contact_relaxation=0.30,
@@ -161,6 +166,7 @@ class Example:
         self.max_lift_lag = 0.0
         self.max_lift_lead = 0.0
         self.max_horizontal_drift = 0.0
+        init_elastic_solver_metric_tracking(self)
 
         self.viewer.set_model(self.model)
         self.viewer.show_elastic_strain = True
@@ -183,6 +189,7 @@ class Example:
         }
 
     def _update_metrics(self):
+        update_elastic_solver_metric_tracking(self)
         q = self.state_0.joint_q.numpy()
         left_start = self._owner_q_starts[self.left_grip]
         right_start = self._owner_q_starts[self.right_grip]
@@ -288,14 +295,23 @@ class Example:
                 f"dropouts={self.settled_contact_dropouts}, left={self.max_left_contact_count}, "
                 f"right={self.max_right_contact_count}"
             )
-        if settled_x_range > 0.012:
+        if settled_x_range > 0.004:
             raise AssertionError(f"settled grasp vibrated horizontally: range={settled_x_range}")
-        if settled_rel_z_range > 0.012:
+        if settled_rel_z_range > 0.004:
             raise AssertionError(f"settled grasp vibrated vertically relative to pads: range={settled_rel_z_range}")
-        if self.max_settled_horizontal_speed > 0.08:
+        if self.max_settled_horizontal_speed > 0.02:
             raise AssertionError(f"settled grasp horizontal speed too high: speed={self.max_settled_horizontal_speed}")
-        if self.max_settled_vertical_speed > 0.08:
+        if self.max_settled_vertical_speed > 0.02:
             raise AssertionError(f"settled grasp vertical speed too high: speed={self.max_settled_vertical_speed}")
+        if self.final_modal_solve_residual_ratio > 0.05:
+            raise AssertionError(
+                f"gripper modal solve residual ratio too high: {self.final_modal_solve_residual_ratio}"
+            )
+        if self.final_modal_update_norm > 1.0e-5 or self.max_modal_update_norm > 5.0e-4:
+            raise AssertionError(
+                "gripper modal update too large: "
+                f"final={self.final_modal_update_norm}, max={self.max_modal_update_norm}"
+            )
         validate_elastic_vertices(self.model, self.state_0)
 
 
