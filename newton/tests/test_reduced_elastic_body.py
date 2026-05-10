@@ -722,6 +722,16 @@ def test_vbd_elastic_contact_solves_modal_penetration(test, device):
     q_start = int(model.joint_q_start.numpy()[owner_joint])
     test.assertLess(abs(float(state_1.joint_q.numpy()[q_start + 7])), 1.0e-5)
 
+    metrics = solver.elastic_mode_solve_metrics()
+    for values in metrics.values():
+        test.assertEqual(values.shape, (1,))
+        test.assertTrue(bool(np.isfinite(values).all()))
+    test.assertGreater(float(metrics["initial_residual_norm"][0]), 0.0)
+    test.assertLess(float(metrics["solve_residual_norm"][0]), 1.0e-5)
+    test.assertLess(float(metrics["applied_residual_norm"][0]), 1.0e-5)
+    test.assertGreater(float(metrics["update_norm"][0]), 1.0e-4)
+    test.assertLess(float(metrics["update_norm"][0]), 1.0e-2)
+
 
 def test_elastic_strain_visualization_colors(test, device):
     length = 1.0

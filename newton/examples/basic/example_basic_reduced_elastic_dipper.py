@@ -33,8 +33,10 @@ import newton.examples
 from newton.examples.basic._reduced_elastic import (
     beam_render_sample_points,
     elastic_shape_volume_ratio,
+    init_elastic_solver_metric_tracking,
     joint_endpoint_world,
     transform_point,
+    update_elastic_solver_metric_tracking,
 )
 
 
@@ -75,6 +77,8 @@ def _set_camera_from_bounds(viewer, bounds_min: np.ndarray, bounds_max: np.ndarr
 
 
 class Example:
+    solver_iterations = 32
+
     def __init__(self, viewer, args):
         self.fps = 60
         self.frame_dt = 1.0 / self.fps
@@ -112,6 +116,10 @@ class Example:
         self.max_volume_ratio_error = 0.0
         self.tip_z_min = float(self.tip_world0[2])
         self.tip_z_max = float(self.tip_world0[2])
+        self.max_mode_step = 0.0
+        self.max_mode_accel = 0.0
+        self._previous_modes = None
+        self._previous_previous_modes = None
         self._last_drive_target = 0.0
         self._last_target_theta = self.arm_theta0
 
@@ -326,7 +334,7 @@ class Example:
 
         self.solver = newton.solvers.SolverVBD(
             self.model,
-            iterations=32,
+            iterations=self.solver_iterations,
             rigid_joint_linear_k_start=5.0e5,
             rigid_joint_angular_k_start=5.0e5,
             rigid_joint_linear_ke=5.0e5,
@@ -335,6 +343,7 @@ class Example:
             rigid_joint_angular_kd=0.0,
             rigid_joint_adaptive_stiffness=False,
         )
+        init_elastic_solver_metric_tracking(self)
 
         self.viewer.set_model(self.model)
         self.viewer.show_elastic_strain = True
@@ -453,6 +462,17 @@ class Example:
         self.state_0.body_q.assign(body_q)
 
     def _update_metrics(self):
+        update_elastic_solver_metric_tracking(self)
+        modes = self._mode_values().copy()
+        if self.step_count > 30 and self._previous_modes is not None:
+            step = modes - self._previous_modes
+            self.max_mode_step = max(self.max_mode_step, float(np.max(np.abs(step))))
+        if self.step_count > 30 and self._previous_modes is not None and self._previous_previous_modes is not None:
+            accel = modes - 2.0 * self._previous_modes + self._previous_previous_modes
+            self.max_mode_accel = max(self.max_mode_accel, float(np.max(np.abs(accel))))
+        self._previous_previous_modes = self._previous_modes
+        self._previous_modes = modes
+
         self.max_joint_residual = max(self.max_joint_residual, *self._joint_residuals())
         self.max_drive_error = max(self.max_drive_error, abs(self._drive_stroke() - self._last_drive_target))
         self.max_tip_bend = max(self.max_tip_bend, self._tip_bend())
@@ -500,8 +520,18 @@ class Example:
             raise AssertionError("dipper tip did not move under the driven actuator and payload")
         if self.max_tip_vertical_motion > 6.5e-1:
             raise AssertionError(f"dipper tip vertical motion was too large: {self.max_tip_vertical_motion}")
+        if self.max_mode_step > 0.01 or self.max_mode_accel > 0.003:
+            raise AssertionError(
+                f"dipper arm modal ringing too high: step={self.max_mode_step}, accel={self.max_mode_accel}"
+            )
         if np.max(np.abs(self._mode_values())) > 0.45:
             raise AssertionError(f"dipper arm mode amplitudes are out of range: {self._mode_values()}")
+        if self.final_modal_solve_residual_ratio > 0.02:
+            raise AssertionError(f"dipper modal solve residual ratio too high: {self.final_modal_solve_residual_ratio}")
+        if self.final_modal_update_norm > 1.0e-4 or self.max_modal_update_norm > 2.0e-4:
+            raise AssertionError(
+                f"dipper modal update too large: final={self.final_modal_update_norm}, max={self.max_modal_update_norm}"
+            )
         if self.max_volume_ratio_error > 0.5:
             raise AssertionError(f"dipper arm volume changed by {self.max_volume_ratio_error:.3f}")
 

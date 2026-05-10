@@ -8,6 +8,13 @@ from collections.abc import Sequence
 import numpy as np
 
 BOX_RENDER_MAX_EDGE_LENGTH = 0.01
+ELASTIC_SOLVER_METRIC_KEYS = (
+    "initial_residual_norm",
+    "solve_residual_norm",
+    "applied_residual_norm",
+    "update_norm",
+    "update_max",
+)
 
 
 def _segment_count(extent: float, edge: float) -> int:
@@ -129,6 +136,70 @@ def quat_rotate(q: np.ndarray, v: np.ndarray) -> np.ndarray:
 def transform_point(xform: np.ndarray, point: np.ndarray) -> np.ndarray:
     """Transform a point by a Newton transform stored as position + xyzw quaternion."""
     return np.asarray(xform[:3], dtype=float) + quat_rotate(np.asarray(xform[3:7], dtype=float), point)
+
+
+def elastic_solver_metric_snapshot(solver) -> dict[str, float]:
+    """Return max-per-body reduced elastic modal solve metrics for one solver step."""
+    if not hasattr(solver, "elastic_mode_solve_metrics"):
+        return dict.fromkeys(ELASTIC_SOLVER_METRIC_KEYS, 0.0)
+
+    metrics = solver.elastic_mode_solve_metrics()
+    snapshot = {}
+    for key in ELASTIC_SOLVER_METRIC_KEYS:
+        values = np.asarray(metrics.get(key, ()), dtype=float)
+        snapshot[key] = float(np.max(values)) if values.size > 0 else 0.0
+    residual_scale = max(snapshot["initial_residual_norm"], 1.0e-12)
+    snapshot["solve_residual_ratio"] = snapshot["solve_residual_norm"] / residual_scale
+    snapshot["applied_residual_ratio"] = snapshot["applied_residual_norm"] / residual_scale
+    return snapshot
+
+
+def init_elastic_solver_metric_tracking(example) -> None:
+    """Initialize common reduced elastic solver metric fields on an example."""
+    example.final_modal_initial_residual_norm = 0.0
+    example.final_modal_solve_residual_norm = 0.0
+    example.final_modal_applied_residual_norm = 0.0
+    example.final_modal_solve_residual_ratio = 0.0
+    example.final_modal_applied_residual_ratio = 0.0
+    example.final_modal_update_norm = 0.0
+    example.final_modal_update_max = 0.0
+    example.max_modal_initial_residual_norm = 0.0
+    example.max_modal_solve_residual_norm = 0.0
+    example.max_modal_applied_residual_norm = 0.0
+    example.max_modal_solve_residual_ratio = 0.0
+    example.max_modal_applied_residual_ratio = 0.0
+    example.max_modal_update_norm = 0.0
+    example.max_modal_update_max = 0.0
+
+
+def update_elastic_solver_metric_tracking(example, solver=None) -> None:
+    """Update common reduced elastic solver metric fields on an example."""
+    if solver is None:
+        solver = example.solver
+
+    snapshot = elastic_solver_metric_snapshot(solver)
+    example.final_modal_initial_residual_norm = snapshot["initial_residual_norm"]
+    example.final_modal_solve_residual_norm = snapshot["solve_residual_norm"]
+    example.final_modal_applied_residual_norm = snapshot["applied_residual_norm"]
+    example.final_modal_solve_residual_ratio = snapshot["solve_residual_ratio"]
+    example.final_modal_applied_residual_ratio = snapshot["applied_residual_ratio"]
+    example.final_modal_update_norm = snapshot["update_norm"]
+    example.final_modal_update_max = snapshot["update_max"]
+    example.max_modal_initial_residual_norm = max(
+        example.max_modal_initial_residual_norm, snapshot["initial_residual_norm"]
+    )
+    example.max_modal_solve_residual_norm = max(example.max_modal_solve_residual_norm, snapshot["solve_residual_norm"])
+    example.max_modal_applied_residual_norm = max(
+        example.max_modal_applied_residual_norm, snapshot["applied_residual_norm"]
+    )
+    example.max_modal_solve_residual_ratio = max(
+        example.max_modal_solve_residual_ratio, snapshot["solve_residual_ratio"]
+    )
+    example.max_modal_applied_residual_ratio = max(
+        example.max_modal_applied_residual_ratio, snapshot["applied_residual_ratio"]
+    )
+    example.max_modal_update_norm = max(example.max_modal_update_norm, snapshot["update_norm"])
+    example.max_modal_update_max = max(example.max_modal_update_max, snapshot["update_max"])
 
 
 def joint_endpoint_world(model, state, joint: int, side: str) -> np.ndarray:
