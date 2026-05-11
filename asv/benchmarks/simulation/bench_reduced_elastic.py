@@ -19,20 +19,20 @@ from asv_runner.benchmarks.mark import skip_benchmark_if
 wp.config.enable_backward = False
 wp.config.quiet = True
 
-from newton.examples.basic.example_basic_reduced_elastic_gripper_contact import Example as GripperExample
-from newton.examples.basic.example_basic_reduced_elastic_scraper_contact import Example as ScraperExample
+from newton.examples.basic.example_basic_reduced_elastic_chair_stick_slip import Example as ChairExample
+from newton.examples.basic.example_basic_reduced_elastic_dipper import Example as DipperExample
 from newton.examples.basic.example_basic_reduced_elastic_wall_contact import Example as WallExample
 from newton.viewer import ViewerNull
 
 EXAMPLES = {
     "wall": (WallExample, 60),
-    "gripper": (GripperExample, 75),
-    "scraper": (ScraperExample, 75),
+    "dipper": (DipperExample, 60),
+    "chair": (ChairExample, 60),
 }
 
 
-class FastReducedElasticContactExamples:
-    """Benchmark reduced elastic contact examples without rendering."""
+class FastReducedElasticRepresentativeExamples:
+    """Benchmark representative reduced elastic examples without rendering."""
 
     params = (tuple(EXAMPLES),)
     param_names = ("case",)
@@ -70,7 +70,7 @@ if __name__ == "__main__":
     from newton.utils import run_benchmark
 
     benchmark_list = {
-        "FastReducedElasticContactExamples": FastReducedElasticContactExamples,
+        "FastReducedElasticRepresentativeExamples": FastReducedElasticRepresentativeExamples,
     }
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)

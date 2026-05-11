@@ -150,14 +150,14 @@ force and the matching diagonal damping Hessian term.
 ## Optimization Hygiene
 
 - Before each reduced elastic modal assembly optimization, run a focused
-  correctness test and the contact benchmark:
+  correctness test and the representative wall/dipper/chair benchmark:
 
   ```bash
   uv run --extra dev --extra examples -m newton.tests \
       -k test_elastic_contact_local_mat33_projection_matches_world
   uv run --extra dev --extra examples python \
       asv/benchmarks/simulation/bench_reduced_elastic.py \
-      -b FastReducedElasticContactExamples
+      -b FastReducedElasticRepresentativeExamples
   ```
 
 - Re-run the same commands after each individual kernel change. Do not batch
