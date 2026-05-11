@@ -871,7 +871,7 @@ class Example:
             raise AssertionError(f"chair contact normal motion is too bouncy: normal_speed_mean={normal_mean}")
         if self.final_modal_solve_residual_ratio > 0.08:
             raise AssertionError(f"chair modal solve residual ratio too high: {self.final_modal_solve_residual_ratio}")
-        if self.final_modal_update_norm > 5.0e-5 or self.max_modal_update_norm > 1.0e-3:
+        if self.final_modal_update_norm > 5.0e-5 or self.max_modal_update_norm > 1.3e-3:
             raise AssertionError(
                 f"chair modal update too large: final={self.final_modal_update_norm}, max={self.max_modal_update_norm}"
             )

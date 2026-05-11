@@ -29,6 +29,18 @@ EXAMPLES = {
     "dipper": (DipperExample, 60),
     "chair": (ChairExample, 60),
 }
+WARMUP_FRAMES = 5
+
+
+def _make_warmed_example(case):
+    example_cls, frame_count = EXAMPLES[case]
+    example = example_cls(ViewerNull(num_frames=frame_count + WARMUP_FRAMES), None)
+
+    for _ in range(WARMUP_FRAMES):
+        example.step()
+    wp.synchronize_device()
+
+    return example, frame_count
 
 
 class FastReducedElasticRepresentativeExamples:
@@ -40,13 +52,7 @@ class FastReducedElasticRepresentativeExamples:
     number = 1
 
     def setup(self, case):
-        example_cls, frame_count = EXAMPLES[case]
-        self.frame_count = frame_count
-        self.example = example_cls(ViewerNull(num_frames=frame_count), None)
-
-        for _ in range(5):
-            self.example.step()
-        wp.synchronize_device()
+        self.example, self.frame_count = _make_warmed_example(case)
 
     @skip_benchmark_if(wp.get_cuda_device_count() == 0)
     def time_step(self, case):
@@ -57,11 +63,11 @@ class FastReducedElasticRepresentativeExamples:
 
     @skip_benchmark_if(wp.get_cuda_device_count() == 0)
     def track_final_modal_solve_residual_ratio(self, case):
-        del case
-        for _ in range(self.frame_count):
-            self.example.step()
+        example, frame_count = _make_warmed_example(case)
+        for _ in range(frame_count):
+            example.step()
         wp.synchronize_device()
-        return self.example.final_modal_solve_residual_ratio
+        return example.final_modal_solve_residual_ratio
 
 
 if __name__ == "__main__":
