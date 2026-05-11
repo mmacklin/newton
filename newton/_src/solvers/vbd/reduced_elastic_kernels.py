@@ -12,6 +12,9 @@ from newton._src.solvers.vbd.rigid_vbd_kernels import (
 
 wp.set_module_options({"enable_backward": False})
 
+_NUM_ELASTIC_CONTACT_THREADS_PER_BODY = 32
+"""Threads per reduced elastic body for modal contact accumulation."""
+
 
 @wp.func
 def _elastic_endpoint_xform(
@@ -151,9 +154,14 @@ def copy_elastic_modes(
         joint_qd_dst[qd_start + i] = joint_qd_src[qd_start + i]
 
 
-@wp.kernel
-def compute_elastic_contact_force_hessian(
+@wp.func
+def _accumulate_elastic_contact_modes(
     dt: float,
+    contact_idx: int,
+    body: int,
+    elastic_index: int,
+    body_R: wp.mat33,
+    body_R_T: wp.mat33,
     elastic_joint: wp.array(dtype=wp.int32),
     elastic_mode_count: wp.array(dtype=wp.int32),
     elastic_max_mode_count: int,
@@ -162,8 +170,6 @@ def compute_elastic_contact_force_hessian(
     body_q_prev: wp.array(dtype=wp.transform),
     body_com: wp.array(dtype=wp.vec3),
     shape_body: wp.array(dtype=wp.int32),
-    rigid_contact_max: int,
-    rigid_contact_count: wp.array(dtype=int),
     rigid_contact_shape0: wp.array(dtype=wp.int32),
     rigid_contact_shape1: wp.array(dtype=wp.int32),
     rigid_contact_point0: wp.array(dtype=wp.vec3),
@@ -182,23 +188,9 @@ def compute_elastic_contact_force_hessian(
     elastic_shape_vertex_phi: wp.array(dtype=wp.vec3),
     joint_q_prev: wp.array(dtype=float),
     joint_q: wp.array(dtype=float),
-    elastic_contact_body: wp.array(dtype=wp.int32),
-    elastic_contact_sample: wp.array(dtype=wp.int32),
-    elastic_contact_force: wp.array(dtype=wp.vec3),
-    elastic_contact_hessian: wp.array(dtype=wp.mat33),
+    elastic_mode_block_grad: wp.array(dtype=float),
+    elastic_mode_block_matrix: wp.array(dtype=float),
 ):
-    contact_idx = wp.tid()
-    elastic_contact_body[contact_idx] = -1
-    elastic_contact_sample[contact_idx] = -1
-    elastic_contact_force[contact_idx] = wp.vec3(0.0)
-    elastic_contact_hessian[contact_idx] = wp.mat33(0.0)
-
-    contact_limit = rigid_contact_count[0]
-    if contact_limit > rigid_contact_max:
-        contact_limit = rigid_contact_max
-    if contact_idx >= contact_limit:
-        return
-
     s0 = rigid_contact_shape0[contact_idx]
     s1 = rigid_contact_shape1[contact_idx]
     if s0 < 0 or s1 < 0:
@@ -220,7 +212,7 @@ def compute_elastic_contact_force_hessian(
         elastic_body = b1
         elastic_sample = elastic_sample1
 
-    if elastic_body < 0 or elastic_sample < 0:
+    if elastic_body != body or elastic_sample < 0:
         return
 
     cp0_local = rigid_contact_point0[contact_idx]
@@ -294,18 +286,36 @@ def compute_elastic_contact_force_hessian(
         dt,
     )
 
-    elastic_contact_body[contact_idx] = elastic_body
-    elastic_contact_sample[contact_idx] = elastic_sample
+    elastic_force = force_1
+    elastic_h = h_ll_1
     if use_side0:
-        elastic_contact_force[contact_idx] = force_0
-        elastic_contact_hessian[contact_idx] = h_ll_0
-    else:
-        elastic_contact_force[contact_idx] = force_1
-        elastic_contact_hessian[contact_idx] = h_ll_1
+        elastic_force = force_0
+        elastic_h = h_ll_0
+
+    elastic_force_local = body_R_T * elastic_force
+    elastic_h_local = body_R_T * (elastic_h * body_R)
+    mode_count = elastic_mode_count[elastic_index]
+    max_modes = elastic_max_mode_count
+    block_vec_start = elastic_index * max_modes
+    block_mat_start = elastic_index * max_modes * max_modes
+
+    for i in range(mode_count):
+        phi_i_local = elastic_shape_vertex_phi[elastic_sample * max_modes + i]
+        wp.atomic_add(
+            elastic_mode_block_grad,
+            block_vec_start + i,
+            -wp.dot(elastic_force_local, phi_i_local),
+        )
+
+        for j in range(i, mode_count):
+            phi_j_local = elastic_shape_vertex_phi[elastic_sample * max_modes + j]
+            h_ij = wp.dot(phi_i_local, elastic_h_local * phi_j_local)
+            mat_idx = block_mat_start + i * max_modes + j
+            wp.atomic_add(elastic_mode_block_matrix, mat_idx, h_ij)
 
 
 @wp.kernel
-def solve_elastic_modes_from_sources_block(
+def assemble_elastic_joints(
     dt: float,
     elastic_body: wp.array(dtype=wp.int32),
     elastic_joint: wp.array(dtype=wp.int32),
@@ -335,29 +345,15 @@ def solve_elastic_modes_from_sources_block(
     joint_penalty_kd: wp.array(dtype=float),
     joint_parent_elastic_endpoint: wp.array(dtype=wp.int32),
     joint_child_elastic_endpoint: wp.array(dtype=wp.int32),
-    rigid_contact_max: int,
-    rigid_contact_count: wp.array(dtype=int),
     joint_q_start: wp.array(dtype=wp.int32),
     joint_qd_start: wp.array(dtype=wp.int32),
-    elastic_shape_vertex_phi: wp.array(dtype=wp.vec3),
     joint_f: wp.array(dtype=float),
     joint_q_prev: wp.array(dtype=float),
     joint_qd_prev: wp.array(dtype=float),
-    elastic_contact_body: wp.array(dtype=wp.int32),
-    elastic_contact_sample: wp.array(dtype=wp.int32),
-    elastic_contact_force: wp.array(dtype=wp.vec3),
-    elastic_contact_hessian: wp.array(dtype=wp.mat33),
+    joint_q: wp.array(dtype=float),
     elastic_mode_block_grad: wp.array(dtype=float),
     elastic_mode_block_delta: wp.array(dtype=float),
     elastic_mode_block_matrix: wp.array(dtype=float),
-    elastic_mode_block_initial_residual_norm: wp.array(dtype=float),
-    elastic_mode_block_solve_residual_norm: wp.array(dtype=float),
-    elastic_mode_block_applied_residual_norm: wp.array(dtype=float),
-    elastic_mode_block_update_norm: wp.array(dtype=float),
-    elastic_mode_block_update_max: wp.array(dtype=float),
-    elastic_mode_relaxation: float,
-    joint_q: wp.array(dtype=float),
-    joint_qd: wp.array(dtype=float),
 ):
     elastic_index = wp.tid()
     body = elastic_body[elastic_index]
@@ -371,6 +367,8 @@ def solve_elastic_modes_from_sources_block(
     inv_dt = 1.0 / dt
     inv_dt_sq = inv_dt * inv_dt
     body_rot = wp.transform_get_rotation(body_q[body])
+    body_R = wp.quat_to_matrix(body_rot)
+    body_R_T = wp.transpose(body_R)
     block_vec_start = elastic_index * max_modes
     block_mat_start = elastic_index * max_modes * max_modes
 
@@ -517,54 +515,209 @@ def solve_elastic_modes_from_sources_block(
             h_scale = h_scale + (kd * inv_dt) * k
 
         side = elastic_endpoint_side[endpoint]
-        body_rot = wp.transform_get_rotation(body_q[body])
+        joint_force_local = body_R_T * joint_force
+        P_local = body_R_T * (P * body_R)
         for i in range(mode_count):
             phi_i_local = elastic_endpoint_phi[endpoint * elastic_max_mode_count + i]
-            dC_i = wp.quat_rotate(body_rot, phi_i_local)
             if side == 0:
-                dC_i = -dC_i
-            PdC_i = P * dC_i
+                phi_i_local = -phi_i_local
+            PdC_i = P_local * phi_i_local
             elastic_mode_block_grad[block_vec_start + i] = elastic_mode_block_grad[block_vec_start + i] + wp.dot(
-                joint_force, PdC_i
+                joint_force_local, PdC_i
             )
 
-            for j in range(mode_count):
+            for j in range(i, mode_count):
                 phi_j_local = elastic_endpoint_phi[endpoint * elastic_max_mode_count + j]
-                dC_j = wp.quat_rotate(body_rot, phi_j_local)
                 if side == 0:
-                    dC_j = -dC_j
-                PdC_j = P * dC_j
+                    phi_j_local = -phi_j_local
+                PdC_j = P_local * phi_j_local
                 mat_idx = block_mat_start + i * max_modes + j
                 h_ij = h_scale * wp.dot(PdC_i, PdC_j)
                 elastic_mode_block_matrix[mat_idx] = elastic_mode_block_matrix[mat_idx] + h_ij
 
+
+@wp.kernel
+def assemble_elastic_contacts(
+    dt: float,
+    elastic_body: wp.array(dtype=wp.int32),
+    elastic_joint: wp.array(dtype=wp.int32),
+    elastic_mode_count: wp.array(dtype=wp.int32),
+    elastic_max_mode_count: int,
+    body_elastic_index: wp.array(dtype=wp.int32),
+    body_q: wp.array(dtype=wp.transform),
+    body_q_prev: wp.array(dtype=wp.transform),
+    body_com: wp.array(dtype=wp.vec3),
+    shape_body: wp.array(dtype=wp.int32),
+    rigid_contact_max: int,
+    rigid_contact_count: wp.array(dtype=int),
+    rigid_contact_shape0: wp.array(dtype=wp.int32),
+    rigid_contact_shape1: wp.array(dtype=wp.int32),
+    rigid_contact_point0: wp.array(dtype=wp.vec3),
+    rigid_contact_point1: wp.array(dtype=wp.vec3),
+    rigid_contact_normal: wp.array(dtype=wp.vec3),
+    rigid_contact_margin0: wp.array(dtype=float),
+    rigid_contact_margin1: wp.array(dtype=float),
+    rigid_contact_elastic_sample0: wp.array(dtype=wp.int32),
+    rigid_contact_elastic_sample1: wp.array(dtype=wp.int32),
+    contact_material_ke: wp.array(dtype=float),
+    contact_material_kd: wp.array(dtype=float),
+    contact_material_mu: wp.array(dtype=float),
+    friction_epsilon: float,
+    body_contact_buffer_pre_alloc: int,
+    body_contact_counts: wp.array(dtype=wp.int32),
+    body_contact_indices: wp.array(dtype=wp.int32),
+    joint_q_start: wp.array(dtype=wp.int32),
+    elastic_shape_vertex_local: wp.array(dtype=wp.vec3),
+    elastic_shape_vertex_phi: wp.array(dtype=wp.vec3),
+    joint_q_prev: wp.array(dtype=float),
+    joint_q: wp.array(dtype=float),
+    elastic_mode_block_grad: wp.array(dtype=float),
+    elastic_mode_block_matrix: wp.array(dtype=float),
+):
+    tid = wp.tid()
+    elastic_index = tid // _NUM_ELASTIC_CONTACT_THREADS_PER_BODY
+    thread_id_within_body = tid % _NUM_ELASTIC_CONTACT_THREADS_PER_BODY
+
+    body = elastic_body[elastic_index]
+    body_rot = wp.transform_get_rotation(body_q[body])
+    body_R = wp.quat_to_matrix(body_rot)
+    body_R_T = wp.transpose(body_R)
+
     contact_limit = rigid_contact_count[0]
     if contact_limit > rigid_contact_max:
         contact_limit = rigid_contact_max
-    for contact_idx in range(contact_limit):
-        if elastic_contact_body[contact_idx] != body:
-            continue
 
-        elastic_sample = elastic_contact_sample[contact_idx]
-        if elastic_sample < 0:
-            continue
+    # Use the rigid per-body list when it is complete; otherwise stride the
+    # full contact range so contact overflow never truncates reduced forces.
+    use_contact_list = False
+    contact_count = wp.int32(0)
+    if body_contact_buffer_pre_alloc > 0:
+        contact_count = body_contact_counts[body]
+        use_contact_list = contact_count <= body_contact_buffer_pre_alloc
 
-        elastic_force = elastic_contact_force[contact_idx]
-        elastic_h = elastic_contact_hessian[contact_idx]
+    if use_contact_list:
+        contact_i = thread_id_within_body
+        while contact_i < contact_count:
+            contact_idx = body_contact_indices[body * body_contact_buffer_pre_alloc + contact_i]
+            if contact_idx < contact_limit:
+                _accumulate_elastic_contact_modes(
+                    dt,
+                    contact_idx,
+                    body,
+                    elastic_index,
+                    body_R,
+                    body_R_T,
+                    elastic_joint,
+                    elastic_mode_count,
+                    elastic_max_mode_count,
+                    body_elastic_index,
+                    body_q,
+                    body_q_prev,
+                    body_com,
+                    shape_body,
+                    rigid_contact_shape0,
+                    rigid_contact_shape1,
+                    rigid_contact_point0,
+                    rigid_contact_point1,
+                    rigid_contact_normal,
+                    rigid_contact_margin0,
+                    rigid_contact_margin1,
+                    rigid_contact_elastic_sample0,
+                    rigid_contact_elastic_sample1,
+                    contact_material_ke,
+                    contact_material_kd,
+                    contact_material_mu,
+                    friction_epsilon,
+                    joint_q_start,
+                    elastic_shape_vertex_local,
+                    elastic_shape_vertex_phi,
+                    joint_q_prev,
+                    joint_q,
+                    elastic_mode_block_grad,
+                    elastic_mode_block_matrix,
+                )
 
-        for i in range(mode_count):
-            phi_i_local = elastic_shape_vertex_phi[elastic_sample * max_modes + i]
-            phi_i_world = wp.quat_rotate(body_rot, phi_i_local)
-            elastic_mode_block_grad[block_vec_start + i] = elastic_mode_block_grad[block_vec_start + i] - wp.dot(
-                elastic_force, phi_i_world
+            contact_i += _NUM_ELASTIC_CONTACT_THREADS_PER_BODY
+    else:
+        contact_idx = thread_id_within_body
+        while contact_idx < contact_limit:
+            _accumulate_elastic_contact_modes(
+                dt,
+                contact_idx,
+                body,
+                elastic_index,
+                body_R,
+                body_R_T,
+                elastic_joint,
+                elastic_mode_count,
+                elastic_max_mode_count,
+                body_elastic_index,
+                body_q,
+                body_q_prev,
+                body_com,
+                shape_body,
+                rigid_contact_shape0,
+                rigid_contact_shape1,
+                rigid_contact_point0,
+                rigid_contact_point1,
+                rigid_contact_normal,
+                rigid_contact_margin0,
+                rigid_contact_margin1,
+                rigid_contact_elastic_sample0,
+                rigid_contact_elastic_sample1,
+                contact_material_ke,
+                contact_material_kd,
+                contact_material_mu,
+                friction_epsilon,
+                joint_q_start,
+                elastic_shape_vertex_local,
+                elastic_shape_vertex_phi,
+                joint_q_prev,
+                joint_q,
+                elastic_mode_block_grad,
+                elastic_mode_block_matrix,
             )
 
-            for j in range(mode_count):
-                phi_j_local = elastic_shape_vertex_phi[elastic_sample * max_modes + j]
-                phi_j_world = wp.quat_rotate(body_rot, phi_j_local)
-                h_ij = wp.dot(phi_i_world, elastic_h * phi_j_world)
-                mat_idx = block_mat_start + i * max_modes + j
-                elastic_mode_block_matrix[mat_idx] = elastic_mode_block_matrix[mat_idx] + h_ij
+            contact_idx += _NUM_ELASTIC_CONTACT_THREADS_PER_BODY
+
+
+@wp.kernel
+def solve_elastic_body(
+    dt: float,
+    elastic_joint: wp.array(dtype=wp.int32),
+    elastic_mode_count: wp.array(dtype=wp.int32),
+    elastic_max_mode_count: int,
+    joint_q_start: wp.array(dtype=wp.int32),
+    joint_qd_start: wp.array(dtype=wp.int32),
+    joint_q_prev: wp.array(dtype=float),
+    elastic_mode_block_grad: wp.array(dtype=float),
+    elastic_mode_block_delta: wp.array(dtype=float),
+    elastic_mode_block_matrix: wp.array(dtype=float),
+    elastic_mode_block_initial_residual_norm: wp.array(dtype=float),
+    elastic_mode_block_solve_residual_norm: wp.array(dtype=float),
+    elastic_mode_block_applied_residual_norm: wp.array(dtype=float),
+    elastic_mode_block_update_norm: wp.array(dtype=float),
+    elastic_mode_block_update_max: wp.array(dtype=float),
+    elastic_mode_relaxation: float,
+    joint_q: wp.array(dtype=float),
+    joint_qd: wp.array(dtype=float),
+):
+    elastic_index = wp.tid()
+    owner_joint = elastic_joint[elastic_index]
+    q_start = joint_q_start[owner_joint] + 7
+    qd_start = joint_qd_start[owner_joint] + 6
+    mode_count = elastic_mode_count[elastic_index]
+    max_modes = elastic_max_mode_count
+
+    inv_dt = 1.0 / dt
+    block_vec_start = elastic_index * max_modes
+    block_mat_start = elastic_index * max_modes * max_modes
+
+    for i in range(mode_count):
+        for j in range(i + 1, mode_count):
+            elastic_mode_block_matrix[block_mat_start + j * max_modes + i] = elastic_mode_block_matrix[
+                block_mat_start + i * max_modes + j
+            ]
 
     # Small dense solve by Gauss-Seidel on the reduced modal block.
     for _sweep in range(max_modes * 2):
