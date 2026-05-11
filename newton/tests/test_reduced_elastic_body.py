@@ -733,6 +733,50 @@ def test_vbd_elastic_contact_solves_modal_penetration(test, device):
     test.assertLess(float(metrics["update_norm"][0]), 1.0e-2)
 
 
+def test_elastic_contact_local_mat33_projection_matches_world(test, device):
+    del device
+
+    quat = wp.quat_from_axis_angle(wp.vec3(0.3, -0.7, 0.2), 0.83)
+    quat_np = np.array([quat[0], quat[1], quat[2], quat[3]], dtype=float)
+    rot = np.column_stack(
+        (
+            _quat_rotate_np(quat_np, np.array([1.0, 0.0, 0.0])),
+            _quat_rotate_np(quat_np, np.array([0.0, 1.0, 0.0])),
+            _quat_rotate_np(quat_np, np.array([0.0, 0.0, 1.0])),
+        )
+    )
+    phi_local = np.array(
+        [
+            [0.35, -0.12, 0.08],
+            [-0.18, 0.24, 0.31],
+            [0.07, 0.42, -0.16],
+            [-0.29, -0.05, 0.23],
+        ],
+        dtype=float,
+    )
+    force_world = np.array([4.0, -7.0, 2.5], dtype=float)
+    hessian_world = np.array(
+        [
+            [18.0, -2.0, 4.0],
+            [-2.0, 11.0, 1.5],
+            [4.0, 1.5, 7.0],
+        ],
+        dtype=float,
+    )
+
+    phi_world = phi_local @ rot.T
+    grad_world = -(phi_world @ force_world)
+    hessian_modal_world = phi_world @ hessian_world @ phi_world.T
+
+    force_local = rot.T @ force_world
+    hessian_local = rot.T @ hessian_world @ rot
+    grad_local = -(phi_local @ force_local)
+    hessian_modal_local = phi_local @ hessian_local @ phi_local.T
+
+    np.testing.assert_allclose(grad_local, grad_world, rtol=1.0e-12, atol=1.0e-12)
+    np.testing.assert_allclose(hessian_modal_local, hessian_modal_world, rtol=1.0e-12, atol=1.0e-12)
+
+
 def test_elastic_strain_visualization_colors(test, device):
     length = 1.0
 
@@ -1595,6 +1639,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_vbd_elastic_contact_solves_modal_penetration",
         test_vbd_elastic_contact_solves_modal_penetration,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_contact_local_mat33_projection_matches_world",
+        test_elastic_contact_local_mat33_projection_matches_world,
         devices=[device],
     )
     add_function_test(
