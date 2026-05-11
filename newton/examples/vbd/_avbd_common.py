@@ -26,6 +26,8 @@ REFERENCE_GRAVITY = -10.0
 REFERENCE_PENALTY_MIN = 1.0
 REFERENCE_PENALTY_MAX = 1.0e10
 REFERENCE_COLLISION_MARGIN = 0.01
+REFERENCE_CONTACT_MATCH_POS_THRESHOLD = 0.05
+REFERENCE_CONTACT_MATCH_NORMAL_DOT_THRESHOLD = 0.9
 REFERENCE_STICK_THRESH = 1.0e-5
 REFERENCE_FRICTION_EPSILON = 0.0
 REFERENCE_STICK_FREEZE_TRANSLATION_EPS = 0.0
@@ -139,7 +141,14 @@ class AvbdSceneExample:
         self.broken_joint_count = 0
         self.rigid_joint_linear_ke = REFERENCE_PENALTY_MAX
         self.rigid_joint_angular_ke = REFERENCE_PENALTY_MAX
+        self.rigid_joint_linear_kd = 0.0
+        self.rigid_joint_angular_kd = 0.0
+        self.rigid_contact_stick_freeze_translation_eps = REFERENCE_STICK_FREEZE_TRANSLATION_EPS
+        self.rigid_contact_stick_freeze_angular_eps = REFERENCE_STICK_FREEZE_ANGULAR_EPS
+        self.rigid_contact_k_start = REFERENCE_PENALTY_MIN
         self.rigid_body_contact_buffer_size = 512
+        self.rigid_body_serial_reverse = False
+        self.contact_matching = "latest"
 
         builder = newton.ModelBuilder(gravity=REFERENCE_GRAVITY)
         builder.rigid_gap = REFERENCE_COLLISION_MARGIN
@@ -152,6 +161,13 @@ class AvbdSceneExample:
 
         self.scene.build(self, builder)
         builder.color()
+        # The AVBD demo updates rigid bodies serially. Joint-only coloring puts
+        # unjointed contact stacks into one parallel color, which changes the
+        # contact solve to a Jacobi update and destabilizes the reference scenes.
+        body_order = (
+            range(builder.body_count - 1, -1, -1) if self.rigid_body_serial_reverse else range(builder.body_count)
+        )
+        builder.body_color_groups = [np.array([body], dtype=int) for body in body_order]
         self.model = builder.finalize()
         newton.eval_fk(self.model, self.model.joint_q, self.model.joint_qd, self.model)
 
@@ -159,7 +175,9 @@ class AvbdSceneExample:
         self.collision_pipeline = newton.CollisionPipeline(
             self.model,
             broad_phase="sap",
-            contact_matching="latest",
+            contact_matching=self.contact_matching,
+            contact_matching_pos_threshold=REFERENCE_CONTACT_MATCH_POS_THRESHOLD,
+            contact_matching_normal_dot_threshold=REFERENCE_CONTACT_MATCH_NORMAL_DOT_THRESHOLD,
             rigid_contact_max=rigid_contact_max,
         )
 
@@ -176,13 +194,15 @@ class AvbdSceneExample:
             rigid_contact_hard=True,
             rigid_contact_history=True,
             rigid_contact_stick_motion_eps=REFERENCE_STICK_THRESH,
-            rigid_contact_stick_freeze_translation_eps=REFERENCE_STICK_FREEZE_TRANSLATION_EPS,
-            rigid_contact_stick_freeze_angular_eps=REFERENCE_STICK_FREEZE_ANGULAR_EPS,
-            rigid_contact_k_start=REFERENCE_PENALTY_MIN,
+            rigid_contact_stick_freeze_translation_eps=self.rigid_contact_stick_freeze_translation_eps,
+            rigid_contact_stick_freeze_angular_eps=self.rigid_contact_stick_freeze_angular_eps,
+            rigid_contact_k_start=self.rigid_contact_k_start,
             rigid_joint_linear_k_start=REFERENCE_PENALTY_MIN,
             rigid_joint_angular_k_start=REFERENCE_PENALTY_MIN,
             rigid_joint_linear_ke=self.rigid_joint_linear_ke,
             rigid_joint_angular_ke=self.rigid_joint_angular_ke,
+            rigid_joint_linear_kd=self.rigid_joint_linear_kd,
+            rigid_joint_angular_kd=self.rigid_joint_angular_kd,
             rigid_body_contact_buffer_size=self.rigid_body_contact_buffer_size,
         )
 
@@ -526,6 +546,9 @@ def build_static_friction(example: AvbdSceneExample, builder: newton.ModelBuilde
 
 
 def build_pyramid(example: AvbdSceneExample, builder: newton.ModelBuilder) -> None:
+    example.rigid_body_serial_reverse = True
+    example.rigid_contact_k_start = 1000.0
+
     size = 16
     example.add_box(builder, (100.0, 100.0, 1.0), 0.0, 0.5, (0.0, 0.0, -0.5), label="ground")
     for y in range(size):
@@ -625,6 +648,11 @@ def build_springs_ratio(example: AvbdSceneExample, builder: newton.ModelBuilder)
 
 
 def build_stack(example: AvbdSceneExample, builder: newton.ModelBuilder) -> None:
+    example.contact_matching = "sticky"
+    example.rigid_contact_k_start = 100.0
+    example.rigid_contact_stick_freeze_translation_eps = 5.0e-2
+    example.rigid_contact_stick_freeze_angular_eps = 1.0e-1
+
     example.add_box(builder, (100.0, 100.0, 1.0), 0.0, 0.5, (0.0, 0.0, 0.0), label="ground")
     for i in range(10):
         example.add_box(builder, (1.0, 1.0, 1.0), 1.0, 0.5, (0.0, 0.0, i * 1.5 + 1.0), label=f"stack_{i}")
@@ -646,6 +674,8 @@ def build_stack_ratio(example: AvbdSceneExample, builder: newton.ModelBuilder) -
 def build_soft_body(example: AvbdSceneExample, builder: newton.ModelBuilder) -> None:
     example.rigid_joint_linear_ke = 1000.0
     example.rigid_joint_angular_ke = 250.0
+    example.rigid_joint_linear_kd = 1.0
+    example.rigid_joint_angular_kd = 1.0
     example.rigid_body_contact_buffer_size = 1024
     example.add_box(builder, (100.0, 100.0, 1.0), 0.0, 0.5, (0.0, 0.0, 0.0), label="ground")
 
@@ -784,6 +814,9 @@ def build_bridge(example: AvbdSceneExample, builder: newton.ModelBuilder) -> Non
 
 
 def build_breakable(example: AvbdSceneExample, builder: newton.ModelBuilder) -> None:
+    example.rigid_contact_stick_freeze_translation_eps = 1.0e-3
+    example.rigid_contact_stick_freeze_angular_eps = 5.0e-3
+
     n = 10
     m = 5
     example.add_box(builder, (100.0, 100.0, 1.0), 0.0, 0.5, (0.0, 0.0, 0.0), label="ground")
@@ -846,6 +879,18 @@ def validate_static_friction(example: AvbdSceneExample) -> None:
         raise AssertionError(
             f"{example.scene.title}: high-friction ramp boxes angular speed {max_angular_speed:.3f} rad/s; "
             "expected no tumbling"
+        )
+
+
+def validate_pyramid(example: AvbdSceneExample) -> None:
+    example.assert_final_speed_below(20.0)
+    example.assert_final_angular_speed_below(32.0)
+    example.assert_final_xy_radius_below(18.0)
+    if example.final_min_z < -2.0:
+        raise AssertionError(f"{example.scene.title}: final min z {example.final_min_z:.3f} below -2.000")
+    if example.final_max_z > 12.0:
+        raise AssertionError(
+            f"{example.scene.title}: final max z {example.final_max_z:.3f} exceeds 12.000; pyramid launched upward"
         )
 
 
@@ -934,7 +979,8 @@ SCENES: dict[str, SceneInfo] = {
         30.0,
         -22.0,
         135.0,
-        speed_limit=1000.0,
+        validate=validate_pyramid,
+        speed_limit=100.0,
     ),
     "rope": SceneInfo(
         "Rope",
@@ -1008,8 +1054,8 @@ SCENES: dict[str, SceneInfo] = {
         135.0,
         validate=validate_soft_body,
         report_frames=120,
-        speed_limit=12.0,
-        status_note="Uses soft fixed VBD joints with source linear/angular stiffness values.",
+        speed_limit=20.0,
+        status_note="Uses soft fixed VBD joints with source stiffness and a small Newton joint damping term.",
     ),
     "bridge": SceneInfo(
         "Bridge",

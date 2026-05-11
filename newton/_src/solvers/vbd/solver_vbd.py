@@ -635,6 +635,7 @@ class SolverVBD(SolverBase):
             # Kinematic bodies: set body_q.
             # Dynamic teleportation: also set body_q_prev and body_qd.
             self.body_q_prev = wp.clone(model.body_q, device=self.device)
+            self.body_qd_prev = wp.clone(model.body_qd, device=self.device)
             self.body_inertia_q = wp.zeros_like(model.body_q, device=self.device)  # inertial target poses for AVBD
 
             # Adjacency and dimensions
@@ -679,6 +680,7 @@ class SolverVBD(SolverBase):
 
             # Body-body contact state (pre-allocated in __init__ when possible, resized on first step otherwise).
             self.body_body_contact_penalty_k = wp.zeros(0, dtype=float, device=self.device)
+            self.body_body_contact_tangent_penalty_k = wp.zeros(0, dtype=float, device=self.device)
             self.body_body_contact_material_ke = wp.zeros(0, dtype=float, device=self.device)
             self.body_body_contact_material_kd = wp.zeros(0, dtype=float, device=self.device)
             self.body_body_contact_material_mu = wp.zeros(0, dtype=float, device=self.device)
@@ -690,6 +692,7 @@ class SolverVBD(SolverBase):
             self._prev_contact_lambda = None
             self._prev_contact_stick_flag = None
             self._prev_contact_penalty_k = None
+            self._prev_contact_tangent_penalty_k = None
             self._prev_contact_point0 = None
             self._prev_contact_point1 = None
             self._prev_contact_normal = None
@@ -780,6 +783,7 @@ class SolverVBD(SolverBase):
     def _init_body_body_contact_state(self, rigid_contact_max: int) -> None:
         """Allocate body-body contact state arrays sized to the given contact buffer capacity."""
         self.body_body_contact_penalty_k = wp.zeros(rigid_contact_max, dtype=float, device=self.device)
+        self.body_body_contact_tangent_penalty_k = wp.zeros(rigid_contact_max, dtype=float, device=self.device)
         self.body_body_contact_material_ke = wp.zeros(rigid_contact_max, dtype=float, device=self.device)
         self.body_body_contact_material_kd = wp.zeros(rigid_contact_max, dtype=float, device=self.device)
         self.body_body_contact_material_mu = wp.zeros(rigid_contact_max, dtype=float, device=self.device)
@@ -800,6 +804,7 @@ class SolverVBD(SolverBase):
         self._prev_contact_lambda = wp.zeros(cap, dtype=wp.vec3, device=self.device)
         self._prev_contact_stick_flag = wp.zeros(cap, dtype=wp.int32, device=self.device)
         self._prev_contact_penalty_k = wp.zeros(cap, dtype=float, device=self.device)
+        self._prev_contact_tangent_penalty_k = wp.zeros(cap, dtype=float, device=self.device)
         self._prev_contact_point0 = wp.zeros(cap, dtype=wp.vec3, device=self.device)
         self._prev_contact_point1 = wp.zeros(cap, dtype=wp.vec3, device=self.device)
         self._prev_contact_normal = wp.zeros(cap, dtype=wp.vec3, device=self.device)
@@ -1622,11 +1627,13 @@ class SolverVBD(SolverBase):
                 self.body_body_contact_lambda,
                 self.body_body_contact_stick_flag,
                 self.body_body_contact_penalty_k,
+                self.body_body_contact_tangent_penalty_k,
             ],
             outputs=[
                 self._prev_contact_lambda,
                 self._prev_contact_stick_flag,
                 self._prev_contact_penalty_k,
+                self._prev_contact_tangent_penalty_k,
                 self._prev_contact_point0,
                 self._prev_contact_point1,
                 self._prev_contact_normal,
@@ -1766,7 +1773,10 @@ class SolverVBD(SolverBase):
                 not refresh
                 and contacts is not None
                 and contacts.rigid_contact_max > 0
-                and self.body_body_contact_penalty_k.shape[0] < contacts.rigid_contact_max
+                and (
+                    self.body_body_contact_penalty_k.shape[0] < contacts.rigid_contact_max
+                    or self.body_body_contact_tangent_penalty_k.shape[0] < contacts.rigid_contact_max
+                )
             ):
                 refresh = True
 
@@ -1778,7 +1788,10 @@ class SolverVBD(SolverBase):
                 else:
                     contact_launch_dim = contacts.rigid_contact_max
 
-                    if self.body_body_contact_penalty_k.shape[0] < contact_launch_dim:
+                    if (
+                        self.body_body_contact_penalty_k.shape[0] < contact_launch_dim
+                        or self.body_body_contact_tangent_penalty_k.shape[0] < contact_launch_dim
+                    ):
                         self._raise_if_capturing_resize(
                             "body-body contact state",
                             self.body_body_contact_penalty_k.shape[0],
@@ -1833,6 +1846,7 @@ class SolverVBD(SolverBase):
                         history.lambda_ = self._prev_contact_lambda
                         history.stick_flag = self._prev_contact_stick_flag
                         history.penalty_k = self._prev_contact_penalty_k
+                        history.tangent_penalty_k = self._prev_contact_tangent_penalty_k
                         history.point0 = self._prev_contact_point0
                         history.point1 = self._prev_contact_point1
                         history.normal = self._prev_contact_normal
@@ -1857,6 +1871,7 @@ class SolverVBD(SolverBase):
                                 contacts.rigid_contact_point0,
                                 contacts.rigid_contact_point1,
                                 self.body_body_contact_penalty_k,
+                                self.body_body_contact_tangent_penalty_k,
                                 self.body_body_contact_lambda,
                                 self.body_body_contact_material_kd,
                                 self.body_body_contact_material_mu,
@@ -1878,6 +1893,7 @@ class SolverVBD(SolverBase):
                             ],
                             outputs=[
                                 self.body_body_contact_penalty_k,
+                                self.body_body_contact_tangent_penalty_k,
                                 self.body_body_contact_material_kd,
                                 self.body_body_contact_material_mu,
                                 self.body_body_contact_material_ke,
@@ -1917,6 +1933,7 @@ class SolverVBD(SolverBase):
                     ],
                     outputs=[
                         self.body_body_contact_penalty_k,
+                        self.body_body_contact_tangent_penalty_k,
                         self.body_body_contact_C0,
                         self.body_body_contact_lambda,
                     ],
@@ -1965,7 +1982,8 @@ class SolverVBD(SolverBase):
                     self.body_inv_mass_effective,
                     self.body_inv_inertia_effective,
                     state_in.body_q,  # input/output
-                    state_in.body_qd,  # input/output
+                    state_in.body_qd,
+                    self.body_qd_prev,
                 ],
                 outputs=[
                     self.body_inertia_q,
@@ -2401,6 +2419,7 @@ class SolverVBD(SolverBase):
                         self.body_inv_mass_effective,
                         self.friction_epsilon,
                         self.body_body_contact_penalty_k,
+                        self.body_body_contact_tangent_penalty_k,
                         self.body_body_contact_material_kd,
                         self.body_body_contact_material_mu,
                         self.body_body_contact_lambda,
@@ -2512,6 +2531,7 @@ class SolverVBD(SolverBase):
                     self.body_body_contact_material_ke,
                     self.rigid_linear_beta,
                     self.body_body_contact_penalty_k,  # input/output
+                    self.body_body_contact_tangent_penalty_k,  # input/output
                     self.body_body_contact_lambda,  # input/output
                 ],
                 outputs=[
@@ -2627,6 +2647,7 @@ class SolverVBD(SolverBase):
             arr is None or arr.shape[0] < max_contacts
             for arr in (
                 getattr(self, "body_body_contact_penalty_k", None),
+                getattr(self, "body_body_contact_tangent_penalty_k", None),
                 getattr(self, "body_body_contact_material_kd", None),
                 getattr(self, "body_body_contact_material_mu", None),
                 getattr(self, "body_body_contact_lambda", None),
@@ -2685,6 +2706,7 @@ class SolverVBD(SolverBase):
                 body_q_prev,
                 self.model.body_com,
                 self.body_body_contact_penalty_k,
+                self.body_body_contact_tangent_penalty_k,
                 self.body_body_contact_material_kd,
                 self.body_body_contact_material_mu,
                 self.body_body_contact_lambda,
@@ -2753,7 +2775,7 @@ class SolverVBD(SolverBase):
                 self.rigid_contact_stick_freeze_translation_eps,
                 self.rigid_contact_stick_freeze_angular_eps,
             ],
-            outputs=[self.body_q_prev, state_out.body_qd, state_in.body_qd, state_out.body_q],
+            outputs=[self.body_q_prev, self.body_qd_prev, state_out.body_qd, state_in.body_qd, state_out.body_q],
             dim=model.body_count,
             device=self.device,
         )

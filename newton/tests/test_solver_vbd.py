@@ -203,11 +203,13 @@ def _rigid_contact_history_restore_from_match_index(test, device):
         history.lambda_ = wp.array([[0.5, 0.0, 1.0], [4.0, 5.0, 6.0], [0.0, 0.0, 7.0]], dtype=wp.vec3, device=device)
         history.stick_flag = wp.array([0, 1, 2], dtype=wp.int32, device=device)
         history.penalty_k = wp.array([20.0, 30.0, 40.0], dtype=float, device=device)
+        history.tangent_penalty_k = wp.array([25.0, 35.0, 45.0], dtype=float, device=device)
         history.point0 = wp.array([[20.0, 0.0, 0.0], [21.0, 0.0, 0.0], [22.0, 0.0, 0.0]], dtype=wp.vec3, device=device)
         history.point1 = wp.array([[20.0, 0.0, 1.0], [21.0, 0.0, 1.0], [22.0, 0.0, 1.0]], dtype=wp.vec3, device=device)
         history.normal = wp.array([[0.0, 0.0, 1.0]] * 3, dtype=wp.vec3, device=device)
 
         penalty_k = wp.zeros(4, dtype=float, device=device)
+        tangent_penalty_k = wp.zeros(4, dtype=float, device=device)
         lam = wp.zeros(4, dtype=wp.vec3, device=device)
         material_kd = wp.zeros(4, dtype=float, device=device)
         material_mu = wp.zeros(4, dtype=float, device=device)
@@ -233,6 +235,7 @@ def _rigid_contact_history_restore_from_match_index(test, device):
                 point0,
                 point1,
                 penalty_k,
+                tangent_penalty_k,
                 lam,
                 material_kd,
                 material_mu,
@@ -242,6 +245,7 @@ def _rigid_contact_history_restore_from_match_index(test, device):
         )
 
         np.testing.assert_allclose(penalty_k.numpy(), [40.0, 10.0, 20.0, 10.0])
+        np.testing.assert_allclose(tangent_penalty_k.numpy(), [45.0, 10.0, 25.0, 10.0])
         np.testing.assert_allclose(lam.numpy(), [[0.0, 0.0, 7.0], [0.0, 0.0, 0.0], [0.5, 0.0, 1.0], [0.0, 0.0, 0.0]])
         np.testing.assert_allclose(material_ke.numpy(), [150.0] * 4)
         np.testing.assert_allclose(material_kd.numpy(), [2.0] * 4)
@@ -258,7 +262,7 @@ def _rigid_contact_history_restore_from_match_index(test, device):
 
 
 def _rigid_contact_history_soft_restores_penalty_only(test, device):
-    """Soft contacts restore penalty state only; saved lambda and anchors stay unused."""
+    """Soft contacts restore penalty states only; saved lambda and anchors stay unused."""
     with wp.ScopedDevice(device):
         contact_count = wp.array([1], dtype=int, device=device)
         shape0 = wp.array([0], dtype=int, device=device)
@@ -273,11 +277,13 @@ def _rigid_contact_history_soft_restores_penalty_only(test, device):
         history.lambda_ = wp.array([[1.0, 2.0, 3.0]], dtype=wp.vec3, device=device)
         history.stick_flag = wp.array([1], dtype=wp.int32, device=device)
         history.penalty_k = wp.array([40.0], dtype=float, device=device)
+        history.tangent_penalty_k = wp.array([45.0], dtype=float, device=device)
         history.point0 = wp.array([[20.0, 0.0, 0.0]], dtype=wp.vec3, device=device)
         history.point1 = wp.array([[20.0, 0.0, 1.0]], dtype=wp.vec3, device=device)
         history.normal = wp.array([[0.0, 0.0, 1.0]], dtype=wp.vec3, device=device)
 
         penalty_k = wp.zeros(1, dtype=float, device=device)
+        tangent_penalty_k = wp.zeros(1, dtype=float, device=device)
         lam = wp.zeros(1, dtype=wp.vec3, device=device)
         material_kd = wp.zeros(1, dtype=float, device=device)
         material_mu = wp.zeros(1, dtype=float, device=device)
@@ -303,6 +309,7 @@ def _rigid_contact_history_soft_restores_penalty_only(test, device):
                 point0,
                 point1,
                 penalty_k,
+                tangent_penalty_k,
                 lam,
                 material_kd,
                 material_mu,
@@ -312,6 +319,7 @@ def _rigid_contact_history_soft_restores_penalty_only(test, device):
         )
 
         np.testing.assert_allclose(penalty_k.numpy(), [40.0])
+        np.testing.assert_allclose(tangent_penalty_k.numpy(), [45.0])
         np.testing.assert_allclose(lam.numpy(), [[0.0, 0.0, 0.0]])
         np.testing.assert_allclose(point0.numpy(), point0_in)
         np.testing.assert_allclose(point1.numpy(), point1_in)
@@ -444,10 +452,12 @@ def _rigid_contact_history_snapshot_copies_active_rows(test, device):
         lam = wp.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]], dtype=wp.vec3, device=device)
         stick = wp.array([1, 2, 3], dtype=wp.int32, device=device)
         penalty = wp.array([10.0, 20.0, 30.0], dtype=float, device=device)
+        tangent_penalty = wp.array([15.0, 25.0, 35.0], dtype=float, device=device)
 
         prev_lambda = wp.zeros(3, dtype=wp.vec3, device=device)
         prev_stick = wp.zeros(3, dtype=wp.int32, device=device)
         prev_penalty = wp.zeros(3, dtype=float, device=device)
+        prev_tangent_penalty = wp.zeros(3, dtype=float, device=device)
         prev_point0 = wp.zeros(3, dtype=wp.vec3, device=device)
         prev_point1 = wp.zeros(3, dtype=wp.vec3, device=device)
         prev_normal = wp.zeros(3, dtype=wp.vec3, device=device)
@@ -455,20 +465,30 @@ def _rigid_contact_history_snapshot_copies_active_rows(test, device):
         wp.launch(
             snapshot_body_body_contact_history,
             dim=3,
-            inputs=[contact_count, point0, point1, normal, lam, stick, penalty],
-            outputs=[prev_lambda, prev_stick, prev_penalty, prev_point0, prev_point1, prev_normal],
+            inputs=[contact_count, point0, point1, normal, lam, stick, penalty, tangent_penalty],
+            outputs=[
+                prev_lambda,
+                prev_stick,
+                prev_penalty,
+                prev_tangent_penalty,
+                prev_point0,
+                prev_point1,
+                prev_normal,
+            ],
             device=device,
         )
 
         np.testing.assert_allclose(prev_lambda.numpy()[:2], lam.numpy()[:2])
         np.testing.assert_allclose(prev_stick.numpy()[:2], [1, 2])
         np.testing.assert_allclose(prev_penalty.numpy()[:2], [10.0, 20.0])
+        np.testing.assert_allclose(prev_tangent_penalty.numpy()[:2], [15.0, 25.0])
         np.testing.assert_allclose(prev_point0.numpy()[:2], point0.numpy()[:2])
         np.testing.assert_allclose(prev_point1.numpy()[:2], point1.numpy()[:2])
         np.testing.assert_allclose(prev_normal.numpy()[:2], normal.numpy()[:2])
         np.testing.assert_allclose(prev_lambda.numpy()[2], [0.0, 0.0, 0.0])
         test.assertEqual(prev_stick.numpy()[2], 0)
         test.assertEqual(prev_penalty.numpy()[2], 0.0)
+        test.assertEqual(prev_tangent_penalty.numpy()[2], 0.0)
 
 
 def _rigid_contact_stick_flags_require_cone_and_small_residual(test, device):
@@ -502,6 +522,7 @@ def _rigid_contact_stick_flags_require_cone_and_small_residual(test, device):
         body_inv_mass = wp.array([1.0, 0.0, 0.0, 0.0, 1.0], dtype=float, device=device)
         contact_ke = wp.array([10.0, 10.0, 10.0, 10.0], dtype=float, device=device)
         penalty_k = wp.array([10.0, 10.0, 10.0, 10.0], dtype=float, device=device)
+        tangent_penalty_k = wp.array([10.0, 10.0, 10.0, 10.0], dtype=float, device=device)
         contact_lambda = wp.zeros(4, dtype=wp.vec3, device=device)
         stick_flag = wp.zeros(4, dtype=wp.int32, device=device)
 
@@ -529,7 +550,7 @@ def _rigid_contact_stick_flags_require_cone_and_small_residual(test, device):
                 contact_ke,
                 0.0,
             ],
-            outputs=[penalty_k, contact_lambda, stick_flag],
+            outputs=[penalty_k, tangent_penalty_k, contact_lambda, stick_flag],
             device=device,
         )
 
@@ -547,6 +568,7 @@ def _rigid_contact_stick_flags_require_cone_and_small_residual(test, device):
         contact_lambda.zero_()
         stick_flag.zero_()
         penalty_k = wp.array([10.0, 10.0, 10.0, 10.0], dtype=float, device=device)
+        tangent_penalty_k = wp.array([10.0, 10.0, 10.0, 10.0], dtype=float, device=device)
 
         wp.launch(
             update_duals_body_body_contacts,
@@ -572,7 +594,7 @@ def _rigid_contact_stick_flags_require_cone_and_small_residual(test, device):
                 contact_ke,
                 0.0,
             ],
-            outputs=[penalty_k, contact_lambda, stick_flag],
+            outputs=[penalty_k, tangent_penalty_k, contact_lambda, stick_flag],
             device=device,
         )
 

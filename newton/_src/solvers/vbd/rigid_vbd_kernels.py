@@ -66,6 +66,7 @@ class RigidContactHistory:
     lambda_: wp.array[wp.vec3]
     stick_flag: wp.array[wp.int32]
     penalty_k: wp.array[float]
+    tangent_penalty_k: wp.array[float]
     point0: wp.array[wp.vec3]
     point1: wp.array[wp.vec3]
     normal: wp.array[wp.vec3]
@@ -1820,6 +1821,7 @@ def forward_step_rigid_bodies(
     body_inv_inertia: wp.array[wp.mat33],
     body_q: wp.array[wp.transform],
     body_qd: wp.array[wp.spatial_vector],
+    body_qd_prev: wp.array[wp.spatial_vector],
     body_inertia_q: wp.array[wp.transform],
 ):
     """
@@ -1834,8 +1836,9 @@ def forward_step_rigid_bodies(
         body_inertia: Inertia tensors (local body frame).
         body_inv_mass: Inverse masses (0 for kinematic bodies).
         body_inv_inertia: Inverse inertia tensors (local body frame).
-        body_q: Body transforms (input: start-of-step pose, output: integrated pose).
-        body_qd: Body velocities (input: start-of-step velocity, output: integrated velocity).
+        body_q: Body transforms (input: start-of-step pose, output: AVBD warm-start pose).
+        body_qd: Body velocities at the start of the step [m/s, rad/s].
+        body_qd_prev: Body velocities from the previous accepted step [m/s, rad/s].
         body_inertia_q: Inertial target body transforms for the AVBD solve (output).
     """
     tid = wp.tid()
@@ -1857,8 +1860,9 @@ def forward_step_rigid_bodies(
     world_idx = body_world[tid]
     world_g = gravity[wp.max(world_idx, 0)]
 
-    # Integrate rigid body motion (semi-implicit Euler, no angular damping)
-    q_new, qd_new = integrate_rigid_body(
+    # The AVBD reference keeps velocity fixed through the positional solve:
+    # x_bar is the inertial target, while body_q is only a warm-start pose.
+    q_inertia, _ = integrate_rigid_body(
         q_current,
         qd_current,
         f_current,
@@ -1871,10 +1875,23 @@ def forward_step_rigid_bodies(
         dt,
     )
 
-    # Update current transform, velocity, and set inertial target
-    body_q[tid] = q_new
-    body_qd[tid] = qd_new
-    body_inertia_q[tid] = q_new
+    v_current = wp.spatial_top(qd_current)
+    v_prev = wp.spatial_top(body_qd_prev[tid])
+    accel_weight = 0.0
+    gravity_len = wp.length(world_g)
+    if gravity_len > 0.0:
+        accel = (v_current - v_prev) / dt
+        accel_weight = wp.clamp(wp.dot(accel, world_g / gravity_len) / gravity_len, 0.0, 1.0)
+
+    rot_warm = wp.transform_get_rotation(q_inertia)
+    rot_current = wp.transform_get_rotation(q_current)
+    pos_current = wp.transform_get_translation(q_current)
+    com_current = pos_current + wp.quat_rotate(rot_current, com_local)
+    com_warm = com_current + v_current * dt + world_g * (accel_weight * dt * dt)
+    pos_warm = com_warm - wp.quat_rotate(rot_warm, com_local)
+
+    body_q[tid] = wp.transform(pos_warm, rot_warm)
+    body_inertia_q[tid] = q_inertia
 
 
 @wp.kernel
@@ -2070,6 +2087,7 @@ def init_body_body_contact_materials(
     k_start: float,
     # Outputs
     contact_penalty_k: wp.array[float],
+    contact_tangent_penalty_k: wp.array[float],
     contact_material_kd: wp.array[float],
     contact_material_mu: wp.array[float],
     contact_material_ke: wp.array[float],
@@ -2101,6 +2119,7 @@ def init_body_body_contact_materials(
 
     k_floor = avg_ke if k_start < 0.0 else wp.min(k_start, avg_ke)
     contact_penalty_k[i] = k_floor
+    contact_tangent_penalty_k[i] = k_floor
 
 
 @wp.kernel
@@ -2126,6 +2145,7 @@ def init_body_body_contacts_avbd(
     rigid_contact_point1: wp.array[wp.vec3],
     # Outputs
     contact_penalty_k: wp.array[float],
+    contact_tangent_penalty_k: wp.array[float],
     contact_lambda: wp.array[wp.vec3],
     contact_material_kd: wp.array[float],
     contact_material_mu: wp.array[float],
@@ -2134,9 +2154,9 @@ def init_body_body_contacts_avbd(
     """Restore body-body contact state from match indices.
 
     For hard contacts: restores lambda (rotated from old to new contact frame),
-    penalty_k, and stick-anchor points when the previous matched contact stuck.
-    For soft contacts: restores penalty_k only; lambda stays zero because the
-    soft path is penalty-only.
+    normal/tangent penalty state, and stick-anchor points when the previous
+    matched contact stuck.  For soft contacts: restores penalty state only;
+    lambda stays zero because the soft path is penalty-only.
     Sticky hard contacts may overwrite rigid_contact_point0/1 in place with the
     previously saved contact anchors.
     C0 and decay are handled by step_body_body_contact_C0_lambda.
@@ -2168,6 +2188,7 @@ def init_body_body_contacts_avbd(
 
     if slot >= 0:
         contact_penalty_k[i] = wp.clamp(history.penalty_k[slot], k_floor, avg_ke)
+        contact_tangent_penalty_k[i] = wp.clamp(history.tangent_penalty_k[slot], k_floor, avg_ke)
         if hard_contacts == 1:
             lam_hist = history.lambda_[slot]
             n_new = rigid_contact_normal[i]
@@ -2186,6 +2207,7 @@ def init_body_body_contacts_avbd(
             contact_lambda[i] = wp.vec3(0.0)
     else:
         contact_penalty_k[i] = k_floor
+        contact_tangent_penalty_k[i] = k_floor
         contact_lambda[i] = wp.vec3(0.0)
 
 
@@ -2198,10 +2220,12 @@ def snapshot_body_body_contact_history(
     contact_lambda: wp.array[wp.vec3],
     contact_stick_flag: wp.array[wp.int32],
     contact_penalty_k: wp.array[float],
+    contact_tangent_penalty_k: wp.array[float],
     # Outputs, same order as RigidContactHistory
     prev_lambda: wp.array[wp.vec3],
     prev_stick_flag: wp.array[wp.int32],
     prev_penalty_k: wp.array[float],
+    prev_tangent_penalty_k: wp.array[float],
     prev_point0: wp.array[wp.vec3],
     prev_point1: wp.array[wp.vec3],
     prev_normal: wp.array[wp.vec3],
@@ -2218,6 +2242,7 @@ def snapshot_body_body_contact_history(
     prev_lambda[i] = contact_lambda[i]
     prev_stick_flag[i] = contact_stick_flag[i]
     prev_penalty_k[i] = contact_penalty_k[i]
+    prev_tangent_penalty_k[i] = contact_tangent_penalty_k[i]
     prev_point0[i] = rigid_contact_point0[i]
     prev_point1[i] = rigid_contact_point1[i]
     prev_normal[i] = rigid_contact_normal[i]
@@ -2242,6 +2267,7 @@ def step_body_body_contact_C0_lambda(
     k_start: float,
     # In/out
     contact_penalty_k: wp.array[float],
+    contact_tangent_penalty_k: wp.array[float],
     contact_C0: wp.array[wp.vec3],
     contact_lambda: wp.array[wp.vec3],
 ):
@@ -2258,6 +2284,7 @@ def step_body_body_contact_C0_lambda(
     ke = contact_material_ke[i]
     k_min = ke if k_start < 0.0 else wp.min(k_start, ke)
     contact_penalty_k[i] = wp.clamp(penalty_decay * contact_penalty_k[i], k_min, ke)
+    contact_tangent_penalty_k[i] = wp.clamp(penalty_decay * contact_tangent_penalty_k[i], k_min, ke)
 
     contact_lambda[i] = contact_lambda[i] * lambda_decay
 
@@ -2465,6 +2492,7 @@ def accumulate_body_body_contacts_per_body(
     body_inv_mass: wp.array[float],
     friction_epsilon: float,
     contact_penalty_k: wp.array[float],
+    contact_tangent_penalty_k: wp.array[float],
     contact_material_kd: wp.array[float],
     contact_material_mu: wp.array[float],
     contact_lambda: wp.array[wp.vec3],
@@ -2544,6 +2572,7 @@ def accumulate_body_body_contacts_per_body(
         C_eff = C_n
         lam_vec = wp.vec3(0.0)
         k = contact_penalty_k[contact_idx]
+        k_t = contact_tangent_penalty_k[contact_idx]
         friction_c0 = wp.vec3(0.0)
 
         if hard_contacts == 1:
@@ -2590,7 +2619,7 @@ def accumulate_body_body_contacts_per_body(
             contact_normal,
             C_eff,
             k,
-            k,
+            k_t,
             contact_kd,
             lam_vec,
             contact_mu,
@@ -2641,6 +2670,7 @@ def compute_rigid_contact_forces(
     body_com: wp.array[wp.vec3],
     # Contact material properties (per-contact)
     contact_penalty_k: wp.array[float],
+    contact_tangent_penalty_k: wp.array[float],
     contact_material_kd: wp.array[float],
     contact_material_mu: wp.array[float],
     contact_lambda: wp.array[wp.vec3],
@@ -2700,6 +2730,7 @@ def compute_rigid_contact_forces(
     C_eff = C_n
     lam_vec = wp.vec3(0.0)
     k = contact_penalty_k[contact_idx]
+    k_t = contact_tangent_penalty_k[contact_idx]
     friction_c0 = wp.vec3(0.0)
 
     if hard_contacts == 1:
@@ -2742,7 +2773,7 @@ def compute_rigid_contact_forces(
         contact_normal,
         C_eff,
         k,
-        k,
+        k_t,
         contact_kd,
         lam_vec,
         contact_mu,
@@ -3583,16 +3614,18 @@ def update_duals_body_body_contacts(
     beta: float,
     # Input/output
     contact_penalty_k: wp.array[float],
+    contact_tangent_penalty_k: wp.array[float],
     contact_lambda: wp.array[wp.vec3],
     # Output
     contact_stick_flag: wp.array[wp.int32],
 ):
     """
     Update AVBD augmented-Lagrangian duals for contact constraints (per-iteration).
-    Hard mode: scalar isotropic k with vec3 lambda. Normal uses C_stab_n, tangential
-    uses displacement (body_q_prev -> body_q) for kinematic friction support.
-    Coulomb cone clamping on tangential lambda. Soft mode: no lambda update.
-    K ramp runs unconditionally for both hard and soft contacts.
+    Hard mode: normal and tangent penalties with vec3 lambda. Normal uses
+    C_stab_n, tangential uses displacement (body_q_prev -> body_q) for
+    kinematic friction support. Coulomb cone clamping applies to tangential
+    lambda. Soft mode has no lambda update. Normal penalty ramps on penetration;
+    tangent penalty ramps on tangential residual while inside the friction cone.
     """
     idx = wp.tid()
     if idx >= rigid_contact_count[0]:
@@ -3629,6 +3662,7 @@ def update_duals_body_body_contacts(
 
     if hard_contacts == 1:
         k = contact_penalty_k[idx]
+        k_t = contact_tangent_penalty_k[idx]
         C0_vec = contact_C0[idx]
         lam_vec = contact_lambda[idx]
         mu = contact_material_mu[idx]
@@ -3649,9 +3683,10 @@ def update_duals_body_body_contacts(
         C0_t_vec = C0_vec - n * C0_n
         lam_t_old = lam_vec - n * lam_n_old
         tangent_residual = tangential_disp + (1.0 - avbd_alpha) * C0_t_vec
-        lam_t_new = lam_t_old + k * tangent_residual
+        lam_t_new = lam_t_old + k_t * tangent_residual
         lam_t_len = wp.length(lam_t_new)
         cone_limit = mu * lam_n_new
+        friction_inside_cone = lam_t_len <= cone_limit
         if lam_t_len > cone_limit and lam_t_len > 0.0:
             lam_t_new = lam_t_new * (cone_limit / lam_t_len)
         contact_lambda[idx] = n * lam_n_new + lam_t_new
@@ -3665,12 +3700,18 @@ def update_duals_body_body_contacts(
             has_kinematic = int(1)
 
         flag = int(0)
-        if lam_n_new > 0.0 and lam_t_len <= cone_limit and wp.length(tangent_residual) < stick_motion_eps:
+        tangent_residual_len = wp.length(tangent_residual)
+        if lam_n_new > 0.0 and friction_inside_cone and tangent_residual_len < stick_motion_eps:
             if has_kinematic == 1:
                 flag = _STICK_FLAG_ANCHOR
             else:
                 flag = _STICK_FLAG_DEADZONE
         contact_stick_flag[idx] = flag
+
+        if friction_inside_cone:
+            contact_tangent_penalty_k[idx] = wp.min(
+                contact_material_ke[idx], contact_tangent_penalty_k[idx] + beta * tangent_residual_len
+            )
     else:
         contact_stick_flag[idx] = int(0)
 
@@ -3742,6 +3783,7 @@ def update_body_velocity(
     stick_freeze_translation_eps: float,
     stick_freeze_angular_eps: float,
     body_q_prev: wp.array[wp.transform],
+    body_qd_prev: wp.array[wp.spatial_vector],
     body_qd: wp.array[wp.spatial_vector],
     body_qd_mirror: wp.array[wp.spatial_vector],
     body_q_out: wp.array[wp.transform],
@@ -3774,6 +3816,8 @@ def update_body_velocity(
         body_q_prev: Previous body transforms (input/output, advanced to current
             pose for next step). For kinematic bodies set body_q. For dynamic
             teleportation also set body_q_prev and body_qd.
+        body_qd_prev: Previous-step body velocities (output), advanced from
+            the caller's current state before body_qd_mirror is overwritten.
         body_qd: Output body velocities (spatial vectors, world frame), bound to state_out.
         body_qd_mirror: Output body velocities, bound to state_in. Mirrors body_qd so the
             next step's forward integrator sees the finalized velocity even when the
@@ -3781,6 +3825,7 @@ def update_body_velocity(
         body_q_out: Output body transforms (state_out), fused copy of body_q.
     """
     tid = wp.tid()
+    qd_prev = body_qd_mirror[tid]
 
     # Read transforms
     pose = body_q[tid]
@@ -3824,6 +3869,7 @@ def update_body_velocity(
     omega = quat_velocity(q, q_prev, dt)
 
     body_qd[tid] = wp.spatial_vector(v, omega)
+    body_qd_prev[tid] = qd_prev
 
     # Mirror to state_in (CUDA-graph-capture safety).
     body_qd_mirror[tid] = wp.spatial_vector(v, omega)

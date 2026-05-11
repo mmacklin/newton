@@ -20,14 +20,14 @@ from newton.examples.vbd._avbd_common import (
     REFERENCE_BETA_LINEAR,
     REFERENCE_COLLISION_MARGIN,
     REFERENCE_COMMIT,
+    REFERENCE_CONTACT_MATCH_NORMAL_DOT_THRESHOLD,
+    REFERENCE_CONTACT_MATCH_POS_THRESHOLD,
     REFERENCE_DT,
     REFERENCE_FRICTION_EPSILON,
     REFERENCE_GAMMA,
     REFERENCE_GRAVITY,
     REFERENCE_ITERATIONS,
     REFERENCE_PENALTY_MIN,
-    REFERENCE_STICK_FREEZE_ANGULAR_EPS,
-    REFERENCE_STICK_FREEZE_TRANSLATION_EPS,
     REFERENCE_STICK_THRESH,
     SCENES,
 )
@@ -39,6 +39,7 @@ FPS = 60
 DEFAULT_REPORT_ROOT = Path.home() / "reports" / "newton_avbd_vbd"
 ROOT = Path(os.environ.get("NEWTON_AVBD_REPORT_DIR", DEFAULT_REPORT_ROOT)).expanduser().resolve()
 ASSETS = ROOT / "assets"
+BASELINE_ASSETS = ROOT / "assets_baseline"
 ASSETS.mkdir(parents=True, exist_ok=True)
 
 
@@ -178,22 +179,61 @@ def fmt_float(value, digits: int = 3) -> str:
         return "n/a"
 
 
+def load_baseline_results() -> dict[str, dict]:
+    path = ROOT / "metrics_baseline.json"
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+    except Exception:
+        return {}
+    return {item.get("scene", ""): item for item in data if isinstance(item, dict)}
+
+
+def video_src(path: str, stamp: str) -> str:
+    return f"{path}?datetime={stamp}"
+
+
 def write_html(results: list[dict]) -> Path:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    baseline = load_baseline_results()
     stable_count = sum(1 for item in results if item["status"] == "Stable")
     broken_count = len(results) - stable_count
+    baseline_stable_count = sum(1 for item in baseline.values() if item.get("status") == "Stable")
     updated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     cards = []
     rows = []
     for item in results:
         metrics = item.get("metrics", {})
+        prev = baseline.get(item["scene"], {})
+        prev_metrics = prev.get("metrics", {}) if isinstance(prev, dict) else {}
+        prev_status = prev.get("status", "n/a") if isinstance(prev, dict) else "n/a"
+        prev_status_class = "ok" if prev_status == "Stable" else "broken"
+        prev_video = f"assets_baseline/{item['scene']}.mp4"
+        prev_video_path = ROOT / prev_video
         status_class = "ok" if item["status"] == "Stable" else "broken"
         err = html.escape(item["error"])
         note = html.escape(item["note"])
+        media = (
+            f"""
+              <div class="compare-media">
+                <div>
+                  <div class="video-label">Before</div>
+                  <video controls preload="metadata" src="{video_src(prev_video, stamp)}"></video>
+                </div>
+                <div>
+                  <div class="video-label">After</div>
+                  <video controls preload="metadata" src="{video_src(item["video"], stamp)}"></video>
+                </div>
+              </div>
+            """
+            if prev_video_path.exists()
+            else f'<video controls preload="metadata" src="{video_src(item["video"], stamp)}"></video>'
+        )
         cards.append(
             f"""
             <article class="card">
-              <video controls preload="metadata" src="{item["video"]}?datetime={stamp}"></video>
+              {media}
               <div class="card-body">
                 <div class="card-head">
                   <h3>{html.escape(item["title"])}</h3>
@@ -201,7 +241,10 @@ def write_html(results: list[dict]) -> Path:
                 </div>
                 <p>{html.escape(item["description"])}</p>
                 <dl>
+                  <div><dt>Before</dt><dd><span class="status {prev_status_class}">{html.escape(prev_status)}</span></dd></div>
+                  <div><dt>After</dt><dd><span class="status {status_class}">{html.escape(item["status"])}</span></dd></div>
                   <div><dt>Frames</dt><dd>{item["frames_completed"]}/{item["frames_requested"]}</dd></div>
+                  <div><dt>Before final speed</dt><dd>{fmt_float(prev_metrics.get("final_speed"))} m/s</dd></div>
                   <div><dt>Max speed</dt><dd>{fmt_float(metrics.get("max_speed"))} m/s</dd></div>
                   <div><dt>Final speed</dt><dd>{fmt_float(metrics.get("final_speed"))} m/s</dd></div>
                   <div><dt>Max angular</dt><dd>{fmt_float(metrics.get("max_angular_speed"))} rad/s</dd></div>
@@ -218,8 +261,10 @@ def write_html(results: list[dict]) -> Path:
             f"""
             <tr>
               <td>{html.escape(item["title"])}</td>
+              <td><span class="status {prev_status_class}">{html.escape(prev_status)}</span></td>
               <td><span class="status {status_class}">{html.escape(item["status"])}</span></td>
               <td>{item["frames_completed"]}/{item["frames_requested"]}</td>
+              <td>{fmt_float(prev_metrics.get("final_speed"))}</td>
               <td>{fmt_float(metrics.get("max_speed"))}</td>
               <td>{fmt_float(metrics.get("final_speed"))}</td>
               <td>{fmt_float(metrics.get("max_angular_speed"))}</td>
@@ -393,6 +438,26 @@ def write_html(results: list[dict]) -> Path:
       background: #000;
       border-bottom: 1px solid var(--line);
     }}
+    .compare-media {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--line);
+      border-bottom: 1px solid var(--line);
+    }}
+    .compare-media video {{
+      border-bottom: 0;
+    }}
+    .video-label {{
+      background: #0f1117;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 650;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }}
     dl {{
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -447,6 +512,7 @@ def write_html(results: list[dict]) -> Path:
         padding-top: 24px;
       }}
       .summary, .grid {{ grid-template-columns: 1fr; }}
+      .compare-media {{ grid-template-columns: 1fr; }}
     }}
   </style>
 </head>
@@ -482,8 +548,8 @@ def write_html(results: list[dict]) -> Path:
           <div class="value">{len(results)} MP4 decode checks pass; camera framing and scene-scaled shadows spot-checked from generated stills.</div>
         </div>
         <div class="metric">
-          <div class="label">Known Failures</div>
-          <div class="value">{broken_count} scenes remain solver-stability failures, not media failures.</div>
+          <div class="label">Before / After Failures</div>
+          <div class="value">{len(baseline) - baseline_stable_count if baseline else "n/a"} / {broken_count}</div>
         </div>
       </div>
     </section>
@@ -519,9 +585,12 @@ def write_html(results: list[dict]) -> Path:
         penalty seed <code>{REFERENCE_PENALTY_MIN}</code>, collision margin <code>{REFERENCE_COLLISION_MARGIN}</code>,
         per-shape contact gap <code>{REFERENCE_COLLISION_MARGIN}</code>,
         stick threshold <code>{REFERENCE_STICK_THRESH:g}</code>, friction smoothing epsilon
-        <code>{REFERENCE_FRICTION_EPSILON:g}</code>, and Newton-only stick freeze thresholds
-        <code>{REFERENCE_STICK_FREEZE_TRANSLATION_EPS:g}</code> m /
-        <code>{REFERENCE_STICK_FREEZE_ANGULAR_EPS:g}</code> rad.
+        <code>{REFERENCE_FRICTION_EPSILON:g}</code>, contact-match midpoint threshold
+        <code>{REFERENCE_CONTACT_MATCH_POS_THRESHOLD:g}</code> m, and contact normal dot threshold
+        <code>{REFERENCE_CONTACT_MATCH_NORMAL_DOT_THRESHOLD:g}</code>. A few stress scenes apply explicit
+        per-scene Newton-only stabilizers, noted in their cards: serial rigid colors to match the AVBD source's
+        body loop, a higher initial contact penalty for pyramid, sticky matching/deadzone for the tall stack,
+        and small damping for the soft fixed-joint lattice.
         Newton's VBD defaults differ from the AVBD demo for several of these values, so the examples pass the
         reference values explicitly.
         Report renders enable ViewerGL shadows with a scene-scaled shadow volume and a lower sun angle so the shadows remain inside the map and readable in the clips.
@@ -531,9 +600,8 @@ def write_html(results: list[dict]) -> Path:
       </p>
       <p>
         Remaining implementation deltas are still material: Newton uses CollisionPipeline contact matching rather than
-        the demo's O(n^2) feature-key manifold merge, and Newton's hard body-body contact path currently uses one scalar
-        contact penalty for normal and tangent directions while the reference demo stores a three-component contact
-        penalty and ramps tangential penalty components from tangential residuals.
+        the demo's O(n^2) feature-key manifold merge, and the tall-stack stabilization still relies on Newton's
+        body-level stick deadzone rather than a cleaner contact-state formulation.
       </p>
     </section>
 
@@ -543,8 +611,10 @@ def write_html(results: list[dict]) -> Path:
         <thead>
           <tr>
             <th>Scene</th>
+            <th>Before</th>
             <th>Status</th>
             <th>Frames</th>
+            <th>Before final speed</th>
             <th>Max speed</th>
             <th>Final speed</th>
             <th>Max angular</th>
