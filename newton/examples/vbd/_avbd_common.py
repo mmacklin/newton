@@ -34,6 +34,13 @@ REFERENCE_STICK_FREEZE_TRANSLATION_EPS = 0.0
 REFERENCE_STICK_FREEZE_ANGULAR_EPS = 0.0
 
 REPORT_FRAMES = 180
+PYRAMID_PLANE_ABS_Y_LIMIT = 0.10
+PYRAMID_PLANE_SPAN_LIMIT = 0.16
+PYRAMID_ROW_PLANE_SPAN_LIMIT = 0.12
+STACK_CENTER_RADIUS_LIMIT = 0.15
+STACK_XY_SPREAD_LIMIT = 0.08
+STACK_LINE_FIT_LIMIT = 0.06
+STACK_TILT_LIMIT = 0.02
 
 
 @dataclass(frozen=True)
@@ -115,6 +122,15 @@ def _quat_wxyz_to_matrix(q: np.ndarray) -> np.ndarray:
     )
 
 
+def _fit_line_metrics(points: np.ndarray) -> tuple[float, float, float]:
+    centered = points - np.mean(points, axis=0)
+    _u, _s, vh = np.linalg.svd(centered, full_matrices=False)
+    axis = vh[0]
+    distances = np.linalg.norm(np.cross(centered, axis), axis=1)
+    tilt_xy_per_z = float(np.linalg.norm(axis[0:2]) / max(abs(axis[2]), 1.0e-8))
+    return float(np.max(distances)), float(np.sqrt(np.mean(distances * distances))), tilt_xy_per_z
+
+
 class AvbdSceneExample:
     """Base class used by thin per-scene AVBD reference examples."""
 
@@ -130,6 +146,7 @@ class AvbdSceneExample:
         self.sim_dt = REFERENCE_DT
         self.sim_substeps = 1
         self.sim_time = 0.0
+        self.solver_iterations = REFERENCE_ITERATIONS
 
         self.initial_body_velocities: dict[int, tuple[float, float, float]] = {}
         self.body_labels: dict[str, int] = {}
@@ -143,11 +160,14 @@ class AvbdSceneExample:
         self.rigid_joint_angular_ke = REFERENCE_PENALTY_MAX
         self.rigid_joint_linear_kd = 0.0
         self.rigid_joint_angular_kd = 0.0
+        self.rigid_avbd_contact_alpha = REFERENCE_ALPHA
         self.rigid_contact_stick_freeze_translation_eps = REFERENCE_STICK_FREEZE_TRANSLATION_EPS
         self.rigid_contact_stick_freeze_angular_eps = REFERENCE_STICK_FREEZE_ANGULAR_EPS
         self.rigid_contact_k_start = REFERENCE_PENALTY_MIN
         self.rigid_body_contact_buffer_size = 512
         self.rigid_body_serial_reverse = False
+        self.soft_joint_hard = True
+        self.rigid_contact_history = True
         self.contact_matching = "latest"
 
         builder = newton.ModelBuilder(gravity=REFERENCE_GRAVITY)
@@ -183,16 +203,16 @@ class AvbdSceneExample:
 
         self.solver = newton.solvers.SolverVBD(
             self.model,
-            iterations=REFERENCE_ITERATIONS,
+            iterations=self.solver_iterations,
             friction_epsilon=REFERENCE_FRICTION_EPSILON,
             rigid_avbd_alpha=REFERENCE_ALPHA,
             rigid_avbd_joint_alpha=REFERENCE_ALPHA,
-            rigid_avbd_contact_alpha=REFERENCE_ALPHA,
+            rigid_avbd_contact_alpha=self.rigid_avbd_contact_alpha,
             rigid_avbd_linear_beta=REFERENCE_BETA_LINEAR,
             rigid_avbd_angular_beta=REFERENCE_BETA_ANGULAR,
             rigid_avbd_gamma=REFERENCE_GAMMA,
             rigid_contact_hard=True,
-            rigid_contact_history=True,
+            rigid_contact_history=self.rigid_contact_history,
             rigid_contact_stick_motion_eps=REFERENCE_STICK_THRESH,
             rigid_contact_stick_freeze_translation_eps=self.rigid_contact_stick_freeze_translation_eps,
             rigid_contact_stick_freeze_angular_eps=self.rigid_contact_stick_freeze_angular_eps,
@@ -206,8 +226,9 @@ class AvbdSceneExample:
             rigid_body_contact_buffer_size=self.rigid_body_contact_buffer_size,
         )
 
-        for joint_index in self.soft_joint_indices:
-            self.solver.set_joint_constraint_mode(joint_index, hard=False)
+        if not self.soft_joint_hard:
+            for joint_index in self.soft_joint_indices:
+                self.solver.set_joint_constraint_mode(joint_index, hard=False)
 
         self.state_0 = self.model.state()
         self.state_1 = self.model.state()
@@ -372,6 +393,9 @@ class AvbdSceneExample:
     def body_position(self, label: str) -> np.ndarray:
         return self.state_0.body_q.numpy()[self.body_index(label), 0:3]
 
+    def body_linear_velocity(self, label: str) -> np.ndarray:
+        return self.state_0.body_qd.numpy()[self.body_index(label), 0:3]
+
     def body_linear_speed(self, label: str) -> float:
         return float(np.linalg.norm(self.state_0.body_qd.numpy()[self.body_index(label), 0:3]))
 
@@ -444,6 +468,48 @@ class AvbdSceneExample:
             self.max_angular_speed = max(self.max_angular_speed, self.final_angular_speed)
         if self.contacts.rigid_contact_count is not None:
             self.max_contacts = max(self.max_contacts, int(self.contacts.rigid_contact_count.numpy()[0]))
+        self._update_scene_alignment_metrics(body_q)
+
+    def _update_scene_alignment_metrics(self, body_q: np.ndarray) -> None:
+        if self.scene_name == "pyramid":
+            brick_indices = self.body_indices_with_prefix("brick_")
+            brick_pos = body_q[brick_indices, 0:3]
+            abs_y = float(np.max(np.abs(brick_pos[:, 1])))
+            y_span = float(np.max(brick_pos[:, 1]) - np.min(brick_pos[:, 1]))
+            row_y_span = 0.0
+            for row in range(16):
+                row_indices = [self.body_index(f"brick_{row}_{x}") for x in range(16 - row)]
+                row_y = body_q[row_indices, 1]
+                row_y_span = max(row_y_span, float(np.max(row_y) - np.min(row_y)))
+            self.extra_metrics["pyramid_observed_abs_y"] = max(
+                abs_y, float(self.extra_metrics.get("pyramid_observed_abs_y", 0.0))
+            )
+            self.extra_metrics["pyramid_observed_lateral_span"] = max(
+                y_span, float(self.extra_metrics.get("pyramid_observed_lateral_span", 0.0))
+            )
+            self.extra_metrics["pyramid_observed_row_lateral_span"] = max(
+                row_y_span, float(self.extra_metrics.get("pyramid_observed_row_lateral_span", 0.0))
+            )
+        elif self.scene_name == "stack":
+            stack_indices = [self.body_index(f"stack_{i}") for i in range(10)]
+            stack_pos = body_q[stack_indices, 0:3]
+            xy = stack_pos[:, 0:2]
+            xy_center = np.mean(xy, axis=0)
+            xy_radius = float(np.max(np.linalg.norm(xy, axis=1)))
+            xy_spread = float(np.max(np.linalg.norm(xy - xy_center, axis=1)))
+            line_fit, _line_rms, tilt = _fit_line_metrics(stack_pos)
+            self.extra_metrics["stack_observed_xy_radius"] = max(
+                xy_radius, float(self.extra_metrics.get("stack_observed_xy_radius", 0.0))
+            )
+            self.extra_metrics["stack_observed_xy_spread"] = max(
+                xy_spread, float(self.extra_metrics.get("stack_observed_xy_spread", 0.0))
+            )
+            self.extra_metrics["stack_observed_line_fit"] = max(
+                line_fit, float(self.extra_metrics.get("stack_observed_line_fit", 0.0))
+            )
+            self.extra_metrics["stack_observed_tilt_xy_per_z"] = max(
+                tilt, float(self.extra_metrics.get("stack_observed_tilt_xy_per_z", 0.0))
+            )
 
     def simulate(self) -> None:
         self.state_0.clear_forces()
@@ -529,6 +595,8 @@ def build_dynamic_friction(example: AvbdSceneExample, builder: newton.ModelBuild
 
 
 def build_static_friction(example: AvbdSceneExample, builder: newton.ModelBuilder) -> None:
+    example.rigid_avbd_contact_alpha = 0.9
+
     example.add_box(builder, (100.0, 100.0, 1.0), 0.0, 0.5, (0.0, 0.0, 0.0), label="ground")
 
     angle = math.radians(30.0)
@@ -547,6 +615,7 @@ def build_static_friction(example: AvbdSceneExample, builder: newton.ModelBuilde
 
 def build_pyramid(example: AvbdSceneExample, builder: newton.ModelBuilder) -> None:
     example.rigid_body_serial_reverse = True
+    example.rigid_avbd_contact_alpha = 0.85
     example.rigid_contact_k_start = 1000.0
 
     size = 16
@@ -648,8 +717,10 @@ def build_springs_ratio(example: AvbdSceneExample, builder: newton.ModelBuilder)
 
 
 def build_stack(example: AvbdSceneExample, builder: newton.ModelBuilder) -> None:
-    example.contact_matching = "sticky"
-    example.rigid_contact_k_start = 100.0
+    example.contact_matching = "disabled"
+    example.rigid_contact_history = False
+    example.rigid_avbd_contact_alpha = 0.9
+    example.rigid_contact_k_start = 1000.0
     example.rigid_contact_stick_freeze_translation_eps = 5.0e-2
     example.rigid_contact_stick_freeze_angular_eps = 1.0e-1
 
@@ -672,6 +743,8 @@ def build_stack_ratio(example: AvbdSceneExample, builder: newton.ModelBuilder) -
 
 
 def build_soft_body(example: AvbdSceneExample, builder: newton.ModelBuilder) -> None:
+    example.solver_iterations = 40
+    example.soft_joint_hard = False
     example.rigid_joint_linear_ke = 1000.0
     example.rigid_joint_angular_ke = 250.0
     example.rigid_joint_linear_kd = 1.0
@@ -849,10 +922,23 @@ def build_breakable(example: AvbdSceneExample, builder: newton.ModelBuilder) -> 
 
 
 def validate_static_friction(example: AvbdSceneExample) -> None:
+    ramp_tangent = np.asarray(_rotate_y(math.radians(30.0), (1.0, 0.0, 0.0)), dtype=np.float64)
     ramp_normal = np.asarray(_rotate_y(math.radians(30.0), (0.0, 0.0, 1.0)), dtype=np.float64)
+    low_friction_min_slide = float("inf")
+    low_friction_min_downhill_speed = float("inf")
     max_tilt = 0.0
     max_speed = 0.0
     max_angular_speed = 0.0
+
+    for i in range(2):
+        label = f"ramp_box_{i}"
+        body = example.body_index(label)
+        initial_pos = np.asarray(example.initial_body_positions[body], dtype=np.float64)
+        pos = example.body_position(label)
+        slide = float(np.dot(pos - initial_pos, ramp_tangent))
+        downhill_speed = float(np.dot(example.body_linear_velocity(label), ramp_tangent))
+        low_friction_min_slide = min(low_friction_min_slide, slide)
+        low_friction_min_downhill_speed = min(low_friction_min_downhill_speed, downhill_speed)
 
     for i in (9, 10):
         label = f"ramp_box_{i}"
@@ -863,10 +949,22 @@ def validate_static_friction(example: AvbdSceneExample) -> None:
         max_speed = max(max_speed, example.body_linear_speed(label))
         max_angular_speed = max(max_angular_speed, example.body_angular_speed(label))
 
+    example.extra_metrics["low_friction_min_slide"] = low_friction_min_slide
+    example.extra_metrics["low_friction_min_downhill_speed"] = low_friction_min_downhill_speed
     example.extra_metrics["high_friction_tilt_deg"] = max_tilt
     example.extra_metrics["high_friction_speed"] = max_speed
     example.extra_metrics["high_friction_angular_speed"] = max_angular_speed
 
+    if low_friction_min_slide < 1.5:
+        raise AssertionError(
+            f"{example.scene.title}: low-friction ramp boxes slid only {low_friction_min_slide:.3f} m; "
+            "expected visible downhill slip"
+        )
+    if low_friction_min_downhill_speed < 0.8:
+        raise AssertionError(
+            f"{example.scene.title}: low-friction ramp boxes downhill speed only "
+            f"{low_friction_min_downhill_speed:.3f} m/s; expected continued sliding"
+        )
     if max_tilt > 25.0:
         raise AssertionError(
             f"{example.scene.title}: high-friction ramp boxes tilted {max_tilt:.2f} deg; expected no tumbling"
@@ -883,9 +981,71 @@ def validate_static_friction(example: AvbdSceneExample) -> None:
 
 
 def validate_pyramid(example: AvbdSceneExample) -> None:
-    example.assert_final_speed_below(20.0)
-    example.assert_final_angular_speed_below(32.0)
-    example.assert_final_xy_radius_below(18.0)
+    body_q = example.state_0.body_q.numpy()
+    brick_indices = example.body_indices_with_prefix("brick_")
+    brick_pos = body_q[brick_indices, 0:3]
+    initial_pos = np.asarray([example.initial_body_positions[body] for body in brick_indices], dtype=np.float64)
+    displacement = np.linalg.norm(brick_pos - initial_pos, axis=1)
+    max_brick_displacement = float(np.max(displacement))
+    mean_brick_displacement = float(np.mean(displacement))
+    brick_final_max_z = float(np.max(brick_pos[:, 2]))
+    brick_lateral_span = float(np.max(brick_pos[:, 1]) - np.min(brick_pos[:, 1]))
+    brick_abs_y = float(np.max(np.abs(brick_pos[:, 1])))
+    max_row_lateral_span = 0.0
+    for row in range(16):
+        row_indices = [example.body_index(f"brick_{row}_{x}") for x in range(16 - row)]
+        row_y = body_q[row_indices, 1]
+        max_row_lateral_span = max(max_row_lateral_span, float(np.max(row_y) - np.min(row_y)))
+    observed_abs_y = max(brick_abs_y, float(example.extra_metrics.get("pyramid_observed_abs_y", 0.0)))
+    observed_lateral_span = max(
+        brick_lateral_span, float(example.extra_metrics.get("pyramid_observed_lateral_span", 0.0))
+    )
+    observed_row_lateral_span = max(
+        max_row_lateral_span, float(example.extra_metrics.get("pyramid_observed_row_lateral_span", 0.0))
+    )
+
+    example.extra_metrics["pyramid_max_brick_displacement"] = max_brick_displacement
+    example.extra_metrics["pyramid_mean_brick_displacement"] = mean_brick_displacement
+    example.extra_metrics["pyramid_final_max_z"] = brick_final_max_z
+    example.extra_metrics["pyramid_lateral_span"] = brick_lateral_span
+    example.extra_metrics["pyramid_abs_y"] = brick_abs_y
+    example.extra_metrics["pyramid_row_lateral_span"] = max_row_lateral_span
+    example.extra_metrics["pyramid_observed_abs_y"] = observed_abs_y
+    example.extra_metrics["pyramid_observed_lateral_span"] = observed_lateral_span
+    example.extra_metrics["pyramid_observed_row_lateral_span"] = observed_row_lateral_span
+
+    example.assert_final_speed_below(5.0)
+    example.assert_final_angular_speed_below(8.0)
+    if observed_abs_y > PYRAMID_PLANE_ABS_Y_LIMIT:
+        raise AssertionError(
+            f"{example.scene.title}: brick centers left the source y=0 plane by {observed_abs_y:.3f} m; "
+            f"expected <= {PYRAMID_PLANE_ABS_Y_LIMIT:.3f} m"
+        )
+    if observed_lateral_span > PYRAMID_PLANE_SPAN_LIMIT:
+        raise AssertionError(
+            f"{example.scene.title}: brick y-span reached {observed_lateral_span:.3f} m; "
+            f"expected <= {PYRAMID_PLANE_SPAN_LIMIT:.3f} m"
+        )
+    if observed_row_lateral_span > PYRAMID_ROW_PLANE_SPAN_LIMIT:
+        raise AssertionError(
+            f"{example.scene.title}: one pyramid row spread {observed_row_lateral_span:.3f} m out of plane; "
+            f"expected <= {PYRAMID_ROW_PLANE_SPAN_LIMIT:.3f} m"
+        )
+    if max_brick_displacement > 8.0:
+        raise AssertionError(
+            f"{example.scene.title}: brick displacement {max_brick_displacement:.3f} m exceeds 8.000; "
+            "pyramid did not stay compact"
+        )
+    if brick_final_max_z < 6.0:
+        raise AssertionError(
+            f"{example.scene.title}: tallest brick center is {brick_final_max_z:.3f} m; "
+            "expected the pile to retain visible height"
+        )
+    if brick_lateral_span > 4.0:
+        raise AssertionError(
+            f"{example.scene.title}: brick lateral span {brick_lateral_span:.3f} m exceeds 4.000; "
+            "pyramid scattered sideways"
+        )
     if example.final_min_z < -2.0:
         raise AssertionError(f"{example.scene.title}: final min z {example.final_min_z:.3f} below -2.000")
     if example.final_max_z > 12.0:
@@ -905,9 +1065,64 @@ def validate_stack_ratio(example: AvbdSceneExample) -> None:
 
 
 def validate_stack(example: AvbdSceneExample) -> None:
-    example.assert_final_speed_below(5.0)
-    example.assert_final_angular_speed_below(8.0)
-    example.assert_final_xy_radius_below(3.0)
+    body_q = example.state_0.body_q.numpy()
+    stack_indices = [example.body_index(f"stack_{i}") for i in range(10)]
+    stack_pos = body_q[stack_indices, 0:3]
+    xy_radius = float(np.max(np.linalg.norm(stack_pos[:, 0:2], axis=1)))
+    xy_center = np.mean(stack_pos[:, 0:2], axis=0)
+    xy_spread = float(np.max(np.linalg.norm(stack_pos[:, 0:2] - xy_center, axis=1)))
+    line_fit, line_fit_rms, tilt_xy_per_z = _fit_line_metrics(stack_pos)
+    observed_xy_radius = max(xy_radius, float(example.extra_metrics.get("stack_observed_xy_radius", 0.0)))
+    observed_xy_spread = max(xy_spread, float(example.extra_metrics.get("stack_observed_xy_spread", 0.0)))
+    observed_line_fit = max(line_fit, float(example.extra_metrics.get("stack_observed_line_fit", 0.0)))
+    observed_tilt = max(tilt_xy_per_z, float(example.extra_metrics.get("stack_observed_tilt_xy_per_z", 0.0)))
+    z_spacing = np.diff(stack_pos[:, 2])
+    min_z_spacing = float(np.min(z_spacing))
+    max_z_spacing = float(np.max(z_spacing))
+    top_z = float(stack_pos[-1, 2])
+
+    example.extra_metrics["stack_xy_radius"] = xy_radius
+    example.extra_metrics["stack_xy_spread"] = xy_spread
+    example.extra_metrics["stack_line_fit"] = line_fit
+    example.extra_metrics["stack_line_fit_rms"] = line_fit_rms
+    example.extra_metrics["stack_tilt_xy_per_z"] = tilt_xy_per_z
+    example.extra_metrics["stack_observed_xy_radius"] = observed_xy_radius
+    example.extra_metrics["stack_observed_xy_spread"] = observed_xy_spread
+    example.extra_metrics["stack_observed_line_fit"] = observed_line_fit
+    example.extra_metrics["stack_observed_tilt_xy_per_z"] = observed_tilt
+    example.extra_metrics["stack_min_z_spacing"] = min_z_spacing
+    example.extra_metrics["stack_max_z_spacing"] = max_z_spacing
+    example.extra_metrics["stack_top_z"] = top_z
+
+    example.assert_final_speed_below(0.25)
+    example.assert_final_angular_speed_below(0.5)
+    if observed_xy_radius > STACK_CENTER_RADIUS_LIMIT:
+        raise AssertionError(
+            f"{example.scene.title}: stack center radius reached {observed_xy_radius:.3f} m; "
+            f"expected <= {STACK_CENTER_RADIUS_LIMIT:.3f} m"
+        )
+    if observed_xy_spread > STACK_XY_SPREAD_LIMIT:
+        raise AssertionError(
+            f"{example.scene.title}: stack xy spread reached {observed_xy_spread:.3f} m; "
+            f"expected <= {STACK_XY_SPREAD_LIMIT:.3f} m"
+        )
+    if observed_line_fit > STACK_LINE_FIT_LIMIT:
+        raise AssertionError(
+            f"{example.scene.title}: stack centers deviated {observed_line_fit:.3f} m from a fitted line; "
+            f"expected <= {STACK_LINE_FIT_LIMIT:.3f} m"
+        )
+    if observed_tilt > STACK_TILT_LIMIT:
+        raise AssertionError(
+            f"{example.scene.title}: stack fitted line tilt reached {observed_tilt:.3f} xy/z; "
+            f"expected <= {STACK_TILT_LIMIT:.3f}"
+        )
+    if min_z_spacing < 0.85 or max_z_spacing > 1.15:
+        raise AssertionError(
+            f"{example.scene.title}: vertical spacing range {min_z_spacing:.3f}-{max_z_spacing:.3f} m; "
+            "expected separated unit cubes"
+        )
+    if top_z < 9.5:
+        raise AssertionError(f"{example.scene.title}: top cube center {top_z:.3f} m below expected stack height")
     if example.final_max_z > 16.0:
         raise AssertionError(
             f"{example.scene.title}: final max z {example.final_max_z:.3f} exceeds 16.000; stack expanded upward"
@@ -915,8 +1130,46 @@ def validate_stack(example: AvbdSceneExample) -> None:
 
 
 def validate_soft_body(example: AvbdSceneExample) -> None:
-    example.assert_final_speed_below(6.0)
-    example.assert_final_angular_speed_below(8.0)
+    body_q = example.state_0.body_q.numpy()
+    min_stack_z_extent = float("inf")
+    min_neighbor_distance = float("inf")
+    for stack in range(3):
+        stack_indices = example.body_indices_with_prefix(f"soft_{stack}_")
+        stack_pos = body_q[stack_indices, 0:3]
+        z_extent = float(np.max(stack_pos[:, 2]) - np.min(stack_pos[:, 2]))
+        min_stack_z_extent = min(min_stack_z_extent, z_extent)
+        positions_by_label = {
+            label: body_q[body, 0:3]
+            for label, body in example.body_labels.items()
+            if label.startswith(f"soft_{stack}_")
+        }
+        for x in range(4):
+            for y in range(4):
+                for z in range(4):
+                    p = positions_by_label[f"soft_{stack}_{x}_{y}_{z}"]
+                    for dx, dy, dz in ((1, 0, 0), (0, 1, 0), (0, 0, 1)):
+                        nx = x + dx
+                        ny = y + dy
+                        nz = z + dz
+                        if nx < 4 and ny < 4 and nz < 4:
+                            q = positions_by_label[f"soft_{stack}_{nx}_{ny}_{nz}"]
+                            min_neighbor_distance = min(min_neighbor_distance, float(np.linalg.norm(q - p)))
+
+    example.extra_metrics["soft_body_min_stack_z_extent"] = min_stack_z_extent
+    example.extra_metrics["soft_body_min_neighbor_distance"] = min_neighbor_distance
+
+    example.assert_final_speed_below(1.0)
+    example.assert_final_angular_speed_below(2.0)
+    if min_stack_z_extent < 2.0:
+        raise AssertionError(
+            f"{example.scene.title}: lattice z extent collapsed to {min_stack_z_extent:.3f} m; "
+            "expected each 4x4x4 block to retain most of its height"
+        )
+    if min_neighbor_distance < 0.55:
+        raise AssertionError(
+            f"{example.scene.title}: neighboring lattice bodies are {min_neighbor_distance:.3f} m apart; "
+            "expected soft joints to prevent self-collapse"
+        )
     if example.final_max_z > 22.0:
         raise AssertionError(
             f"{example.scene.title}: final max z {example.final_max_z:.3f} exceeds 22.000; lattice is expanding"
@@ -1055,7 +1308,7 @@ SCENES: dict[str, SceneInfo] = {
         validate=validate_soft_body,
         report_frames=120,
         speed_limit=20.0,
-        status_note="Uses soft fixed VBD joints with source stiffness and a small Newton joint damping term.",
+        status_note="Uses source soft fixed-joint stiffness with 40 Newton VBD iterations to prevent lattice collapse.",
     ),
     "bridge": SceneInfo(
         "Bridge",

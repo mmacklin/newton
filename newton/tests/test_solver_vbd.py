@@ -601,6 +601,61 @@ def _rigid_contact_stick_flags_require_cone_and_small_residual(test, device):
         np.testing.assert_array_equal(stick_flag.numpy(), [0, 0, 0, 0])
 
 
+def _rigid_contact_penalty_ramps_from_stabilized_residual(test, device):
+    """Hard-contact normal penalty ramp should use the stabilized AL residual."""
+    with wp.ScopedDevice(device):
+        contact_count = wp.array([1], dtype=int, device=device)
+        shape0 = wp.array([0], dtype=int, device=device)
+        shape1 = wp.array([1], dtype=int, device=device)
+        point0 = wp.zeros(1, dtype=wp.vec3, device=device)
+        point1 = wp.zeros(1, dtype=wp.vec3, device=device)
+        normal = wp.array([[0.0, 0.0, 1.0]], dtype=wp.vec3, device=device)
+        margin0 = wp.array([0.05], dtype=float, device=device)
+        margin1 = wp.array([0.05], dtype=float, device=device)
+        shape_body = wp.array([0, 1], dtype=int, device=device)
+        body_q = wp.array([wp.transform_identity(), wp.transform_identity()], dtype=wp.transform, device=device)
+        body_q_prev = wp.array([wp.transform_identity(), wp.transform_identity()], dtype=wp.transform, device=device)
+        contact_mu = wp.array([0.5], dtype=float, device=device)
+        contact_c0 = wp.array([[0.0, 0.0, 0.09]], dtype=wp.vec3, device=device)
+        body_inv_mass = wp.array([1.0, 1.0], dtype=float, device=device)
+        contact_ke = wp.array([1000.0], dtype=float, device=device)
+        penalty_k = wp.array([10.0], dtype=float, device=device)
+        tangent_penalty_k = wp.array([10.0], dtype=float, device=device)
+        contact_lambda = wp.zeros(1, dtype=wp.vec3, device=device)
+        stick_flag = wp.zeros(1, dtype=wp.int32, device=device)
+
+        wp.launch(
+            update_duals_body_body_contacts,
+            dim=1,
+            inputs=[
+                contact_count,
+                shape0,
+                shape1,
+                point0,
+                point1,
+                normal,
+                margin0,
+                margin1,
+                shape_body,
+                body_q,
+                body_q_prev,
+                contact_mu,
+                contact_c0,
+                0.9,
+                0.0,
+                1,
+                body_inv_mass,
+                contact_ke,
+                100.0,
+            ],
+            outputs=[penalty_k, tangent_penalty_k, contact_lambda, stick_flag],
+            device=device,
+        )
+
+        np.testing.assert_allclose(contact_lambda.numpy(), [[0.0, 0.0, 0.19]], rtol=1e-6, atol=1e-6)
+        np.testing.assert_allclose(penalty_k.numpy(), [11.9], rtol=1e-6, atol=1e-6)
+
+
 class TestSolverVBD(unittest.TestCase):
     pass
 
@@ -651,6 +706,12 @@ add_function_test(
     TestSolverVBD,
     "test_rigid_contact_stick_flags_require_cone_and_small_residual",
     _rigid_contact_stick_flags_require_cone_and_small_residual,
+    devices=devices,
+)
+add_function_test(
+    TestSolverVBD,
+    "test_rigid_contact_penalty_ramps_from_stabilized_residual",
+    _rigid_contact_penalty_ramps_from_stabilized_residual,
     devices=devices,
 )
 

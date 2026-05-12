@@ -56,6 +56,9 @@ _STICK_FLAG_ANCHOR = wp.constant(1)
 _STICK_FLAG_DEADZONE = wp.constant(2)
 """contact_stick_flag value: anti-creep deadzone (sticking dynamic-dynamic contacts)"""
 
+_FINITE_STIFFNESS_C0_THRESHOLD = wp.constant(1.0e9)
+"""Penalty ceiling below this value is treated as finite-stiffness AL without C0 stabilization."""
+
 # ---------------------------------
 # Helper classes and device functions
 # ---------------------------------
@@ -360,6 +363,18 @@ def _update_dual_vec3(
     else:
         lam_new = lam
     return lam_new
+
+
+@wp.func
+def _structural_c0_alpha(is_hard: int, k_max: float, avbd_alpha: float):
+    """Return C0 stabilization alpha for a structural joint slot.
+
+    The AVBD demo uses AL multipliers for finite-stiffness joints, but only
+    applies the C0 stabilization term to hard/infinite-stiffness constraints.
+    """
+    if is_hard == 1 and k_max >= _FINITE_STIFFNESS_C0_THRESHOLD:
+        return avbd_alpha
+    return 0.0
 
 
 @wp.func
@@ -1030,6 +1045,7 @@ def evaluate_joint_force_hessian(
     joint_qd_start: wp.array[int],
     joint_constraint_start: wp.array[int],
     joint_penalty_k: wp.array[float],
+    joint_penalty_k_max: wp.array[float],
     joint_penalty_kd: wp.array[float],
     joint_sigma_start: wp.array[wp.vec3],
     joint_C_fric: wp.array[wp.vec3],
@@ -1136,7 +1152,7 @@ def evaluate_joint_force_hessian(
     if joint_is_hard[c_start] == 1:
         lin_lambda = joint_lambda_lin[joint_index]
         lin_C0 = joint_C0_lin[joint_index]
-        lin_alpha = avbd_alpha
+        lin_alpha = _structural_c0_alpha(joint_is_hard[c_start], joint_penalty_k_max[c_start], avbd_alpha)
 
     # Hard/soft AL gating for the angular structural slot (slot 1)
     ang_lambda = wp.vec3(0.0)
@@ -1149,7 +1165,7 @@ def evaluate_joint_force_hessian(
     if ang_hard == 1:
         ang_lambda = joint_lambda_ang[joint_index]
         ang_C0 = joint_C0_ang[joint_index]
-        ang_alpha = avbd_alpha
+        ang_alpha = _structural_c0_alpha(ang_hard, joint_penalty_k_max[c_start + 1], avbd_alpha)
 
     if jt == JointType.CABLE:
         k_stretch = joint_penalty_k[c_start]
@@ -2948,6 +2964,7 @@ def solve_rigid_body(
     joint_constraint_start: wp.array[int],
     # AVBD per-constraint penalty state (scalar constraints indexed via joint_constraint_start)
     joint_penalty_k: wp.array[float],
+    joint_penalty_k_max: wp.array[float],
     joint_penalty_kd: wp.array[float],
     # Dahl hysteresis parameters (frozen for this timestep, component-wise vec3 per joint)
     joint_sigma_start: wp.array[wp.vec3],
@@ -3118,6 +3135,7 @@ def solve_rigid_body(
             joint_qd_start,
             joint_constraint_start,
             joint_penalty_k,
+            joint_penalty_k_max,
             joint_penalty_kd,
             joint_sigma_start,
             joint_C_fric,
@@ -3278,7 +3296,7 @@ def update_duals_joint(
         lam_new = _update_dual_vec3(
             C_vec_stretch,
             joint_C0_lin[j],
-            avbd_alpha,
+            _structural_c0_alpha(joint_is_hard[stretch_idx], joint_penalty_k_max[stretch_idx], avbd_alpha),
             joint_penalty_k[stretch_idx],
             joint_lambda_lin[j],
             joint_is_hard[stretch_idx],
@@ -3293,7 +3311,7 @@ def update_duals_joint(
         lam_new = _update_dual_vec3(
             kappa,
             joint_C0_ang[j],
-            avbd_alpha,
+            _structural_c0_alpha(joint_is_hard[bend_idx], joint_penalty_k_max[bend_idx], avbd_alpha),
             joint_penalty_k[bend_idx],
             joint_lambda_ang[j],
             joint_is_hard[bend_idx],
@@ -3314,7 +3332,7 @@ def update_duals_joint(
         lam_new = _update_dual_vec3(
             C_vec,
             joint_C0_lin[j],
-            avbd_alpha,
+            _structural_c0_alpha(joint_is_hard[i0], joint_penalty_k_max[i0], avbd_alpha),
             joint_penalty_k[i0],
             joint_lambda_lin[j],
             joint_is_hard[i0],
@@ -3334,7 +3352,7 @@ def update_duals_joint(
         lam_new = _update_dual_vec3(
             C_vec_lin,
             joint_C0_lin[j],
-            avbd_alpha,
+            _structural_c0_alpha(joint_is_hard[i_lin], joint_penalty_k_max[i_lin], avbd_alpha),
             joint_penalty_k[i_lin],
             joint_lambda_lin[j],
             joint_is_hard[i_lin],
@@ -3352,7 +3370,7 @@ def update_duals_joint(
         lam_new = _update_dual_vec3(
             kappa,
             joint_C0_ang[j],
-            avbd_alpha,
+            _structural_c0_alpha(joint_is_hard[i_ang], joint_penalty_k_max[i_ang], avbd_alpha),
             joint_penalty_k[i_ang],
             joint_lambda_ang[j],
             joint_is_hard[i_ang],
@@ -3377,7 +3395,7 @@ def update_duals_joint(
         lam_new = _update_dual_vec3(
             C_vec_lin,
             P_lin * joint_C0_lin[j],
-            avbd_alpha,
+            _structural_c0_alpha(joint_is_hard[i_lin], joint_penalty_k_max[i_lin], avbd_alpha),
             joint_penalty_k[i_lin],
             joint_lambda_lin[j],
             joint_is_hard[i_lin],
@@ -3396,7 +3414,7 @@ def update_duals_joint(
         lam_new = _update_dual_vec3(
             kappa_perp,
             P_ang * joint_C0_ang[j],
-            avbd_alpha,
+            _structural_c0_alpha(joint_is_hard[i_ang], joint_penalty_k_max[i_ang], avbd_alpha),
             joint_penalty_k[i_ang],
             lam_old,
             joint_is_hard[i_ang],
@@ -3446,7 +3464,7 @@ def update_duals_joint(
         lam_new = _update_dual_vec3(
             C_vec_perp,
             P_lin * joint_C0_lin[j],
-            avbd_alpha,
+            _structural_c0_alpha(joint_is_hard[i_lin], joint_penalty_k_max[i_lin], avbd_alpha),
             joint_penalty_k[i_lin],
             lam_old,
             joint_is_hard[i_lin],
@@ -3464,7 +3482,7 @@ def update_duals_joint(
         lam_new = _update_dual_vec3(
             kappa_perp,
             P_ang * joint_C0_ang[j],
-            avbd_alpha,
+            _structural_c0_alpha(joint_is_hard[i_ang], joint_penalty_k_max[i_ang], avbd_alpha),
             joint_penalty_k[i_ang],
             joint_lambda_ang[j],
             joint_is_hard[i_ang],
@@ -3515,7 +3533,7 @@ def update_duals_joint(
             lam_new = _update_dual_vec3(
                 C_vec_perp,
                 P_lin * joint_C0_lin[j],
-                avbd_alpha,
+                _structural_c0_alpha(joint_is_hard[i_lin], joint_penalty_k_max[i_lin], avbd_alpha),
                 joint_penalty_k[i_lin],
                 lam_old,
                 joint_is_hard[i_lin],
@@ -3535,7 +3553,7 @@ def update_duals_joint(
             lam_new = _update_dual_vec3(
                 kappa_perp,
                 P_ang * joint_C0_ang[j],
-                avbd_alpha,
+                _structural_c0_alpha(joint_is_hard[i_ang], joint_penalty_k_max[i_ang], avbd_alpha),
                 joint_penalty_k[i_ang],
                 lam_old,
                 joint_is_hard[i_ang],
@@ -3659,6 +3677,8 @@ def update_duals_body_body_contacts(
     n = rigid_contact_normal[idx]
     d = p1_world - p0_world
     thickness_total = rigid_contact_margin0[idx] + rigid_contact_margin1[idx]
+    normal_penalty_residual = float(0.0)
+    normal_penalty_active = int(0)
 
     if hard_contacts == 1:
         k = contact_penalty_k[idx]
@@ -3677,6 +3697,9 @@ def update_duals_body_body_contacts(
 
         lam_n_old = wp.dot(lam_vec, n)
         lam_n_new = wp.max(lam_n_old + k * C_stab_n, 0.0)
+        if lam_n_new > 0.0:
+            normal_penalty_residual = wp.abs(C_stab_n)
+            normal_penalty_active = int(1)
 
         rel_disp = (p0_world - p0_prev) - (p1_world - p1_prev)
         tangential_disp = rel_disp - n * wp.dot(n, rel_disp)
@@ -3714,10 +3737,15 @@ def update_duals_body_body_contacts(
             )
     else:
         contact_stick_flag[idx] = int(0)
+        C_n = wp.dot(n * thickness_total - d, n)
+        if C_n > 0.0:
+            normal_penalty_residual = C_n
+            normal_penalty_active = int(1)
 
-    C_n = wp.dot(n * thickness_total - d, n)
-    if C_n > 0.0:
-        contact_penalty_k[idx] = wp.min(contact_material_ke[idx], contact_penalty_k[idx] + beta * C_n)
+    if normal_penalty_active == 1:
+        contact_penalty_k[idx] = wp.min(
+            contact_material_ke[idx], contact_penalty_k[idx] + beta * normal_penalty_residual
+        )
 
 
 @wp.kernel

@@ -484,6 +484,27 @@ def write_html(results: list[dict]) -> Path:
       border-radius: 6px;
       color: #ffd8b4;
     }}
+    .detail-grid {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 14px;
+    }}
+    .detail {{
+      background: #171a22;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }}
+    .detail h3 {{
+      margin-bottom: 8px;
+    }}
+    ul {{
+      margin: 10px 0 0;
+      padding-left: 19px;
+      color: var(--muted);
+    }}
+    li {{ margin: 7px 0; }}
     table {{
       width: 100%;
       border-collapse: collapse;
@@ -513,6 +534,7 @@ def write_html(results: list[dict]) -> Path:
       }}
       .summary, .grid {{ grid-template-columns: 1fr; }}
       .compare-media {{ grid-template-columns: 1fr; }}
+      .detail-grid {{ grid-template-columns: 1fr; }}
     }}
   </style>
 </head>
@@ -603,6 +625,69 @@ def write_html(results: list[dict]) -> Path:
         the demo's O(n^2) feature-key manifold merge, and the tall-stack stabilization still relies on Newton's
         body-level stick deadzone rather than a cleaner contact-state formulation.
       </p>
+    </section>
+
+    <h2 class="section-title">Changes From Original Newton VBD</h2>
+    <section class="section">
+      <p>
+        This branch is not just a scene port. Several solver and example-level changes were needed to make
+        Newton's rigid VBD/AVBD path behave like the AVBD 3D reference implementation on contact-heavy stacks.
+      </p>
+      <div class="detail-grid">
+        <div class="detail">
+          <h3>Coloring And Iteration Order</h3>
+          <ul>
+            <li>The AVBD examples override Newton's normal body coloring with one rigid body per color group.</li>
+            <li>This changes contact-only rigid scenes from a parallel Jacobi-style update to a serial Gauss-Seidel-style sweep.</li>
+            <li>The AVBD demo walks a linked list of bodies serially; matching that order is important for pyramid and stack propagation.</li>
+            <li>Pyramid also uses the reverse serial body order to match the source's newest-first linked-list traversal.</li>
+          </ul>
+        </div>
+        <div class="detail">
+          <h3>Rigid Contact State</h3>
+          <ul>
+            <li>Body-body contacts now carry separate normal and tangential penalties instead of reusing one scalar penalty for both.</li>
+            <li>Contact history snapshots restore normal penalty, tangent penalty, lambda, stick flags, anchors, and normals.</li>
+            <li>Hard-contact tangential friction uses the tangent penalty and clamps lambda to the Coulomb cone.</li>
+            <li>Tangent penalty only ramps when the updated tangential lambda remains inside the cone.</li>
+          </ul>
+        </div>
+        <div class="detail">
+          <h3>AVBD Stabilization</h3>
+          <ul>
+            <li>Hard-contact normal residuals use the start-of-step C0 snapshot: <code>C_n - alpha C0_n</code>.</li>
+            <li>The normal penalty ramp now uses that stabilized AL residual rather than raw penetration.</li>
+            <li>Tangential friction includes the AVBD residual term <code>(1 - alpha) C0_t</code>.</li>
+            <li>Finite-stiffness structural joints keep AL multipliers but do not apply the C0 stabilization term.</li>
+          </ul>
+        </div>
+        <div class="detail">
+          <h3>Rigid Warm Start</h3>
+          <ul>
+            <li>The rigid forward step now separates the inertial target from the AVBD primal warm-start pose.</li>
+            <li>Previous accepted body velocity is stored separately so adaptive warm-starting does not overwrite the velocity state.</li>
+            <li>This follows the AVBD reference pattern where position is warm-started but velocity is updated after the positional solve.</li>
+          </ul>
+        </div>
+        <div class="detail">
+          <h3>Scene Settings</h3>
+          <ul>
+            <li>The examples pass reference dt, iteration count, alpha, beta, gamma, gravity, gap, margin, friction epsilon, and contact matching thresholds explicitly.</li>
+            <li>Static friction uses contact alpha <code>0.9</code> so low-friction boxes continue sliding while high-friction boxes stick.</li>
+            <li>Pyramid uses contact alpha <code>0.85</code>, contact penalty seed <code>1000</code>, and reverse serial body order.</li>
+            <li>Stack disables rigid contact warm-start/contact matching, and uses contact alpha <code>0.9</code>, contact penalty seed <code>1000</code>, and a body-level stick deadzone.</li>
+            <li>Soft body uses source finite fixed-joint stiffness, soft joint mode, damping, and 40 VBD iterations.</li>
+          </ul>
+        </div>
+        <div class="detail">
+          <h3>Tests And Report Checks</h3>
+          <ul>
+            <li>Example tests now fail for low-friction boxes that do not slide, high-friction boxes that tumble, pyramid scattering, stack collapse, and soft-body self-collapse.</li>
+            <li>Solver tests cover tangent penalty warm-start/snapshot behavior, contact stick flags, and stabilized-residual penalty ramping.</li>
+            <li>Report generation runs each example's assertions, writes metrics, validates MP4 decode, and checks for nonblank frames.</li>
+          </ul>
+        </div>
+      </div>
     </section>
 
     <h2 class="section-title">Stability Metrics</h2>

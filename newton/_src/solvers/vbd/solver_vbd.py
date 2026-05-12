@@ -2473,6 +2473,7 @@ class SolverVBD(SolverBase):
                     model.joint_qd_start,
                     self.joint_constraint_start,
                     self.joint_penalty_k,
+                    self.joint_penalty_k_max,
                     self.joint_penalty_kd,
                     self.joint_sigma_start,
                     self.joint_C_fric,
