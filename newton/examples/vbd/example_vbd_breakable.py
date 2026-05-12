@@ -5,55 +5,16 @@
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
 import warp as wp
 
 import newton
 import newton.examples
 
-REFERENCE_DT = 1.0 / 60.0
-REFERENCE_ITERATIONS = 10
-REFERENCE_ALPHA = 0.99
-REFERENCE_BETA_LINEAR = 10000.0
-REFERENCE_BETA_ANGULAR = 100.0
-REFERENCE_GAMMA = 0.999
-REFERENCE_GRAVITY = -10.0
-REFERENCE_PENALTY_MIN = 1.0
-REFERENCE_PENALTY_MAX = 1.0e10
-REFERENCE_COLLISION_MARGIN = 0.01
-REFERENCE_CONTACT_MATCH_POS_THRESHOLD = 0.05
-REFERENCE_CONTACT_MATCH_NORMAL_DOT_THRESHOLD = 0.9
-REFERENCE_STICK_THRESH = 1.0e-5
-REFERENCE_FRICTION_EPSILON = 0.0
-REFERENCE_STICK_FREEZE_TRANSLATION_EPS = 0.0
-REFERENCE_STICK_FREEZE_ANGULAR_EPS = 0.0
-
 TITLE = "Breakable"
 DESCRIPTION = "Beam of hard fixed joints with runtime joint disabling above the source break force."
-CAMERA_TARGET = (0.0, 0.0, 7.0)
-CAMERA_DISTANCE = 28.0
-CAMERA_PITCH = -22.0
-CAMERA_YAW = 135.0
-CAMERA_FOV = 55.0
-POSITION_LIMIT = 500.0
-SPEED_LIMIT = 15.0
-MIN_Z_LIMIT = -80.0
 REPORT_FRAMES = 180
 STATUS_NOTE = "Fracture disables overloaded joints; collision filters remain static after breakage."
-
-PYRAMID_PLANE_ABS_Y_LIMIT = 0.10
-PYRAMID_PLANE_SPAN_LIMIT = 0.16
-PYRAMID_ROW_PLANE_SPAN_LIMIT = 0.12
-STACK_CENTER_RADIUS_LIMIT = 0.15
-STACK_XY_SPREAD_LIMIT = 0.08
-STACK_LINE_FIT_LIMIT = 0.06
-STACK_TILT_LIMIT = 0.02
-
-
-def _vec(values: tuple[float, float, float]) -> wp.vec3:
-    return wp.vec3(float(values[0]), float(values[1]), float(values[2]))
 
 
 def _xform(
@@ -62,62 +23,7 @@ def _xform(
 ) -> wp.transform:
     if rotation is None:
         rotation = wp.quat_identity()
-    return wp.transform(p=_vec(position), q=rotation)
-
-
-def _quat_axis_angle(axis: tuple[float, float, float], angle: float) -> wp.quat:
-    return wp.quat_from_axis_angle(_vec(axis), float(angle))
-
-
-def _rotate_y(angle: float, values: tuple[float, float, float]) -> tuple[float, float, float]:
-    c = math.cos(angle)
-    s = math.sin(angle)
-    x, y, z = values
-    return (c * x + s * z, y, -s * x + c * z)
-
-
-def _add(a: tuple[float, float, float], b: tuple[float, float, float]) -> tuple[float, float, float]:
-    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
-
-
-def _mul(a: tuple[float, float, float], s: float) -> tuple[float, float, float]:
-    return (a[0] * s, a[1] * s, a[2] * s)
-
-
-def _camera_front(yaw: float, pitch: float) -> tuple[float, float, float]:
-    yaw_rad = math.radians(yaw)
-    pitch_rad = math.radians(pitch)
-    cos_pitch = math.cos(pitch_rad)
-    return (
-        math.cos(yaw_rad) * cos_pitch,
-        math.sin(yaw_rad) * cos_pitch,
-        math.sin(pitch_rad),
-    )
-
-
-def _quat_wxyz_to_matrix(q: np.ndarray) -> np.ndarray:
-    q = np.asarray(q, dtype=np.float64)
-    norm = np.linalg.norm(q)
-    if norm == 0.0:
-        return np.eye(3)
-    w, x, y, z = q / norm
-    return np.array(
-        [
-            [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w)],
-            [2.0 * (x * y + z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w)],
-            [2.0 * (x * z - y * w), 2.0 * (y * z + x * w), 1.0 - 2.0 * (x * x + y * y)],
-        ],
-        dtype=np.float64,
-    )
-
-
-def _fit_line_metrics(points: np.ndarray) -> tuple[float, float, float]:
-    centered = points - np.mean(points, axis=0)
-    _u, _s, vh = np.linalg.svd(centered, full_matrices=False)
-    axis = vh[0]
-    distances = np.linalg.norm(np.cross(centered, axis), axis=1)
-    tilt_xy_per_z = float(np.linalg.norm(axis[0:2]) / max(abs(axis[2]), 1.0e-8))
-    return float(np.max(distances)), float(np.sqrt(np.mean(distances * distances))), tilt_xy_per_z
+    return wp.transform(p=wp.vec3(float(position[0]), float(position[1]), float(position[2])), q=rotation)
 
 
 class Example:
@@ -125,44 +31,44 @@ class Example:
         self.viewer = viewer
         self.args = args
         self.title = TITLE
-
         self.fps = 60
-        self.frame_dt = REFERENCE_DT
-        self.sim_dt = REFERENCE_DT
+        self.frame_dt = 1.0 / 60.0
+        self.sim_dt = self.frame_dt
         self.sim_substeps = 1
         self.sim_time = 0.0
-        self.solver_iterations = REFERENCE_ITERATIONS
-
-        self.initial_body_velocities: dict[int, tuple[float, float, float]] = {}
-        self.body_labels: dict[str, int] = {}
-        self.body_sizes: dict[int, tuple[float, float, float]] = {}
-        self.initial_body_positions: dict[int, tuple[float, float, float]] = {}
-        self.dynamic_body_indices: list[int] = []
-        self.soft_joint_indices: list[int] = []
-        self.breakable_joint_indices: list[int] = []
-        self.broken_joint_count = 0
-        self.rigid_joint_linear_ke = REFERENCE_PENALTY_MAX
-        self.rigid_joint_angular_ke = REFERENCE_PENALTY_MAX
+        self.solver_iterations = 10
+        self.collision_margin = 0.01
+        self.penalty_min = 1.0
+        self.penalty_max = 1.0e10
+        self.position_limit = 500.0
+        self.speed_limit = 15.0
+        self.min_z_limit = -80.0
+        self.rigid_joint_linear_ke = self.penalty_max
+        self.rigid_joint_angular_ke = self.penalty_max
         self.rigid_joint_linear_kd = 0.0
         self.rigid_joint_angular_kd = 0.0
-        self.rigid_avbd_contact_alpha = REFERENCE_ALPHA
-        self.rigid_contact_stick_freeze_translation_eps = REFERENCE_STICK_FREEZE_TRANSLATION_EPS
-        self.rigid_contact_stick_freeze_angular_eps = REFERENCE_STICK_FREEZE_ANGULAR_EPS
-        self.rigid_contact_k_start = REFERENCE_PENALTY_MIN
+        self.rigid_avbd_contact_alpha = 0.99
+        self.rigid_contact_stick_freeze_translation_eps = 0.0
+        self.rigid_contact_stick_freeze_angular_eps = 0.0
+        self.rigid_contact_k_start = self.penalty_min
         self.rigid_body_contact_buffer_size = 512
         self.rigid_body_serial_reverse = False
         self.soft_joint_hard = True
+        self.soft_joint_indices: list[int] = []
+        self.breakable_joint_indices: list[int] = []
+        self.broken_joint_count = 0
         self.rigid_contact_history = True
         self.contact_matching = "latest"
+        pass
 
-        builder = newton.ModelBuilder(gravity=REFERENCE_GRAVITY)
-        builder.rigid_gap = REFERENCE_COLLISION_MARGIN
+        builder = newton.ModelBuilder(gravity=-10.0)
+        builder.rigid_gap = self.collision_margin
         builder.default_shape_cfg.density = 1.0
-        builder.default_shape_cfg.ke = REFERENCE_PENALTY_MAX
+        builder.default_shape_cfg.ke = self.penalty_max
         builder.default_shape_cfg.kd = 0.0
         builder.default_shape_cfg.mu = 0.5
-        builder.default_shape_cfg.margin = REFERENCE_COLLISION_MARGIN * 0.5
-        builder.default_shape_cfg.gap = REFERENCE_COLLISION_MARGIN
+        builder.default_shape_cfg.margin = self.collision_margin * 0.5
+        builder.default_shape_cfg.gap = self.collision_margin
 
         self._build_scene(builder)
         builder.color()
@@ -178,36 +84,34 @@ class Example:
             self.model,
             broad_phase="sap",
             contact_matching=self.contact_matching,
-            contact_matching_pos_threshold=REFERENCE_CONTACT_MATCH_POS_THRESHOLD,
-            contact_matching_normal_dot_threshold=REFERENCE_CONTACT_MATCH_NORMAL_DOT_THRESHOLD,
+            contact_matching_pos_threshold=0.05,
+            contact_matching_normal_dot_threshold=0.9,
             rigid_contact_max=rigid_contact_max,
         )
-
         self.solver = newton.solvers.SolverVBD(
             self.model,
             iterations=self.solver_iterations,
-            friction_epsilon=REFERENCE_FRICTION_EPSILON,
-            rigid_avbd_alpha=REFERENCE_ALPHA,
-            rigid_avbd_joint_alpha=REFERENCE_ALPHA,
+            friction_epsilon=0.0,
+            rigid_avbd_alpha=0.99,
+            rigid_avbd_joint_alpha=0.99,
             rigid_avbd_contact_alpha=self.rigid_avbd_contact_alpha,
-            rigid_avbd_linear_beta=REFERENCE_BETA_LINEAR,
-            rigid_avbd_angular_beta=REFERENCE_BETA_ANGULAR,
-            rigid_avbd_gamma=REFERENCE_GAMMA,
+            rigid_avbd_linear_beta=10000.0,
+            rigid_avbd_angular_beta=100.0,
+            rigid_avbd_gamma=0.999,
             rigid_contact_hard=True,
             rigid_contact_history=self.rigid_contact_history,
-            rigid_contact_stick_motion_eps=REFERENCE_STICK_THRESH,
+            rigid_contact_stick_motion_eps=1.0e-5,
             rigid_contact_stick_freeze_translation_eps=self.rigid_contact_stick_freeze_translation_eps,
             rigid_contact_stick_freeze_angular_eps=self.rigid_contact_stick_freeze_angular_eps,
             rigid_contact_k_start=self.rigid_contact_k_start,
-            rigid_joint_linear_k_start=REFERENCE_PENALTY_MIN,
-            rigid_joint_angular_k_start=REFERENCE_PENALTY_MIN,
+            rigid_joint_linear_k_start=self.penalty_min,
+            rigid_joint_angular_k_start=self.penalty_min,
             rigid_joint_linear_ke=self.rigid_joint_linear_ke,
             rigid_joint_angular_ke=self.rigid_joint_angular_ke,
             rigid_joint_linear_kd=self.rigid_joint_linear_kd,
             rigid_joint_angular_kd=self.rigid_joint_angular_kd,
             rigid_body_contact_buffer_size=self.rigid_body_contact_buffer_size,
         )
-
         if not self.soft_joint_hard:
             for joint_index in self.soft_joint_indices:
                 self.solver.set_joint_constraint_mode(joint_index, hard=False)
@@ -217,25 +121,14 @@ class Example:
         self.control = self.model.control()
         newton.eval_fk(self.model, self.model.joint_q, self.model.joint_qd, self.state_0)
         newton.eval_fk(self.model, self.model.joint_q, self.model.joint_qd, self.state_1)
-        self._assign_initial_velocities()
-
         self.contacts = self.collision_pipeline.contacts()
         self.viewer.set_model(self.model)
-        front = _camera_front(CAMERA_YAW, CAMERA_PITCH)
-        camera_pos = (
-            CAMERA_TARGET[0] - front[0] * CAMERA_DISTANCE,
-            CAMERA_TARGET[1] - front[1] * CAMERA_DISTANCE,
-            CAMERA_TARGET[2] - front[2] * CAMERA_DISTANCE,
-        )
-        self.viewer.set_camera(
-            pos=_vec(camera_pos),
-            pitch=CAMERA_PITCH,
-            yaw=CAMERA_YAW,
-        )
+        self.shadow_distance = 28.0
+        self.viewer.set_camera(pos=wp.vec3(18.35730375, -18.35730375, 17.48898462), pitch=-22.0, yaw=135.0)
         if hasattr(self.viewer, "camera") and hasattr(self.viewer.camera, "fov"):
-            self.viewer.camera.fov = CAMERA_FOV
+            self.viewer.camera.fov = 55.0
         if hasattr(self.viewer, "camera") and hasattr(self.viewer.camera, "look_at"):
-            self.viewer.camera.look_at(_vec(CAMERA_TARGET))
+            self.viewer.camera.look_at(wp.vec3(0.0, 0.0, 7.0))
 
         self.max_speed = 0.0
         self.final_speed = 0.0
@@ -252,213 +145,55 @@ class Example:
         self.nan_detected = False
         self.extra_metrics: dict[str, float | int | bool] = {}
 
-    def _cfg(self, density: float, friction: float) -> newton.ModelBuilder.ShapeConfig:
+    def _shape_cfg(self, density: float, friction: float) -> newton.ModelBuilder.ShapeConfig:
         cfg = newton.ModelBuilder.ShapeConfig()
         cfg.density = density
-        cfg.ke = REFERENCE_PENALTY_MAX
+        cfg.ke = self.penalty_max
         cfg.kd = 0.0
         cfg.mu = friction
-        cfg.margin = REFERENCE_COLLISION_MARGIN * 0.5
-        cfg.gap = REFERENCE_COLLISION_MARGIN
+        cfg.margin = self.collision_margin * 0.5
+        cfg.gap = self.collision_margin
         return cfg
-
-    def add_box(
-        self,
-        builder: newton.ModelBuilder,
-        size: tuple[float, float, float],
-        density: float,
-        friction: float,
-        position: tuple[float, float, float],
-        velocity: tuple[float, float, float] = (0.0, 0.0, 0.0),
-        rotation: wp.quat | None = None,
-        label: str | None = None,
-    ) -> tuple[int, int]:
-        body = builder.add_body(
-            xform=_xform(position, rotation),
-            is_kinematic=density <= 0.0,
-            label=label,
-        )
-        shape = builder.add_shape_box(
-            body,
-            hx=0.5 * size[0],
-            hy=0.5 * size[1],
-            hz=0.5 * size[2],
-            cfg=self._cfg(density, friction),
-            label=f"{label}_shape" if label else None,
-        )
-        if density > 0.0:
-            self.dynamic_body_indices.append(body)
-        self.body_sizes[body] = size
-        self.initial_body_positions[body] = position
-        if label is not None:
-            self.body_labels[label] = body
-        if velocity != (0.0, 0.0, 0.0):
-            self.initial_body_velocities[body] = velocity
-            builder.body_qd[body] = wp.spatial_vector(velocity[0], velocity[1], velocity[2], 0.0, 0.0, 0.0)
-        return body, shape
-
-    def add_ball_joint(
-        self,
-        builder: newton.ModelBuilder,
-        parent: int,
-        child: int,
-        parent_anchor: tuple[float, float, float],
-        child_anchor: tuple[float, float, float],
-        label: str,
-        collision_filter_parent: bool = True,
-    ) -> int:
-        return builder.add_joint_ball(
-            parent=parent,
-            child=child,
-            parent_xform=_xform(parent_anchor),
-            child_xform=_xform(child_anchor),
-            collision_filter_parent=collision_filter_parent,
-            label=label,
-        )
-
-    def add_fixed_joint(
-        self,
-        builder: newton.ModelBuilder,
-        parent: int,
-        child: int,
-        parent_anchor: tuple[float, float, float],
-        child_anchor: tuple[float, float, float],
-        label: str,
-        soft: bool = False,
-        collision_filter_parent: bool = True,
-    ) -> int:
-        joint = builder.add_joint_fixed(
-            parent=parent,
-            child=child,
-            parent_xform=_xform(parent_anchor),
-            child_xform=_xform(child_anchor),
-            collision_filter_parent=collision_filter_parent,
-            label=label,
-        )
-        if soft:
-            self.soft_joint_indices.append(joint)
-        return joint
-
-    def add_cable_joint(
-        self,
-        builder: newton.ModelBuilder,
-        parent: int,
-        child: int,
-        parent_anchor: tuple[float, float, float],
-        child_anchor: tuple[float, float, float],
-        stiffness: float,
-        label: str,
-        collision_filter_parent: bool = True,
-    ) -> int:
-        return builder.add_joint_cable(
-            parent=parent,
-            child=child,
-            parent_xform=_xform(parent_anchor),
-            child_xform=_xform(child_anchor),
-            stretch_stiffness=stiffness,
-            stretch_damping=0.0,
-            bend_stiffness=0.0,
-            bend_damping=0.0,
-            collision_filter_parent=collision_filter_parent,
-            label=label,
-        )
-
-    def body_index(self, label: str) -> int:
-        try:
-            return self.body_labels[label]
-        except KeyError as exc:
-            raise AssertionError(f"{self.title}: missing body label {label}") from exc
-
-    def body_indices_with_prefix(self, prefix: str) -> list[int]:
-        return [body for label, body in self.body_labels.items() if label.startswith(prefix)]
-
-    def body_position(self, label: str) -> np.ndarray:
-        return self.state_0.body_q.numpy()[self.body_index(label), 0:3]
-
-    def body_linear_velocity(self, label: str) -> np.ndarray:
-        return self.state_0.body_qd.numpy()[self.body_index(label), 0:3]
-
-    def body_linear_speed(self, label: str) -> float:
-        return float(np.linalg.norm(self.state_0.body_qd.numpy()[self.body_index(label), 0:3]))
-
-    def body_angular_speed(self, label: str) -> float:
-        return float(np.linalg.norm(self.state_0.body_qd.numpy()[self.body_index(label), 3:6]))
-
-    def body_local_axis_world(self, label: str, axis: tuple[float, float, float]) -> np.ndarray:
-        q = self.state_0.body_q.numpy()[self.body_index(label), 3:7]
-        return _quat_wxyz_to_matrix(q) @ np.asarray(axis, dtype=np.float64)
-
-    def assert_final_speed_below(self, limit: float) -> None:
-        if self.final_speed > limit:
-            raise AssertionError(f"{self.title}: final speed {self.final_speed:.3f} exceeds {limit:.3f}")
-
-    def assert_final_angular_speed_below(self, limit: float) -> None:
-        if self.final_angular_speed > limit:
-            raise AssertionError(
-                f"{self.title}: final angular speed {self.final_angular_speed:.3f} exceeds {limit:.3f}"
-            )
-
-    def assert_final_xy_radius_below(self, limit: float) -> None:
-        if self.final_xy_radius > limit:
-            raise AssertionError(f"{self.title}: final xy radius {self.final_xy_radius:.3f} exceeds {limit:.3f}")
 
     def _build_scene(self, builder: newton.ModelBuilder) -> None:
         self.rigid_contact_stick_freeze_translation_eps = 1.0e-3
         self.rigid_contact_stick_freeze_angular_eps = 5.0e-3
 
-        n = 10
-        m = 5
-        self.add_box(builder, (100.0, 100.0, 1.0), 0.0, 0.5, (0.0, 0.0, 0.0), label="ground")
+        ground = builder.add_body(xform=_xform((0.0, 0.0, 0.0)), is_kinematic=True, label="ground")
+        builder.add_shape_box(ground, hx=50.0, hy=50.0, hz=0.5, cfg=self._shape_cfg(0.0, 0.5), label="ground_shape")
         prev = -1
-        for i in range(n + 1):
-            body, _shape = self.add_box(
-                builder,
-                (1.0, 1.0, 0.5),
-                1.0,
-                0.5,
-                (float(i) - n / 2.0, 0.0, 6.0),
-                label=f"breakable_beam_{i}",
+        for i in range(11):
+            body = builder.add_body(xform=_xform((float(i) - 5.0, 0.0, 6.0)), label=f"breakable_beam_{i}")
+            builder.add_shape_box(
+                body, hx=0.5, hy=0.5, hz=0.25, cfg=self._shape_cfg(1.0, 0.5), label=f"breakable_beam_{i}_shape"
             )
             if prev >= 0:
-                joint = self.add_fixed_joint(
-                    builder,
-                    prev,
-                    body,
-                    (0.5, 0.0, 0.0),
-                    (-0.5, 0.0, 0.0),
-                    f"breakable_joint_{i}",
+                joint = builder.add_joint_fixed(
+                    parent=prev,
+                    child=body,
+                    parent_xform=_xform((0.5, 0.0, 0.0)),
+                    child_xform=_xform((-0.5, 0.0, 0.0)),
+                    collision_filter_parent=True,
+                    label=f"breakable_joint_{i}",
                 )
                 self.breakable_joint_indices.append(joint)
             prev = body
 
-        self.add_box(builder, (1.0, 1.0, 5.0), 0.0, 0.5, (-n / 2.0, 0.0, 2.5), label="left_support")
-        self.add_box(builder, (1.0, 1.0, 5.0), 0.0, 0.5, (n / 2.0, 0.0, 2.5), label="right_support")
-        for i in range(m):
-            self.add_box(builder, (2.0, 1.0, 1.0), 1.0, 0.5, (0.0, 0.0, i * 2.0 + 8.0), label=f"falling_load_{i}")
-
-    def _validate_scene(self) -> None:
-        self.assert_final_speed_below(10.0)
-        self.assert_final_angular_speed_below(16.0)
-        if self.final_max_abs_position > 18.0:
-            raise AssertionError(f"{self.title}: final max |position| {self.final_max_abs_position:.3f} exceeds 18.000")
-
-    def _update_scene_alignment_metrics(self, body_q: np.ndarray) -> None:
-        del body_q
-
-    def _assign_initial_velocities(self) -> None:
-        if not self.initial_body_velocities:
-            return
-        for state in (self.state_0, self.state_1):
-            qd = state.body_qd.numpy()
-            for body, velocity in self.initial_body_velocities.items():
-                qd[body, 0:3] = np.asarray(velocity, dtype=np.float32)
-                qd[body, 3:6] = 0.0
-            state.body_qd.assign(qd)
+        left_support = builder.add_body(xform=_xform((-5.0, 0.0, 2.5)), is_kinematic=True, label="left_support")
+        builder.add_shape_box(
+            left_support, hx=0.5, hy=0.5, hz=2.5, cfg=self._shape_cfg(0.0, 0.5), label="left_support_shape"
+        )
+        right_support = builder.add_body(xform=_xform((5.0, 0.0, 2.5)), is_kinematic=True, label="right_support")
+        builder.add_shape_box(
+            right_support, hx=0.5, hy=0.5, hz=2.5, cfg=self._shape_cfg(0.0, 0.5), label="right_support_shape"
+        )
+        for i in range(5):
+            body = builder.add_body(xform=_xform((0.0, 0.0, i * 2.0 + 8.0)), label=f"falling_load_{i}")
+            builder.add_shape_box(
+                body, hx=1.0, hy=0.5, hz=0.5, cfg=self._shape_cfg(1.0, 0.5), label=f"falling_load_{i}_shape"
+            )
 
     def _break_overloaded_joints(self) -> None:
-        if not self.breakable_joint_indices:
-            return
-
         lambda_ang = self.solver.joint_lambda_ang.numpy()
         enabled = self.model.joint_enabled.numpy()
         changed = False
@@ -493,7 +228,6 @@ class Example:
             self.max_angular_speed = max(self.max_angular_speed, self.final_angular_speed)
         if self.contacts.rigid_contact_count is not None:
             self.max_contacts = max(self.max_contacts, int(self.contacts.rigid_contact_count.numpy()[0]))
-        self._update_scene_alignment_metrics(body_q)
 
     def simulate(self) -> None:
         self.state_0.clear_forces()
@@ -517,15 +251,20 @@ class Example:
     def test_final(self) -> None:
         if self.nan_detected:
             raise AssertionError(f"{self.title}: non-finite state detected")
-        if self.max_abs_position > POSITION_LIMIT:
+        if self.max_abs_position > self.position_limit:
             raise AssertionError(
-                f"{self.title}: max |position| {self.max_abs_position:.3f} exceeds {POSITION_LIMIT:.3f}"
+                f"{self.title}: max |position| {self.max_abs_position:.3f} exceeds {self.position_limit:.3f}"
             )
-        if self.max_speed > SPEED_LIMIT:
-            raise AssertionError(f"{self.title}: max speed {self.max_speed:.3f} exceeds {SPEED_LIMIT:.3f}")
-        if self.min_z < MIN_Z_LIMIT:
-            raise AssertionError(f"{self.title}: min z {self.min_z:.3f} below {MIN_Z_LIMIT:.3f}")
-        self._validate_scene()
+        if self.max_speed > self.speed_limit:
+            raise AssertionError(f"{self.title}: max speed {self.max_speed:.3f} exceeds {self.speed_limit:.3f}")
+        if self.min_z < self.min_z_limit:
+            raise AssertionError(f"{self.title}: min z {self.min_z:.3f} below {self.min_z_limit:.3f}")
+        if self.final_speed > 10.0:
+            raise AssertionError(f"{self.title}: final speed {self.final_speed:.3f} exceeds 10.000")
+        if self.final_angular_speed > 16.0:
+            raise AssertionError(f"{self.title}: final angular speed {self.final_angular_speed:.3f} exceeds 16.000")
+        if self.final_max_abs_position > 18.0:
+            raise AssertionError(f"{self.title}: final max |position| {self.final_max_abs_position:.3f} exceeds 18.000")
 
     @staticmethod
     def create_parser():

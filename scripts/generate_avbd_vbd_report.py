@@ -57,7 +57,7 @@ BASELINE_ASSETS = ROOT / "assets_baseline"
 ASSETS.mkdir(parents=True, exist_ok=True)
 
 
-def configure_renderer(viewer, scene_module) -> None:
+def configure_renderer(viewer, example) -> None:
     renderer = getattr(viewer, "renderer", None)
     if renderer is None:
         return
@@ -65,7 +65,7 @@ def configure_renderer(viewer, scene_module) -> None:
     renderer.draw_shadows = True
     renderer._sun_direction = np.array((0.60, -0.75, 0.28), dtype=np.float32)
     renderer._sun_direction /= np.linalg.norm(renderer._sun_direction)
-    camera_distance = getattr(scene_module, "CAMERA_DISTANCE", 40.0)
+    camera_distance = getattr(example, "shadow_distance", 40.0)
     renderer.shadow_extents = max(40.0, min(180.0, camera_distance * 3.0))
     renderer.shadow_radius = 2.0
     renderer.diffuse_scale = 1.25
@@ -101,7 +101,7 @@ def render_scene(scene_name: str) -> dict:
 
     try:
         example = module.Example(viewer, SimpleNamespace())
-        configure_renderer(viewer, module)
+        configure_renderer(viewer, example)
         with imageio.get_writer(video_path, fps=FPS, codec="libx264", quality=8, macro_block_size=1) as writer:
             for frame_index in range(report_frames):
                 example.step()
