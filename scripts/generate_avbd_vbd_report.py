@@ -14,22 +14,36 @@ import imageio.v2 as imageio
 import numpy as np
 
 import newton.viewer
-from newton.examples.vbd._avbd_common import (
-    REFERENCE_ALPHA,
-    REFERENCE_BETA_ANGULAR,
-    REFERENCE_BETA_LINEAR,
-    REFERENCE_COLLISION_MARGIN,
-    REFERENCE_COMMIT,
-    REFERENCE_CONTACT_MATCH_NORMAL_DOT_THRESHOLD,
-    REFERENCE_CONTACT_MATCH_POS_THRESHOLD,
-    REFERENCE_DT,
-    REFERENCE_FRICTION_EPSILON,
-    REFERENCE_GAMMA,
-    REFERENCE_GRAVITY,
-    REFERENCE_ITERATIONS,
-    REFERENCE_PENALTY_MIN,
-    REFERENCE_STICK_THRESH,
-    SCENES,
+
+REFERENCE_COMMIT = "7701bd427d55ca5d03ea1fdf331912ded9169f4b"
+REFERENCE_DT = 1.0 / 60.0
+REFERENCE_ITERATIONS = 10
+REFERENCE_ALPHA = 0.99
+REFERENCE_BETA_LINEAR = 10000.0
+REFERENCE_BETA_ANGULAR = 100.0
+REFERENCE_GAMMA = 0.999
+REFERENCE_GRAVITY = -10.0
+REFERENCE_PENALTY_MIN = 1.0
+REFERENCE_COLLISION_MARGIN = 0.01
+REFERENCE_CONTACT_MATCH_POS_THRESHOLD = 0.05
+REFERENCE_CONTACT_MATCH_NORMAL_DOT_THRESHOLD = 0.9
+REFERENCE_STICK_THRESH = 1.0e-5
+REFERENCE_FRICTION_EPSILON = 0.0
+
+SCENE_NAMES = (
+    "ground",
+    "dynamic_friction",
+    "static_friction",
+    "pyramid",
+    "rope",
+    "heavy_rope",
+    "spring",
+    "springs_ratio",
+    "stack",
+    "stack_ratio",
+    "soft_body",
+    "bridge",
+    "breakable",
 )
 
 WIDTH = 960
@@ -43,7 +57,7 @@ BASELINE_ASSETS = ROOT / "assets_baseline"
 ASSETS.mkdir(parents=True, exist_ok=True)
 
 
-def configure_renderer(viewer, scene_info) -> None:
+def configure_renderer(viewer, scene_module) -> None:
     renderer = getattr(viewer, "renderer", None)
     if renderer is None:
         return
@@ -51,7 +65,8 @@ def configure_renderer(viewer, scene_info) -> None:
     renderer.draw_shadows = True
     renderer._sun_direction = np.array((0.60, -0.75, 0.28), dtype=np.float32)
     renderer._sun_direction /= np.linalg.norm(renderer._sun_direction)
-    renderer.shadow_extents = max(40.0, min(180.0, scene_info.camera_distance * 3.0))
+    camera_distance = getattr(scene_module, "CAMERA_DISTANCE", 40.0)
+    renderer.shadow_extents = max(40.0, min(180.0, camera_distance * 3.0))
     renderer.shadow_radius = 2.0
     renderer.diffuse_scale = 1.25
     renderer.specular_scale = 0.65
@@ -61,12 +76,15 @@ def configure_renderer(viewer, scene_info) -> None:
 
 
 def module_name_for(scene_name: str) -> str:
-    return f"vbd_avbd_{scene_name}"
+    return f"vbd_{scene_name}"
 
 
 def render_scene(scene_name: str) -> dict:
-    info = SCENES[scene_name]
     module = importlib.import_module(f"newton.examples.vbd.example_{module_name_for(scene_name)}")
+    title = getattr(module, "TITLE", scene_name.replace("_", " ").title())
+    description = getattr(module, "DESCRIPTION", "")
+    report_frames = getattr(module, "REPORT_FRAMES", 180)
+    note = getattr(module, "STATUS_NOTE", "Reference parameters reproduced.")
     video_path = ASSETS / f"{scene_name}.mp4"
     shot_path = ASSETS / f"{scene_name}.jpg"
 
@@ -83,9 +101,9 @@ def render_scene(scene_name: str) -> dict:
 
     try:
         example = module.Example(viewer, SimpleNamespace())
-        configure_renderer(viewer, info)
+        configure_renderer(viewer, module)
         with imageio.get_writer(video_path, fps=FPS, codec="libx264", quality=8, macro_block_size=1) as writer:
-            for frame_index in range(info.report_frames):
+            for frame_index in range(report_frames):
                 example.step()
                 example.render()
                 frame = viewer.get_frame().numpy()
@@ -99,10 +117,10 @@ def render_scene(scene_name: str) -> dict:
                 frame_max = max(frame_max, local_max)
                 writer.append_data(frame)
                 frame_count = frame_index + 1
-                if frame_index == info.report_frames // 2:
+                if frame_index == report_frames // 2:
                     imageio.imwrite(shot_path, frame)
                     wrote_shot = True
-                if example.nan_detected:
+                if getattr(example, "nan_detected", False):
                     status = "Broken"
                     error = "non-finite state detected during run"
                     break
@@ -128,11 +146,11 @@ def render_scene(scene_name: str) -> dict:
 
     result = {
         "scene": scene_name,
-        "title": info.title,
-        "description": info.description,
+        "title": title,
+        "description": description,
         "status": status,
         "error": error,
-        "frames_requested": info.report_frames,
+        "frames_requested": report_frames,
         "frames_completed": frame_count,
         "video": f"assets/{scene_name}.mp4",
         "screenshot": f"assets/{scene_name}.jpg",
@@ -143,7 +161,7 @@ def render_scene(scene_name: str) -> dict:
         "last_range": last_range,
         "decode": decode,
         "metrics": metrics,
-        "note": info.status_note,
+        "note": note,
     }
     print(json.dumps(result, indent=2))
     return result
@@ -734,7 +752,7 @@ def main() -> None:
         return
 
     results = []
-    for scene_name in SCENES:
+    for scene_name in SCENE_NAMES:
         env = os.environ.copy()
         env.setdefault("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
         subprocess.run([sys.executable, __file__, "--scene", scene_name], check=True, cwd=ROOT, env=env)
