@@ -12,6 +12,7 @@
 - Add reduced elastic body links with floating-frame modal coordinates, VBD support for revolute-joint attachments, and deformed Viewer mesh rendering
 - Add sampled `ModalBasis` and modal generators for reusable reduced elastic mode construction
 - Add `ModalGeneratorFEM` for matrix-based reduced elastic modes from nodal mass, stiffness, and damping matrices
+- Add `ModalBasis` floating-frame inertia coupling integrals (`sample_mass`, `mode_coupling_linear`, `mode_coupling_angular`), computed exactly by `ModalGeneratorFEM` and by lumped quadrature from per-sample masses
 - Add a reduced elastic cantilever vibration example with finite modal mass dynamics
 - Add a reduced elastic prismatic compression example with Poisson bulging and parent rotation validation
 - Add reduced elastic crank-slider, Watt linkage, and bell-crank examples with analytic geometry checks
