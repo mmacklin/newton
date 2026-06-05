@@ -315,6 +315,99 @@ def test_modal_generator_fem_matrix_rom(test, device):
     np.testing.assert_allclose(basis.sample_value(1), np.zeros((3, 3)), atol=1.0e-7)
 
 
+def test_modal_basis_lumped_inertia_coupling(test, device):
+    points = np.array([[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=np.float32)
+    # mode 0: uniform +z translation; mode 1: phi_z = x (antisymmetric about origin).
+    sample_phi = np.array(
+        [
+            [[0.0, 0.0, 1.0], [0.0, 0.0, -1.0]],
+            [[0.0, 0.0, 1.0], [0.0, 0.0, 1.0]],
+        ],
+        dtype=np.float32,
+    )
+    basis = newton.ModalBasis(sample_points=points, sample_phi=sample_phi, sample_mass=[1.0, 1.0])
+
+    # S_i = sum_s mass_s phi_i(x_s): mode 0 sums to 2 in z, mode 1 cancels.
+    np.testing.assert_allclose(basis.mode_coupling_linear, [[0.0, 0.0, 2.0], [0.0, 0.0, 0.0]], atol=1.0e-6)
+    # sum_s mass_s (phi_i(x_s) x x_s): mode 0 cancels, mode 1 sums to 2 about y.
+    np.testing.assert_allclose(basis.mode_coupling_angular, [[0.0, 0.0, 0.0], [0.0, 2.0, 0.0]], atol=1.0e-6)
+
+
+def test_modal_basis_coupling_unavailable_without_mass(test, device):
+    basis = newton.ModalBasis(
+        sample_points=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        sample_phi=[[[0.0, 0.0, 1.0]], [[0.0, 0.0, 1.0]]],
+    )
+    test.assertIsNone(basis.sample_mass)
+    test.assertIsNone(basis.mode_coupling_linear)
+    test.assertIsNone(basis.mode_coupling_angular)
+
+
+def test_modal_basis_coupling_explicit_override(test, device):
+    explicit = np.array([[1.0, 2.0, 3.0]], dtype=np.float32)
+    basis = newton.ModalBasis(
+        sample_points=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        sample_phi=[[[0.0, 0.0, 1.0]], [[0.0, 0.0, 1.0]]],
+        sample_mass=[1.0, 1.0],
+        mode_coupling_linear=explicit,
+    )
+    # An explicit integral is preserved, not overwritten by lumped quadrature.
+    np.testing.assert_allclose(basis.mode_coupling_linear, explicit, atol=1.0e-7)
+    # The unspecified angular coupling is still filled from sample_mass.
+    test.assertIsNotNone(basis.mode_coupling_angular)
+    # Wrong trailing dimension is rejected.
+    with test.assertRaises(ValueError):
+        newton.ModalBasis(
+            sample_points=[[0.0, 0.0, 0.0]],
+            sample_phi=[[[0.0, 0.0, 1.0]]],
+            mode_coupling_linear=[[1.0, 2.0]],
+        )
+
+
+def test_modal_generator_fem_inertia_coupling(test, device):
+    nodes = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=np.float32)
+    mass = np.diag([1.0, 1.0, 1.0, 2.0, 2.0, 2.0])
+    stiffness = np.zeros((6, 6), dtype=np.float64)
+    stiffness[3, 3] = 8.0
+    stiffness[4, 4] = 18.0
+    stiffness[5, 5] = 32.0
+    basis = newton.ModalGeneratorFEM(
+        node_positions=nodes,
+        mass_matrix=mass,
+        stiffness_matrix=stiffness,
+        sample_points=nodes,
+        sample_node_indices=[0, 1],
+        fixed_node_indices=[0],
+        mode_count=3,
+    ).build()
+
+    # The exact-from-M integrals must equal the lumped definition for a diagonal
+    # (lumped) mass matrix with samples at the nodes.
+    node_mass = np.array([1.0, 2.0])  # isotropic per-node mass from the diagonal
+    phi_nodes = np.stack([basis.sample_value(0), basis.sample_value(1)]).astype(np.float64)  # [node, mode, 3]
+    expected_linear = np.einsum("j,jmc->mc", node_mass, phi_nodes)
+    expected_angular = np.einsum("j,jmc->mc", node_mass, np.cross(phi_nodes, nodes[:, None, :].astype(np.float64)))
+    np.testing.assert_allclose(basis.mode_coupling_linear, expected_linear, atol=1.0e-5)
+    np.testing.assert_allclose(basis.mode_coupling_angular, expected_angular, atol=1.0e-5)
+
+
+def test_modal_generator_pod_inertia_coupling(test, device):
+    points = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=np.float32)
+    displacements = np.array([[[0.0, 0.0, 0.0], [0.0, 2.0, 0.0]]], dtype=np.float32)
+    basis = newton.ModalGeneratorPOD(
+        sample_points=points,
+        displacements=displacements,
+        mode_count=1,
+        total_mass=2.0,
+    ).build()
+
+    test.assertIsNotNone(basis.mode_coupling_linear)
+    # Mass is lumped uniformly: total_mass / sample_count = 1.0 per sample.
+    sample_mass = np.full(2, 1.0)
+    expected_linear = np.einsum("s,smc->mc", sample_mass, basis.sample_phi.astype(np.float64))
+    np.testing.assert_allclose(basis.mode_coupling_linear, expected_linear, atol=1.0e-6)
+
+
 def _deformed_endpoint_world(model, state, joint: int, side: str) -> np.ndarray:
     body = int(model.joint_parent.numpy()[joint]) if side == "parent" else int(model.joint_child.numpy()[joint])
     xforms = model.joint_X_p.numpy() if side == "parent" else model.joint_X_c.numpy()
@@ -1577,6 +1670,36 @@ for device in devices:
         TestReducedElasticBody,
         "test_modal_generator_fem_matrix_rom",
         test_modal_generator_fem_matrix_rom,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_modal_basis_lumped_inertia_coupling",
+        test_modal_basis_lumped_inertia_coupling,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_modal_basis_coupling_unavailable_without_mass",
+        test_modal_basis_coupling_unavailable_without_mass,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_modal_basis_coupling_explicit_override",
+        test_modal_basis_coupling_explicit_override,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_modal_generator_fem_inertia_coupling",
+        test_modal_generator_fem_inertia_coupling,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_modal_generator_pod_inertia_coupling",
+        test_modal_generator_pod_inertia_coupling,
         devices=[device],
     )
     add_function_test(TestReducedElasticBody, "test_elastic_link_layout", test_elastic_link_layout, devices=[device])
