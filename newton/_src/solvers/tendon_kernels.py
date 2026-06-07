@@ -337,6 +337,10 @@ def update_tendon_attachments(
                 if lt_l > 1.0e-8:
                     fl = wp.dot(t_far_l / lt_l, v_far_l - vlin_p)
                 total_slide = total_slide + (0.5 * (fr - fl) - rim)
+            # decay 0.9 -> ~10-substep time constant: longer than the cable ring
+            # period (~6 substeps at omega*dt~1) so it rejects ringing, far shorter
+            # than a load reversal (hundreds of substeps) so it still tracks
+            # loading vs unloading for hysteresis.
             decay = 0.9
             tendon_slide_filter[tendon_id] = decay * tendon_slide_filter[tendon_id] + (1.0 - decay) * total_slide
 
