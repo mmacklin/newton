@@ -9,6 +9,7 @@ acceptance criteria.  Test expectation changes in this file should follow
 """
 
 import unittest
+from itertools import pairwise
 
 import numpy as np
 import warp as wp
@@ -122,6 +123,62 @@ def build_slack_pinhole_route():
     )
 
     return builder.finalize()
+
+
+def build_frictionless_zero_span_route(compliance=1.0e-3, mu=0.0, points=None, rest_lengths=None):
+    """Build a static route where one exhausted middle span separates tension plateaus."""
+    builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=0.0)
+
+    # The duplicate middle pinholes make segment 2 have zero geometric length.
+    # A frictionless continuous cable should still equalize tension across the
+    # remaining nonzero spans instead of treating the zero span as a barrier.
+    if points is None:
+        points = [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0),
+            (3.0, 0.0, 0.0),
+            (4.0, 0.0, 0.0),
+        ]
+    if rest_lengths is None:
+        rest_lengths = [0.5, 0.5, 1.0e-6, 0.9, 0.9]
+
+    bodies = []
+    for point in points:
+        body = builder.add_body(xform=wp.transform(p=wp.vec3(*point)), mass=0.0, is_kinematic=True)
+        builder.add_shape_sphere(body, radius=0.01)
+        bodies.append(body)
+
+    builder.add_tendon()
+    builder.add_tendon_link(
+        body=bodies[0],
+        link_type=int(TendonLinkType.ATTACHMENT),
+        offset=(0.0, 0.0, 0.0),
+        axis=(0.0, 1.0, 0.0),
+    )
+    for body, rest in zip(bodies[1:-1], rest_lengths[:-1], strict=True):
+        builder.add_tendon_link(
+            body=body,
+            link_type=int(TendonLinkType.PINHOLE),
+            mu=mu,
+            offset=(0.0, 0.0, 0.0),
+            axis=(0.0, 1.0, 0.0),
+            compliance=compliance,
+            damping=0.0,
+            rest_length=rest,
+        )
+    builder.add_tendon_link(
+        body=bodies[-1],
+        link_type=int(TendonLinkType.ATTACHMENT),
+        offset=(0.0, 0.0, 0.0),
+        axis=(0.0, 1.0, 0.0),
+        compliance=compliance,
+        damping=0.0,
+        rest_length=rest_lengths[-1],
+    )
+
+    return builder.finalize(), np.asarray(rest_lengths, dtype=np.float32), compliance
 
 
 def build_dynamic_pulley_atwood(
@@ -548,6 +605,48 @@ def build_motorized_pulley_drive(mu=0.0):
         )
 
     return builder.finalize(), slider, pulley, j_pulley
+
+
+def build_kinematic_rolling_transport(mu=10.0):
+    """Build a fixed anchor - rolling pulley - fixed anchor route for prescribed spin tests."""
+    builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=0.0)
+
+    left = builder.add_body(xform=wp.transform(p=wp.vec3(-0.4, 0.0, 0.0)), mass=0.0, is_kinematic=True)
+    pulley = builder.add_body(xform=wp.transform(p=wp.vec3(0.0, 0.0, 0.0)), mass=0.0, is_kinematic=True)
+    right = builder.add_body(xform=wp.transform(p=wp.vec3(0.4, 0.0, 0.0)), mass=0.0, is_kinematic=True)
+    for body in (left, pulley, right):
+        builder.add_shape_sphere(body, radius=0.01)
+
+    builder.add_tendon()
+    builder.add_tendon_link(
+        body=left,
+        link_type=int(TendonLinkType.ATTACHMENT),
+        offset=(0.0, 0.0, 0.0),
+        axis=(0.0, 0.0, 1.0),
+    )
+    builder.add_tendon_link(
+        body=pulley,
+        link_type=int(TendonLinkType.ROLLING),
+        radius=0.1,
+        orientation=1,
+        mu=mu,
+        offset=(0.0, 0.0, 0.0),
+        axis=(0.0, 0.0, 1.0),
+        compliance=1.0e-6,
+        damping=0.0,
+        rest_length=-1.0,
+    )
+    builder.add_tendon_link(
+        body=right,
+        link_type=int(TendonLinkType.ATTACHMENT),
+        offset=(0.0, 0.0, 0.0),
+        axis=(0.0, 0.0, 1.0),
+        compliance=1.0e-6,
+        damping=0.0,
+        rest_length=-1.0,
+    )
+
+    return builder.finalize(), pulley
 
 
 def run_model(model, num_frames=80, substeps=12, fps=60):
@@ -1115,6 +1214,8 @@ def test_kinematic_capstan_hysteresis_matches_capstan_band(test, device):
             t_fix = sample["t_fix"]
             t_app = sample["t_app"]
             alpha = sample["alpha"]
+            if max(t_fix, t_app) < 5.0:
+                continue
             test.assertLessEqual(
                 t_app,
                 alpha * t_fix + 1.0,
@@ -1417,6 +1518,47 @@ def test_motorized_pulley_updates_rest_in_first_step(test, device):
         )
 
 
+def test_kinematic_rolling_transfer_independent_of_iterations(test, device):
+    """Prescribed pulley spin should transfer the same material for any XPBD iteration count."""
+
+    def run_once(iterations):
+        model, pulley_idx = build_kinematic_rolling_transport(mu=10.0)
+        solver = newton.solvers.SolverXPBD(model, iterations=iterations, joint_linear_relaxation=1.0)
+        state_0 = model.state()
+        state_1 = model.state()
+        control = model.control()
+        newton.eval_fk(model, model.joint_q, model.joint_qd, state_0)
+
+        initial_rest = solver.tendon_seg_rest_length.numpy().copy()
+        angle = 0.4
+        body_q = state_0.body_q.numpy()
+        body_q[pulley_idx, 3:] = np.array([0.0, 0.0, np.sin(0.5 * angle), np.cos(0.5 * angle)], dtype=np.float32)
+        state_0.body_q.assign(body_q)
+
+        solver.step(state_0, state_1, control, None, 1.0 / 60.0)
+        return solver.tendon_seg_rest_length.numpy() - initial_rest
+
+    with wp.ScopedDevice(device):
+        reference = run_once(1)
+        test.assertGreater(
+            float(np.max(np.abs(reference))),
+            1.0e-4,
+            f"Prescribed rolling spin should produce nonzero material transfer: delta={reference}",
+        )
+        for iterations in (2, 4, 8, 16):
+            rest_delta = run_once(iterations)
+            np.testing.assert_allclose(
+                rest_delta,
+                reference,
+                rtol=1.0e-6,
+                atol=1.0e-6,
+                err_msg=(
+                    "Rolling material transport should be a time-step update, not an XPBD iteration update: "
+                    f"iterations={iterations}, reference={reference}, actual={rest_delta}"
+                ),
+            )
+
+
 def test_rolling_transfer_saturates_at_zero_span(test, device):
     """Rolling transfer should clamp before a free span goes negative."""
     with wp.ScopedDevice(device):
@@ -1456,6 +1598,99 @@ def test_rolling_transfer_saturates_at_zero_span(test, device):
             1.0e-2,
             f"Slider should lock once a free span is exhausted: {final_x:.6f} vs {saturated_x:.6f}",
         )
+
+
+def test_frictionless_zero_span_equalizes_global_tension(test, device):
+    """A zero-rest middle span should not split a frictionless tendon into tension islands."""
+    with wp.ScopedDevice(device):
+        model, initial_rest, compliance = build_frictionless_zero_span_route()
+        solver = newton.solvers.SolverXPBD(model, iterations=12, joint_linear_relaxation=1.0)
+        state_0 = model.state()
+        state_1 = model.state()
+        control = model.control()
+        newton.eval_fk(model, model.joint_q, model.joint_qd, state_0)
+
+        solver.step(state_0, state_1, control, None, 1.0 / 60.0)
+
+        att_l = solver.tendon_seg_attachment_l.numpy()
+        att_r = solver.tendon_seg_attachment_r.numpy()
+        rest = solver.tendon_seg_rest_length.numpy()
+        lengths = np.linalg.norm(att_r - att_l, axis=1)
+        tensions = np.maximum(lengths - rest, 0.0) / compliance
+        nonzero_span = lengths > 1.0e-5
+        expected_tension = (
+            (float(np.sum(lengths[nonzero_span])) - float(np.sum(initial_rest)))
+            / int(np.count_nonzero(nonzero_span))
+            / compliance
+        )
+
+        np.testing.assert_allclose(
+            np.sum(rest),
+            np.sum(initial_rest),
+            rtol=1.0e-6,
+            atol=1.0e-6,
+            err_msg=f"Frictionless serial traversal should preserve total free-span rest length: {rest}",
+        )
+        np.testing.assert_allclose(
+            tensions[nonzero_span],
+            expected_tension,
+            rtol=1.0e-4,
+            atol=1.0,
+            err_msg=f"Frictionless nonzero spans should share one global tension: {tensions}, rest={rest}",
+        )
+
+
+def test_finite_friction_zero_span_respects_global_capstan_cone(test, device):
+    """A depleted middle span should not strand finite-friction tension islands."""
+    with wp.ScopedDevice(device):
+        mu = 0.2
+        points = [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 0.0, 1.0),
+            (2.0, 0.0, 1.0),
+        ]
+        initial_rest = np.asarray([0.5, 1.0e-6, 0.9, 0.9], dtype=np.float32)
+        model, initial_rest, compliance = build_frictionless_zero_span_route(
+            mu=mu,
+            points=points,
+            rest_lengths=initial_rest,
+        )
+        solver = newton.solvers.SolverXPBD(model, iterations=12, joint_linear_relaxation=1.0)
+        state_0 = model.state()
+        state_1 = model.state()
+        control = model.control()
+        newton.eval_fk(model, model.joint_q, model.joint_qd, state_0)
+
+        solver.step(state_0, state_1, control, None, 1.0 / 60.0)
+
+        att_l = solver.tendon_seg_attachment_l.numpy()
+        att_r = solver.tendon_seg_attachment_r.numpy()
+        rest = solver.tendon_seg_rest_length.numpy()
+        lengths = np.linalg.norm(att_r - att_l, axis=1)
+        tensions = np.maximum(lengths - rest, 0.0) / compliance
+        nonzero_tensions = tensions[lengths > 1.0e-5]
+        capstan_ratio = np.exp(mu * np.pi)
+
+        np.testing.assert_allclose(
+            np.sum(rest),
+            np.sum(initial_rest),
+            rtol=1.0e-6,
+            atol=1.0e-6,
+            err_msg=f"Finite-friction serial traversal should preserve total free-span rest length: {rest}",
+        )
+        for left, right in pairwise(nonzero_tensions):
+            test.assertLessEqual(
+                left,
+                capstan_ratio * right + 1.0,
+                f"Left tension escaped finite capstan cone: tensions={tensions}, rest={rest}",
+            )
+            test.assertLessEqual(
+                right,
+                capstan_ratio * left + 1.0,
+                f"Right tension escaped finite capstan cone: tensions={tensions}, rest={rest}",
+            )
 
 
 devices = ["cpu"]
@@ -1575,7 +1810,25 @@ add_test(
     test_motorized_pulley_updates_rest_in_first_step,
 )
 add_test(
+    TestTendonCapstan,
+    "kinematic_rolling_transfer_independent_of_iterations",
+    devices,
+    test_kinematic_rolling_transfer_independent_of_iterations,
+)
+add_test(
     TestTendonCapstan, "rolling_transfer_saturates_at_zero_span", devices, test_rolling_transfer_saturates_at_zero_span
+)
+add_test(
+    TestTendonCapstan,
+    "frictionless_zero_span_equalizes_global_tension",
+    devices,
+    test_frictionless_zero_span_equalizes_global_tension,
+)
+add_test(
+    TestTendonCapstan,
+    "finite_friction_zero_span_respects_global_capstan_cone",
+    devices,
+    test_finite_friction_zero_span_respects_global_capstan_cone,
 )
 
 

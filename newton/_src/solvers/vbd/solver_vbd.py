@@ -1592,6 +1592,7 @@ class SolverVBD(TendonStateMixin, SolverBase):
         self._initialize_rigid_bodies(state_in, control, contacts, dt, update_rigid)
         self._initialize_particles(state_in, state_out, dt)
         if self.tendon_seg_lambda is not None and state_in.body_q is not None:
+            self._snapshot_tendon_step_state()
             self.tendon_seg_lambda.zero_()
 
         for iter_num in range(self.iterations):
@@ -2330,6 +2331,7 @@ class SolverVBD(TendonStateMixin, SolverBase):
                 model.tendon_link_offset,
                 model.tendon_link_axis,
                 self.tendon_seg_rest_length,
+                self.tendon_seg_rest_length_step,
                 model.tendon_seg_compliance,
                 model.tendon_seg_damping,
                 self.tendon_seg_active,
@@ -2343,6 +2345,8 @@ class SolverVBD(TendonStateMixin, SolverBase):
                 self.tendon_seg_attachment_r,
                 self.tendon_seg_attachment_l_local,
                 self.tendon_seg_attachment_r_local,
+                self.tendon_seg_attachment_l_local_step,
+                self.tendon_seg_attachment_r_local_step,
                 self.tendon_seg_rolling_delta_l,
                 self.tendon_seg_rolling_delta_r,
                 1,

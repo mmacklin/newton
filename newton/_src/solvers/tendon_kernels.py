@@ -99,6 +99,7 @@ def update_tendon_attachments(
     tendon_link_offset: wp.array[wp.vec3],
     tendon_link_axis: wp.array[wp.vec3],
     seg_rest_length: wp.array[float],
+    seg_rest_length_step: wp.array[float],
     seg_compliance: wp.array[float],
     seg_damping: wp.array[float],
     seg_active: wp.array[int],
@@ -112,6 +113,8 @@ def update_tendon_attachments(
     seg_attachment_r: wp.array[wp.vec3],
     seg_attachment_l_local: wp.array[wp.vec3],
     seg_attachment_r_local: wp.array[wp.vec3],
+    seg_attachment_l_local_step: wp.array[wp.vec3],
+    seg_attachment_r_local_step: wp.array[wp.vec3],
     seg_rolling_delta_l: wp.array[float],
     seg_rolling_delta_r: wp.array[float],
     apply_rolling_transfer: int,
@@ -143,6 +146,8 @@ def update_tendon_attachments(
         seg_active_damping[seg] = seg_damping[seg]
         seg_rolling_delta_l[seg] = 0.0
         seg_rolling_delta_r[seg] = 0.0
+        if apply_rolling_transfer != 0 or apply_pinhole_slip != 0:
+            seg_rest_length[seg] = seg_rest_length_step[seg]
 
     tendon_link_active[link_start] = 1
     tendon_link_active[link_end - 1] = 1
@@ -202,16 +207,18 @@ def update_tendon_attachments(
         normal_l = wp.transform_vector(pose_l, axis_l)
         normal_r = wp.transform_vector(pose_r, axis_r)
 
-        old_al = wp.transform_point(pose_l, seg_attachment_l_local[seg])
-        old_ar = wp.transform_point(pose_r, seg_attachment_r_local[seg])
+        seed_al = wp.transform_point(pose_l, seg_attachment_l_local[seg])
+        seed_ar = wp.transform_point(pose_r, seg_attachment_r_local[seg])
+        base_al = wp.transform_point(pose_l, seg_attachment_l_local_step[seg])
+        base_ar = wp.transform_point(pose_r, seg_attachment_r_local_step[seg])
 
         new_al = center_l
         new_ar = center_r
         both_rolling = (type_l == int(TendonLinkType.ROLLING)) and (type_r == int(TendonLinkType.ROLLING))
 
         if both_rolling and radius_l > 0.0 and radius_r > 0.0:
-            new_al = old_al
-            new_ar = old_ar
+            new_al = seed_al
+            new_ar = seed_ar
             for _iter in range(10):
                 new_ar = tangent_point_circle(new_al, center_r, radius_r, normal_r, orient_r)
                 new_al = tangent_point_circle(new_ar, center_l, radius_l, normal_l, -orient_l)
@@ -224,11 +231,11 @@ def update_tendon_attachments(
 
         if apply_rolling_transfer != 0:
             if type_l == int(TendonLinkType.ROLLING) and radius_l > 0.0:
-                delta_l = signed_arc_length(old_al, new_al, center_l, radius_l, normal_l, orient_l)
+                delta_l = signed_arc_length(base_al, new_al, center_l, radius_l, normal_l, orient_l)
                 seg_rolling_delta_l[seg] = delta_l
 
             if type_r == int(TendonLinkType.ROLLING) and radius_r > 0.0:
-                delta_r = signed_arc_length(old_ar, new_ar, center_r, radius_r, normal_r, orient_r)
+                delta_r = signed_arc_length(base_ar, new_ar, center_r, radius_r, normal_r, orient_r)
                 seg_rolling_delta_r[seg] = -delta_r
 
         seg_attachment_l[seg] = new_al
@@ -279,151 +286,187 @@ def update_tendon_attachments(
         seg_rest_length[seg_left] = rest_l
         seg_rest_length[seg_right] = rest_r
 
-    if apply_rolling_transfer != 0:
+    if apply_rolling_transfer != 0 or apply_pinhole_slip != 0:
+        material_sweep_count = int(4)
         for i in range(1, num_links - 1):
             link_idx = link_start + i
-            if tendon_link_type[link_idx] != int(TendonLinkType.ROLLING):
-                continue
-            if tendon_link_active[link_idx] == 0:
-                continue
+            if tendon_link_type[link_idx] == int(TendonLinkType.PINHOLE):
+                material_sweep_count = int(32)
 
-            radius = tendon_link_radius[link_idx]
-            if radius <= 0.0:
+        for material_sweep in range(32):
+            if material_sweep >= material_sweep_count:
                 continue
 
-            seg_left = seg_offset + i - 1
-            seg_right = seg_offset + i
-            body = tendon_link_body[link_idx]
-            pose = body_q[body]
-            center = wp.transform_point(pose, tendon_link_offset[link_idx])
-            normal = wp.transform_vector(pose, tendon_link_axis[link_idx])
+            for order in range(1, num_links - 1):
+                i = order
+                if material_sweep % 2 == 1:
+                    i = num_links - order - 1
 
-            pt_left = seg_attachment_r[seg_left]
-            pt_right = seg_attachment_l[seg_right]
-            r_left = pt_left - center
-            r_right = pt_right - center
-            r_left = r_left - wp.dot(r_left, normal) * normal
-            r_right = r_right - wp.dot(r_right, normal) * normal
-            len_rl = wp.length(r_left)
-            len_rr = wp.length(r_right)
-            theta = wp.pi
-            if len_rl > 1.0e-8 and len_rr > 1.0e-8:
-                u_left = r_left / len_rl
-                u_right = r_right / len_rr
-                theta = wp.abs(wp.atan2(wp.dot(wp.cross(u_left, u_right), normal), wp.dot(u_left, u_right)))
+                link_idx = link_start + i
+                link_type = tendon_link_type[link_idx]
+                is_rolling = (link_type == int(TendonLinkType.ROLLING)) and tendon_link_active[link_idx] != 0
+                is_pinhole = link_type == int(TendonLinkType.PINHOLE)
 
-            cap_ratio = wp.exp(wp.min(wp.max(tendon_link_mu[link_idx], 0.0) * theta, 20.0))
-            beta = (cap_ratio - 1.0) / (cap_ratio + 1.0)
+                if not ((apply_rolling_transfer != 0 and is_rolling) or (apply_pinhole_slip != 0 and is_pinhole)):
+                    continue
 
-            rest_l = seg_rest_length[seg_left] + seg_rolling_delta_r[seg_left] * beta
-            rest_r = seg_rest_length[seg_right] + seg_rolling_delta_l[seg_right] * beta
-            if rest_l < min_rest:
-                rest_l = min_rest
-            if rest_r < min_rest:
-                rest_r = min_rest
-            seg_rest_length[seg_left] = rest_l
-            seg_rest_length[seg_right] = rest_r
+                seg_adj_left = seg_offset + i - 1
+                seg_adj_right = seg_offset + i
+                cap_ratio = float(1.0)
 
-            len_l = wp.length(seg_attachment_r[seg_left] - seg_attachment_l[seg_left])
-            len_r = wp.length(seg_attachment_r[seg_right] - seg_attachment_l[seg_right])
-            d_l = len_l - seg_rest_length[seg_left]
-            d_r = len_r - seg_rest_length[seg_right]
-            if d_l < 0.0:
-                d_l = 0.0
-            if d_r < 0.0:
-                d_r = 0.0
+                if material_sweep == 0 and is_rolling and apply_rolling_transfer != 0:
+                    radius = tendon_link_radius[link_idx]
+                    if radius > 0.0:
+                        body = tendon_link_body[link_idx]
+                        pose = body_q[body]
+                        center = wp.transform_point(pose, tendon_link_offset[link_idx])
+                        normal = wp.transform_vector(pose, tendon_link_axis[link_idx])
 
-            comp_l = wp.max(seg_compliance[seg_left], 1.0e-8)
-            comp_r = wp.max(seg_compliance[seg_right], 1.0e-8)
-            force_l = d_l / comp_l
-            force_r = d_r / comp_r
-            delta = float(0.0)
-            max_delta = float(0.0)
+                        pt_left = seg_attachment_r[seg_adj_left]
+                        pt_right = seg_attachment_l[seg_adj_right]
+                        r_left = pt_left - center
+                        r_right = pt_right - center
+                        r_left = r_left - wp.dot(r_left, normal) * normal
+                        r_right = r_right - wp.dot(r_right, normal) * normal
+                        len_rl = wp.length(r_left)
+                        len_rr = wp.length(r_right)
+                        theta = wp.pi
+                        if len_rl > 1.0e-8 and len_rr > 1.0e-8:
+                            u_left = r_left / len_rl
+                            u_right = r_right / len_rr
+                            theta = wp.abs(wp.atan2(wp.dot(wp.cross(u_left, u_right), normal), wp.dot(u_left, u_right)))
 
-            if force_l > force_r * cap_ratio:
-                delta = (comp_r * d_l - cap_ratio * comp_l * d_r) / (comp_r + cap_ratio * comp_l)
-                if delta < 0.0:
-                    delta = 0.0
-                max_delta = seg_rest_length[seg_right] - min_rest
-                if max_delta < 0.0:
-                    max_delta = 0.0
-                if delta > max_delta:
-                    delta = max_delta
-                seg_rest_length[seg_left] = seg_rest_length[seg_left] + delta
-                seg_rest_length[seg_right] = seg_rest_length[seg_right] - delta
-            elif force_r > force_l * cap_ratio:
-                delta = (comp_l * d_r - cap_ratio * comp_r * d_l) / (comp_l + cap_ratio * comp_r)
-                if delta < 0.0:
-                    delta = 0.0
-                max_delta = seg_rest_length[seg_left] - min_rest
-                if max_delta < 0.0:
-                    max_delta = 0.0
-                if delta > max_delta:
-                    delta = max_delta
-                seg_rest_length[seg_left] = seg_rest_length[seg_left] - delta
-                seg_rest_length[seg_right] = seg_rest_length[seg_right] + delta
+                        cap_ratio = wp.exp(wp.min(wp.max(tendon_link_mu[link_idx], 0.0) * theta, 20.0))
+                        beta = (cap_ratio - 1.0) / (cap_ratio + 1.0)
 
-    if apply_pinhole_slip == 0:
-        return
+                        rest_l = seg_rest_length[seg_adj_left] + seg_rolling_delta_r[seg_adj_left] * beta
+                        rest_r = seg_rest_length[seg_adj_right] + seg_rolling_delta_l[seg_adj_right] * beta
+                        if rest_l < min_rest:
+                            rest_l = min_rest
+                        if rest_r < min_rest:
+                            rest_r = min_rest
+                        seg_rest_length[seg_adj_left] = rest_l
+                        seg_rest_length[seg_adj_right] = rest_r
 
-    min_rest = 1.0e-6
-    for i in range(1, num_links - 1):
-        link_idx = link_start + i
-        if tendon_link_type[link_idx] != int(TendonLinkType.PINHOLE):
-            continue
+                seg_left = int(-1)
+                seg_right = int(-1)
+                if is_rolling:
+                    if seg_active[seg_adj_left] != 0 and seg_active[seg_adj_right] != 0:
+                        seg_left = seg_adj_left
+                        seg_right = seg_adj_right
+                else:
+                    for probe in range(num_segs):
+                        left_candidate = i - 1 - probe
+                        if left_candidate >= 0 and seg_left < 0:
+                            seg = seg_offset + left_candidate
+                            if seg_active[seg] != 0:
+                                length = wp.length(seg_attachment_r[seg] - seg_attachment_l[seg])
+                                if length > 1.0e-5:
+                                    seg_left = seg
 
-        seg_left = seg_offset + i - 1
-        seg_right = seg_offset + i
-        len_l = wp.length(seg_attachment_r[seg_left] - seg_attachment_l[seg_left])
-        len_r = wp.length(seg_attachment_r[seg_right] - seg_attachment_l[seg_right])
-        d_l = len_l - seg_rest_length[seg_left]
-        d_r = len_r - seg_rest_length[seg_right]
+                        right_candidate = i + probe
+                        if right_candidate < num_segs and seg_right < 0:
+                            seg = seg_offset + right_candidate
+                            if seg_active[seg] != 0:
+                                length = wp.length(seg_attachment_r[seg] - seg_attachment_l[seg])
+                                if length > 1.0e-5:
+                                    seg_right = seg
 
-        if d_l < 0.0:
-            d_l = 0.0
-        if d_r < 0.0:
-            d_r = 0.0
+                if seg_left < 0 or seg_right < 0:
+                    continue
 
-        comp_l = wp.max(seg_compliance[seg_left], 1.0e-8)
-        comp_r = wp.max(seg_compliance[seg_right], 1.0e-8)
-        force_l = d_l / comp_l
-        force_r = d_r / comp_r
+                link_first = seg_active_link_r[seg_left]
+                link_last = seg_active_link_l[seg_right]
+                if link_last < link_first:
+                    tmp_link = link_first
+                    link_first = link_last
+                    link_last = tmp_link
 
-        pin = seg_attachment_r[seg_left]
-        u_left = seg_attachment_l[seg_left] - pin
-        u_right = seg_attachment_r[seg_right] - pin
-        len_ul = wp.length(u_left)
-        len_ur = wp.length(u_right)
-        theta = 0.0
-        if len_ul > 1.0e-8 and len_ur > 1.0e-8:
-            # Bend angle between incoming cable direction and outgoing direction.
-            incoming = -u_left / len_ul
-            outgoing = u_right / len_ur
-            theta = wp.atan2(wp.length(wp.cross(incoming, outgoing)), wp.dot(incoming, outgoing))
+                if link_first == link_last:
+                    cap_ratio = float(1.0)
+                    cone_link_type = tendon_link_type[link_first]
+                    if cone_link_type == int(TendonLinkType.PINHOLE):
+                        pin = seg_attachment_r[seg_left]
+                        u_left = seg_attachment_l[seg_left] - pin
+                        u_right = seg_attachment_r[seg_right] - pin
+                        len_ul = wp.length(u_left)
+                        len_ur = wp.length(u_right)
+                        theta = 0.0
+                        if len_ul > 1.0e-8 and len_ur > 1.0e-8:
+                            incoming = -u_left / len_ul
+                            outgoing = u_right / len_ur
+                            theta = wp.atan2(wp.length(wp.cross(incoming, outgoing)), wp.dot(incoming, outgoing))
+                        cap_ratio = wp.exp(wp.min(wp.max(tendon_link_mu[link_first], 0.0) * theta, 20.0))
+                    elif cone_link_type == int(TendonLinkType.ROLLING) and tendon_link_active[link_first] != 0:
+                        body = tendon_link_body[link_first]
+                        pose = body_q[body]
+                        center = wp.transform_point(pose, tendon_link_offset[link_first])
+                        normal = wp.transform_vector(pose, tendon_link_axis[link_first])
+                        radius = tendon_link_radius[link_first]
 
-        cap_ratio = wp.exp(wp.min(wp.max(tendon_link_mu[link_idx], 0.0) * theta, 20.0))
-        delta = float(0.0)
-        max_delta = float(0.0)
+                        pt_left = seg_attachment_r[seg_left]
+                        pt_right = seg_attachment_l[seg_right]
+                        r_left = pt_left - center
+                        r_right = pt_right - center
+                        r_left = r_left - wp.dot(r_left, normal) * normal
+                        r_right = r_right - wp.dot(r_right, normal) * normal
+                        len_rl = wp.length(r_left)
+                        len_rr = wp.length(r_right)
+                        theta = 0.0
+                        if radius > 0.0 and len_rl > 1.0e-8 and len_rr > 1.0e-8:
+                            u_left = r_left / len_rl
+                            u_right = r_right / len_rr
+                            theta = wp.abs(wp.atan2(wp.dot(wp.cross(u_left, u_right), normal), wp.dot(u_left, u_right)))
+                        cap_ratio = wp.exp(wp.min(wp.max(tendon_link_mu[link_first], 0.0) * theta, 20.0))
+                else:
+                    max_mu = float(0.0)
+                    for link in range(link_first, link_last + 1):
+                        cone_link_type = tendon_link_type[link]
+                        if cone_link_type == int(TendonLinkType.PINHOLE):
+                            max_mu = wp.max(max_mu, tendon_link_mu[link])
+                        elif cone_link_type == int(TendonLinkType.ROLLING) and tendon_link_active[link] != 0:
+                            max_mu = wp.max(max_mu, tendon_link_mu[link])
+                    cap_ratio = wp.exp(wp.min(wp.max(max_mu, 0.0) * wp.pi, 20.0))
 
-        if force_l > force_r * cap_ratio:
-            delta = (comp_r * d_l - cap_ratio * comp_l * d_r) / (comp_r + cap_ratio * comp_l)
-            if delta < 0.0:
-                delta = 0.0
-            max_delta = seg_rest_length[seg_right] - min_rest
-            if max_delta < 0.0:
-                max_delta = 0.0
-            if delta > max_delta:
-                delta = max_delta
-            seg_rest_length[seg_left] = seg_rest_length[seg_left] + delta
-            seg_rest_length[seg_right] = seg_rest_length[seg_right] - delta
-        elif force_r > force_l * cap_ratio:
-            delta = (comp_l * d_r - cap_ratio * comp_r * d_l) / (comp_l + cap_ratio * comp_r)
-            if delta < 0.0:
-                delta = 0.0
-            max_delta = seg_rest_length[seg_left] - min_rest
-            if max_delta < 0.0:
-                max_delta = 0.0
-            if delta > max_delta:
-                delta = max_delta
-            seg_rest_length[seg_left] = seg_rest_length[seg_left] - delta
-            seg_rest_length[seg_right] = seg_rest_length[seg_right] + delta
+                if cap_ratio < 1.0:
+                    cap_ratio = 1.0
+
+                len_l = wp.length(seg_attachment_r[seg_left] - seg_attachment_l[seg_left])
+                len_r = wp.length(seg_attachment_r[seg_right] - seg_attachment_l[seg_right])
+                d_l = len_l - seg_rest_length[seg_left]
+                d_r = len_r - seg_rest_length[seg_right]
+
+                if d_l < 0.0:
+                    d_l = 0.0
+                if d_r < 0.0:
+                    d_r = 0.0
+
+                comp_l = wp.max(seg_active_compliance[seg_left], 1.0e-8)
+                comp_r = wp.max(seg_active_compliance[seg_right], 1.0e-8)
+                force_l = d_l / comp_l
+                force_r = d_r / comp_r
+                delta = float(0.0)
+                max_delta = float(0.0)
+
+                if force_l > force_r * cap_ratio:
+                    delta = (comp_r * d_l - cap_ratio * comp_l * d_r) / (comp_r + cap_ratio * comp_l)
+                    if delta < 0.0:
+                        delta = 0.0
+                    max_delta = seg_rest_length[seg_right] - min_rest
+                    if max_delta < 0.0:
+                        max_delta = 0.0
+                    if delta > max_delta:
+                        delta = max_delta
+                    seg_rest_length[seg_left] = seg_rest_length[seg_left] + delta
+                    seg_rest_length[seg_right] = seg_rest_length[seg_right] - delta
+                elif force_r > force_l * cap_ratio:
+                    delta = (comp_l * d_r - cap_ratio * comp_r * d_l) / (comp_l + cap_ratio * comp_r)
+                    if delta < 0.0:
+                        delta = 0.0
+                    max_delta = seg_rest_length[seg_left] - min_rest
+                    if max_delta < 0.0:
+                        max_delta = 0.0
+                    if delta > max_delta:
+                        delta = max_delta
+                    seg_rest_length[seg_left] = seg_rest_length[seg_left] - delta
+                    seg_rest_length[seg_right] = seg_rest_length[seg_right] + delta
