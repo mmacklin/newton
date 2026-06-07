@@ -134,6 +134,9 @@ class TendonStateMixin:
             )
             self.tendon_seg_rolling_delta_l = wp.zeros(model.tendon_segment_count, dtype=float)
             self.tendon_seg_rolling_delta_r = wp.zeros(model.tendon_segment_count, dtype=float)
+            # Persistent low-passed cable-slide direction per tendon (capstan
+            # kinetic-friction direction); see update_tendon_attachments Pass A.
+            self.tendon_slide_filter = wp.zeros(model.tendon_count, dtype=float)
             self.tendon_seg_active = wp.ones(model.tendon_segment_count, dtype=wp.int32)
             self.tendon_seg_active_link_l = wp.zeros(model.tendon_segment_count, dtype=wp.int32)
             self.tendon_seg_active_link_r = wp.zeros(model.tendon_segment_count, dtype=wp.int32)
@@ -304,6 +307,8 @@ class TendonStateMixin:
                 self.tendon_seg_attachment_r_local,
                 self.tendon_seg_rolling_delta_l,
                 self.tendon_seg_rolling_delta_r,
+                self.tendon_slide_filter,
+                0,
                 0,
                 0,
             ],

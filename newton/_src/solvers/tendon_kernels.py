@@ -116,6 +116,8 @@ def update_tendon_attachments(
     seg_attachment_r_local: wp.array[wp.vec3],
     seg_rolling_delta_l: wp.array[float],
     seg_rolling_delta_r: wp.array[float],
+    tendon_slide_filter: wp.array[float],
+    iteration_index: int,
     apply_rolling_transfer: int,
     apply_pinhole_slip: int,
 ):
@@ -282,62 +284,69 @@ def update_tendon_attachments(
         seg_rest_length[seg_right] = rest_r
 
     if apply_rolling_transfer != 0:
-        # ===== Pass A: one global cable-slide direction for the whole tendon. ====
-        # The cable is a single strand, so the high-tension end is consistent: the
-        # cable slides TOWARD the high-tension side and tension drops away from it.
-        # Per-pulley flux signs flip with routing geometry, so summing the
-        # rim-relative slide (+index convention) and taking the net sign gives a
-        # globally coherent direction (this is what a purely local per-pulley sign
-        # cannot do on a multi-pulley route).
-        total_slide = float(0.0)
-        for i in range(1, num_links - 1):
-            link_idx = link_start + i
-            if tendon_link_type[link_idx] != int(TendonLinkType.ROLLING):
-                continue
-            if tendon_link_active[link_idx] == 0:
-                continue
-            radius = tendon_link_radius[link_idx]
-            if radius <= 0.0:
-                continue
-            seg_left = seg_offset + i - 1
-            seg_right = seg_offset + i
-            body = tendon_link_body[link_idx]
-            pose = body_q[body]
-            normal = wp.transform_vector(pose, tendon_link_axis[link_idx])
-            vlin_p = wp.spatial_top(body_qd[body])
-            omega_p = wp.spatial_bottom(body_qd[body])
-            rim = wp.dot(omega_p, normal) * radius
-            br_body = tendon_link_body[seg_active_link_r[seg_right]]
-            bl_body = tendon_link_body[seg_active_link_l[seg_left]]
-            a_far_r = seg_attachment_r[seg_right]
-            a_far_l = seg_attachment_l[seg_left]
-            p_out = seg_attachment_l[seg_right]
-            p_in = seg_attachment_r[seg_left]
-            comw_r = wp.transform_point(body_q[br_body], body_com[br_body])
-            comw_l = wp.transform_point(body_q[bl_body], body_com[bl_body])
-            v_far_r = wp.spatial_top(body_qd[br_body]) + wp.cross(
-                wp.spatial_bottom(body_qd[br_body]), a_far_r - comw_r
-            )
-            v_far_l = wp.spatial_top(body_qd[bl_body]) + wp.cross(
-                wp.spatial_bottom(body_qd[bl_body]), a_far_l - comw_l
-            )
-            t_far_r = a_far_r - p_out
-            t_far_l = a_far_l - p_in
-            lt_r = wp.length(t_far_r)
-            lt_l = wp.length(t_far_l)
-            fr = float(0.0)
-            fl = float(0.0)
-            if lt_r > 1.0e-8:
-                fr = wp.dot(t_far_r / lt_r, v_far_r - vlin_p)
-            if lt_l > 1.0e-8:
-                fl = wp.dot(t_far_l / lt_l, v_far_l - vlin_p)
-            total_slide = total_slide + (0.5 * (fr - fl) - rim)
+        # ===== Pass A: persistent low-passed global slide direction. ====
+        # The cable is a single strand, so the high-tension end is consistent: it
+        # slides TOWARD the high-tension side and tension drops away from it.  We
+        # need ONE coherent direction for the whole route (per-pulley signs flip
+        # with routing geometry).  The instantaneous rim-relative slide is summed
+        # in the +index convention, but instantaneous body velocities RING for a
+        # light cable, so the raw sign flips and the cascade can invert.  Low-pass
+        # it over several substeps (longer than the ring period, far shorter than a
+        # load reversal) for a stable direction.  Updated once per substep.
+        if iteration_index == 0:
+            total_slide = float(0.0)
+            for i in range(1, num_links - 1):
+                link_idx = link_start + i
+                if tendon_link_type[link_idx] != int(TendonLinkType.ROLLING):
+                    continue
+                if tendon_link_active[link_idx] == 0:
+                    continue
+                radius = tendon_link_radius[link_idx]
+                if radius <= 0.0:
+                    continue
+                seg_left = seg_offset + i - 1
+                seg_right = seg_offset + i
+                body = tendon_link_body[link_idx]
+                pose = body_q[body]
+                normal = wp.transform_vector(pose, tendon_link_axis[link_idx])
+                vlin_p = wp.spatial_top(body_qd[body])
+                omega_p = wp.spatial_bottom(body_qd[body])
+                rim = wp.dot(omega_p, normal) * radius
+                br_body = tendon_link_body[seg_active_link_r[seg_right]]
+                bl_body = tendon_link_body[seg_active_link_l[seg_left]]
+                a_far_r = seg_attachment_r[seg_right]
+                a_far_l = seg_attachment_l[seg_left]
+                p_out = seg_attachment_l[seg_right]
+                p_in = seg_attachment_r[seg_left]
+                comw_r = wp.transform_point(body_q[br_body], body_com[br_body])
+                comw_l = wp.transform_point(body_q[bl_body], body_com[bl_body])
+                v_far_r = wp.spatial_top(body_qd[br_body]) + wp.cross(
+                    wp.spatial_bottom(body_qd[br_body]), a_far_r - comw_r
+                )
+                v_far_l = wp.spatial_top(body_qd[bl_body]) + wp.cross(
+                    wp.spatial_bottom(body_qd[bl_body]), a_far_l - comw_l
+                )
+                t_far_r = a_far_r - p_out
+                t_far_l = a_far_l - p_in
+                lt_r = wp.length(t_far_r)
+                lt_l = wp.length(t_far_l)
+                fr = float(0.0)
+                fl = float(0.0)
+                if lt_r > 1.0e-8:
+                    fr = wp.dot(t_far_r / lt_r, v_far_r - vlin_p)
+                if lt_l > 1.0e-8:
+                    fl = wp.dot(t_far_l / lt_l, v_far_l - vlin_p)
+                total_slide = total_slide + (0.5 * (fr - fl) - rim)
+            decay = 0.9
+            tendon_slide_filter[tendon_id] = decay * tendon_slide_filter[tendon_id] + (1.0 - decay) * total_slide
+
         # +1: cable sliding toward the last link (high side is the +index end).
         # -1: toward link 0.  0: not sliding (static everywhere).
+        slide_ref = tendon_slide_filter[tendon_id]
         slide_dir = 0.0
-        if total_slide > 1.0e-7:
+        if slide_ref > 1.0e-9:
             slide_dir = 1.0
-        elif total_slide < -1.0e-7:
+        elif slide_ref < -1.0e-9:
             slide_dir = -1.0
 
         # ===== Pass B: per-pulley friction. ====
