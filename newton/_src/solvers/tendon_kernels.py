@@ -430,8 +430,13 @@ def update_tendon_attachments(
             delta = float(0.0)
             max_delta = float(0.0)
 
-            if slip_frac > 0.3 and slide_dir != 0.0:
-                # KINETIC capstan: the cable is sliding on this pulley.  Pin the
+            if slip_frac > 0.3 and slide_dir != 0.0 and cap_ratio < 20.0:
+                # KINETIC capstan (moderate-friction sliding regime; cap_ratio<20
+                # i.e. mu*theta < 3).  An extreme cone (high-mu "no-slip") is the
+                # gripping regime instead -- the rolling nudge + deadband lock it,
+                # so we must not pin a near-locked heavy pulley to a huge ratio
+                # (that would unload the low span and let it creep).
+                # The cable is sliding on this pulley.  Pin the
                 # tension ratio to the boundary T_hi = T_lo * exp(mu*theta),
                 # rest-conservingly (transfer delta between the two spans -> total
                 # cable length preserved).  High side is the GLOBAL slide target,
