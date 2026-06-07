@@ -1592,11 +1592,10 @@ class SolverVBD(TendonStateMixin, SolverBase):
         self._initialize_rigid_bodies(state_in, control, contacts, dt, update_rigid)
         self._initialize_particles(state_in, state_out, dt)
         if self.tendon_seg_lambda is not None and state_in.body_q is not None:
-            self._snapshot_tendon_step_state()
             self.tendon_seg_lambda.zero_()
 
         for iter_num in range(self.iterations):
-            self._solve_rigid_body_iteration(state_in, state_out, control, contacts, dt, iter_num)
+            self._solve_rigid_body_iteration(state_in, state_out, control, contacts, dt)
             self._solve_particle_iteration(state_in, state_out, contacts, dt, iter_num)
 
         # Snapshot solved rigid contact state for next-frame warm-start.
@@ -2311,7 +2310,7 @@ class SolverVBD(TendonStateMixin, SolverBase):
 
         wp.copy(state_out.particle_q, state_in.particle_q)
 
-    def _update_tendon_routing(self, state_in: State, iteration_index: int) -> None:
+    def _update_tendon_routing(self, state_in: State) -> None:
         """Update VBD routed-tendon geometry and rolling rest transfer for this iteration."""
         model = self.model
         if model.tendon_segment_count == 0 or state_in.body_q is None:
@@ -2333,7 +2332,6 @@ class SolverVBD(TendonStateMixin, SolverBase):
                 model.tendon_link_offset,
                 model.tendon_link_axis,
                 self.tendon_seg_rest_length,
-                self.tendon_seg_rest_length_step,
                 model.tendon_seg_compliance,
                 model.tendon_seg_damping,
                 self.tendon_seg_active,
@@ -2347,12 +2345,10 @@ class SolverVBD(TendonStateMixin, SolverBase):
                 self.tendon_seg_attachment_r,
                 self.tendon_seg_attachment_l_local,
                 self.tendon_seg_attachment_r_local,
-                self.tendon_seg_attachment_l_local_step,
-                self.tendon_seg_attachment_r_local_step,
                 self.tendon_seg_rolling_delta_l,
                 self.tendon_seg_rolling_delta_r,
                 self.tendon_slide_filter,
-                iteration_index,
+                0,
                 1,
                 1,
             ],
@@ -2385,13 +2381,13 @@ class SolverVBD(TendonStateMixin, SolverBase):
         wp.copy(state_in.body_q, state_out.body_q)
         wp.copy(state_in.body_qd, state_out.body_qd)
 
-    def _project_tendon_constraints(self, state_in: State, state_out: State, dt: float, iteration_index: int) -> None:
+    def _project_tendon_constraints(self, state_in: State, state_out: State, dt: float) -> None:
         """Run the same routed-tendon stretch and capstan slip rows as XPBD."""
         model = self.model
         if model.tendon_segment_count == 0 or state_in.body_q is None:
             return
 
-        self._update_tendon_routing(state_in, iteration_index)
+        self._update_tendon_routing(state_in)
 
         self.tendon_body_deltas.zero_()
         # VBD keeps its existing position-level tendon multiplier scaling while
@@ -2457,13 +2453,7 @@ class SolverVBD(TendonStateMixin, SolverBase):
         self._apply_tendon_body_deltas(state_in, state_out, dt)
 
     def _solve_rigid_body_iteration(
-        self,
-        state_in: State,
-        state_out: State,
-        control: Control,
-        contacts: Contacts | None,
-        dt: float,
-        iteration_index: int,
+        self, state_in: State, state_out: State, control: Control, contacts: Contacts | None, dt: float
     ):
         """Solve one AVBD iteration for rigid bodies (per-iteration phase).
 
@@ -2508,7 +2498,7 @@ class SolverVBD(TendonStateMixin, SolverBase):
         self.body_hessian_al.zero_()
         self.body_hessian_ll.zero_()
 
-        self._project_tendon_constraints(state_in, state_out, dt, iteration_index)
+        self._project_tendon_constraints(state_in, state_out, dt)
 
         body_color_groups = model.body_color_groups
 
@@ -2653,7 +2643,7 @@ class SolverVBD(TendonStateMixin, SolverBase):
                 device=self.device,
             )
 
-        self._project_tendon_constraints(state_in, state_out, dt, iteration_index)
+        self._project_tendon_constraints(state_in, state_out, dt)
 
         if contacts is not None:
             contact_launch_dim = contacts.rigid_contact_max

@@ -101,7 +101,6 @@ def update_tendon_attachments(
     tendon_link_offset: wp.array[wp.vec3],
     tendon_link_axis: wp.array[wp.vec3],
     seg_rest_length: wp.array[float],
-    seg_rest_length_step: wp.array[float],
     seg_compliance: wp.array[float],
     seg_damping: wp.array[float],
     seg_active: wp.array[int],
@@ -115,8 +114,6 @@ def update_tendon_attachments(
     seg_attachment_r: wp.array[wp.vec3],
     seg_attachment_l_local: wp.array[wp.vec3],
     seg_attachment_r_local: wp.array[wp.vec3],
-    seg_attachment_l_local_step: wp.array[wp.vec3],
-    seg_attachment_r_local_step: wp.array[wp.vec3],
     seg_rolling_delta_l: wp.array[float],
     seg_rolling_delta_r: wp.array[float],
     tendon_slide_filter: wp.array[float],
@@ -150,8 +147,6 @@ def update_tendon_attachments(
         seg_active_damping[seg] = seg_damping[seg]
         seg_rolling_delta_l[seg] = 0.0
         seg_rolling_delta_r[seg] = 0.0
-        if apply_rolling_transfer != 0 or apply_pinhole_slip != 0:
-            seg_rest_length[seg] = seg_rest_length_step[seg]
 
     tendon_link_active[link_start] = 1
     tendon_link_active[link_end - 1] = 1
@@ -211,18 +206,16 @@ def update_tendon_attachments(
         normal_l = wp.transform_vector(pose_l, axis_l)
         normal_r = wp.transform_vector(pose_r, axis_r)
 
-        seed_al = wp.transform_point(pose_l, seg_attachment_l_local[seg])
-        seed_ar = wp.transform_point(pose_r, seg_attachment_r_local[seg])
-        base_al = wp.transform_point(pose_l, seg_attachment_l_local_step[seg])
-        base_ar = wp.transform_point(pose_r, seg_attachment_r_local_step[seg])
+        old_al = wp.transform_point(pose_l, seg_attachment_l_local[seg])
+        old_ar = wp.transform_point(pose_r, seg_attachment_r_local[seg])
 
         new_al = center_l
         new_ar = center_r
         both_rolling = (type_l == int(TendonLinkType.ROLLING)) and (type_r == int(TendonLinkType.ROLLING))
 
         if both_rolling and radius_l > 0.0 and radius_r > 0.0:
-            new_al = seed_al
-            new_ar = seed_ar
+            new_al = old_al
+            new_ar = old_ar
             for _iter in range(10):
                 new_ar = tangent_point_circle(new_al, center_r, radius_r, normal_r, orient_r)
                 new_al = tangent_point_circle(new_ar, center_l, radius_l, normal_l, -orient_l)
@@ -235,11 +228,11 @@ def update_tendon_attachments(
 
         if apply_rolling_transfer != 0:
             if type_l == int(TendonLinkType.ROLLING) and radius_l > 0.0:
-                delta_l = signed_arc_length(base_al, new_al, center_l, radius_l, normal_l, orient_l)
+                delta_l = signed_arc_length(old_al, new_al, center_l, radius_l, normal_l, orient_l)
                 seg_rolling_delta_l[seg] = delta_l
 
             if type_r == int(TendonLinkType.ROLLING) and radius_r > 0.0:
-                delta_r = signed_arc_length(base_ar, new_ar, center_r, radius_r, normal_r, orient_r)
+                delta_r = signed_arc_length(old_ar, new_ar, center_r, radius_r, normal_r, orient_r)
                 seg_rolling_delta_r[seg] = -delta_r
 
         seg_attachment_l[seg] = new_al

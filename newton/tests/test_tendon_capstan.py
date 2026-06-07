@@ -550,48 +550,6 @@ def build_motorized_pulley_drive(mu=0.0):
     return builder.finalize(), slider, pulley, j_pulley
 
 
-def build_kinematic_rolling_transport(mu=10.0):
-    """Build a fixed anchor - rolling pulley - fixed anchor route for prescribed spin tests."""
-    builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=0.0)
-
-    left = builder.add_body(xform=wp.transform(p=wp.vec3(-0.4, 0.0, 0.0)), mass=0.0, is_kinematic=True)
-    pulley = builder.add_body(xform=wp.transform(p=wp.vec3(0.0, 0.0, 0.0)), mass=0.0, is_kinematic=True)
-    right = builder.add_body(xform=wp.transform(p=wp.vec3(0.4, 0.0, 0.0)), mass=0.0, is_kinematic=True)
-    for body in (left, pulley, right):
-        builder.add_shape_sphere(body, radius=0.01)
-
-    builder.add_tendon()
-    builder.add_tendon_link(
-        body=left,
-        link_type=int(TendonLinkType.ATTACHMENT),
-        offset=(0.0, 0.0, 0.0),
-        axis=(0.0, 0.0, 1.0),
-    )
-    builder.add_tendon_link(
-        body=pulley,
-        link_type=int(TendonLinkType.ROLLING),
-        radius=0.1,
-        orientation=1,
-        mu=mu,
-        offset=(0.0, 0.0, 0.0),
-        axis=(0.0, 0.0, 1.0),
-        compliance=1.0e-6,
-        damping=0.0,
-        rest_length=-1.0,
-    )
-    builder.add_tendon_link(
-        body=right,
-        link_type=int(TendonLinkType.ATTACHMENT),
-        offset=(0.0, 0.0, 0.0),
-        axis=(0.0, 0.0, 1.0),
-        compliance=1.0e-6,
-        damping=0.0,
-        rest_length=-1.0,
-    )
-
-    return builder.finalize(), pulley
-
-
 def run_model(model, num_frames=80, substeps=12, fps=60):
     dt = 1.0 / fps / substeps
     solver = newton.solvers.SolverXPBD(model, iterations=8, joint_linear_relaxation=0.8)
@@ -1459,47 +1417,6 @@ def test_motorized_pulley_updates_rest_in_first_step(test, device):
         )
 
 
-def test_kinematic_rolling_transfer_independent_of_iterations(test, device):
-    """Prescribed pulley spin should transfer the same material for any XPBD iteration count."""
-
-    def run_once(iterations):
-        model, pulley_idx = build_kinematic_rolling_transport(mu=10.0)
-        solver = newton.solvers.SolverXPBD(model, iterations=iterations, joint_linear_relaxation=1.0)
-        state_0 = model.state()
-        state_1 = model.state()
-        control = model.control()
-        newton.eval_fk(model, model.joint_q, model.joint_qd, state_0)
-
-        initial_rest = solver.tendon_seg_rest_length.numpy().copy()
-        angle = 0.4
-        body_q = state_0.body_q.numpy()
-        body_q[pulley_idx, 3:] = np.array([0.0, 0.0, np.sin(0.5 * angle), np.cos(0.5 * angle)], dtype=np.float32)
-        state_0.body_q.assign(body_q)
-
-        solver.step(state_0, state_1, control, None, 1.0 / 60.0)
-        return solver.tendon_seg_rest_length.numpy() - initial_rest
-
-    with wp.ScopedDevice(device):
-        reference = run_once(1)
-        test.assertGreater(
-            float(np.max(np.abs(reference))),
-            1.0e-4,
-            f"Prescribed rolling spin should produce nonzero material transfer: delta={reference}",
-        )
-        for iterations in (2, 4, 8, 16):
-            rest_delta = run_once(iterations)
-            np.testing.assert_allclose(
-                rest_delta,
-                reference,
-                rtol=1.0e-6,
-                atol=1.0e-6,
-                err_msg=(
-                    "Rolling material transport should be a time-step update, not an XPBD iteration update: "
-                    f"iterations={iterations}, reference={reference}, actual={rest_delta}"
-                ),
-            )
-
-
 def test_rolling_transfer_saturates_at_zero_span(test, device):
     """Rolling transfer should clamp before a free span goes negative."""
     with wp.ScopedDevice(device):
@@ -1656,12 +1573,6 @@ add_test(
     "motorized_pulley_updates_rest_in_first_step",
     devices,
     test_motorized_pulley_updates_rest_in_first_step,
-)
-add_test(
-    TestTendonCapstan,
-    "kinematic_rolling_transfer_independent_of_iterations",
-    devices,
-    test_kinematic_rolling_transfer_independent_of_iterations,
 )
 add_test(
     TestTendonCapstan, "rolling_transfer_saturates_at_zero_span", devices, test_rolling_transfer_saturates_at_zero_span
