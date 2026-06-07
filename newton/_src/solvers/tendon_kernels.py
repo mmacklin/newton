@@ -404,12 +404,8 @@ def update_tendon_attachments(
             p_in = seg_attachment_r[seg_left]
             comw_r = wp.transform_point(body_q[br_body], body_com[br_body])
             comw_l = wp.transform_point(body_q[bl_body], body_com[bl_body])
-            v_far_r = wp.spatial_top(body_qd[br_body]) + wp.cross(
-                wp.spatial_bottom(body_qd[br_body]), a_far_r - comw_r
-            )
-            v_far_l = wp.spatial_top(body_qd[bl_body]) + wp.cross(
-                wp.spatial_bottom(body_qd[bl_body]), a_far_l - comw_l
-            )
+            v_far_r = wp.spatial_top(body_qd[br_body]) + wp.cross(wp.spatial_bottom(body_qd[br_body]), a_far_r - comw_r)
+            v_far_l = wp.spatial_top(body_qd[bl_body]) + wp.cross(wp.spatial_bottom(body_qd[bl_body]), a_far_l - comw_l)
             t_far_r = a_far_r - p_out
             t_far_l = a_far_l - p_in
             lt_r = wp.length(t_far_r)
