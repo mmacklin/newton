@@ -101,10 +101,13 @@ class TendonStateMixin:
         """Allocate mutable tendon state arrays and build segment/link mappings."""
         if model.tendon_segment_count == 0:
             self.tendon_seg_rest_length = None
+            self.tendon_seg_rest_length_step = None
             self.tendon_seg_attachment_l = None
             self.tendon_seg_attachment_r = None
             self.tendon_seg_attachment_l_local = None
             self.tendon_seg_attachment_r_local = None
+            self.tendon_seg_attachment_l_local_step = None
+            self.tendon_seg_attachment_r_local_step = None
             self.tendon_seg_lambda = None
             self.tendon_seg_delta_lambda = None
             self.tendon_seg_rolling_delta_l = None
@@ -176,11 +179,23 @@ class TendonStateMixin:
             auto_mask = rest_np < 0.0
             rest_np[auto_mask] = 0.0
             self.tendon_seg_rest_length = wp.array(rest_np, dtype=float, device=model.device)
+            self.tendon_seg_rest_length_step = wp.array(rest_np.copy(), dtype=float, device=model.device)
+            self.tendon_seg_attachment_l_local_step = wp.zeros(model.tendon_segment_count, dtype=wp.vec3)
+            self.tendon_seg_attachment_r_local_step = wp.zeros(model.tendon_segment_count, dtype=wp.vec3)
 
             route_rest_np, route_seg_mask = self._compute_active_route_rest_lengths(model)
             self.tendon_link_route_rest_length = wp.array(route_rest_np, dtype=float, device=model.device)
 
             self._init_tendon_attachment_points(model, auto_mask, route_seg_mask)
+
+    def _snapshot_tendon_step_state(self) -> None:
+        """Snapshot rest lengths and local tangent points for one solver step."""
+        if self.tendon_seg_rest_length is None:
+            return
+
+        wp.copy(self.tendon_seg_rest_length_step, self.tendon_seg_rest_length)
+        wp.copy(self.tendon_seg_attachment_l_local_step, self.tendon_seg_attachment_l_local)
+        wp.copy(self.tendon_seg_attachment_r_local_step, self.tendon_seg_attachment_r_local)
 
     def _compute_active_route_rest_lengths(self, model: Model) -> tuple[np.ndarray, np.ndarray]:
         """Compute bypass material lengths for initially inactive rolling links."""
@@ -292,6 +307,7 @@ class TendonStateMixin:
                 model.tendon_link_offset,
                 model.tendon_link_axis,
                 self.tendon_seg_rest_length,
+                self.tendon_seg_rest_length_step,
                 model.tendon_seg_compliance,
                 model.tendon_seg_damping,
                 self.tendon_seg_active,
@@ -305,6 +321,8 @@ class TendonStateMixin:
                 self.tendon_seg_attachment_r,
                 self.tendon_seg_attachment_l_local,
                 self.tendon_seg_attachment_r_local,
+                self.tendon_seg_attachment_l_local_step,
+                self.tendon_seg_attachment_r_local_step,
                 self.tendon_seg_rolling_delta_l,
                 self.tendon_seg_rolling_delta_r,
                 self.tendon_slide_filter,
@@ -322,6 +340,7 @@ class TendonStateMixin:
             if auto_mask[i] and not route_seg_mask[i]:
                 rest_np[i] = np.linalg.norm(att_r_np[i] - att_l_np[i])
         self.tendon_seg_rest_length = wp.array(rest_np, dtype=float, device=model.device)
+        self._snapshot_tendon_step_state()
 
         link_type_np = model.tendon_link_type.numpy()
         link_radius_np = model.tendon_link_radius.numpy()
