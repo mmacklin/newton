@@ -669,6 +669,8 @@ class SolverXPBD(TendonStateMixin, SolverBase):
                             dim=model.tendon_count,
                             inputs=[
                                 body_q,
+                                body_qd,
+                                model.body_com,
                                 model.tendon_start,
                                 model.tendon_link_body,
                                 model.tendon_link_type,

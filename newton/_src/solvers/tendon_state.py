@@ -278,6 +278,8 @@ class TendonStateMixin:
             dim=model.tendon_count,
             inputs=[
                 body_q,
+                wp.zeros(model.body_count, dtype=wp.spatial_vector, device=model.device),
+                model.body_com,
                 model.tendon_start,
                 model.tendon_link_body,
                 model.tendon_link_type,

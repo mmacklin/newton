@@ -90,6 +90,8 @@ def advance_point_on_circle(
 @wp.kernel
 def update_tendon_attachments(
     body_q: wp.array[wp.transform],
+    body_qd: wp.array[wp.spatial_vector],
+    body_com: wp.array[wp.vec3],
     tendon_start: wp.array[int],
     tendon_link_body: wp.array[int],
     tendon_link_type: wp.array[int],
@@ -280,6 +282,65 @@ def update_tendon_attachments(
         seg_rest_length[seg_right] = rest_r
 
     if apply_rolling_transfer != 0:
+        # ===== Pass A: one global cable-slide direction for the whole tendon. ====
+        # The cable is a single strand, so the high-tension end is consistent: the
+        # cable slides TOWARD the high-tension side and tension drops away from it.
+        # Per-pulley flux signs flip with routing geometry, so summing the
+        # rim-relative slide (+index convention) and taking the net sign gives a
+        # globally coherent direction (this is what a purely local per-pulley sign
+        # cannot do on a multi-pulley route).
+        total_slide = float(0.0)
+        for i in range(1, num_links - 1):
+            link_idx = link_start + i
+            if tendon_link_type[link_idx] != int(TendonLinkType.ROLLING):
+                continue
+            if tendon_link_active[link_idx] == 0:
+                continue
+            radius = tendon_link_radius[link_idx]
+            if radius <= 0.0:
+                continue
+            seg_left = seg_offset + i - 1
+            seg_right = seg_offset + i
+            body = tendon_link_body[link_idx]
+            pose = body_q[body]
+            normal = wp.transform_vector(pose, tendon_link_axis[link_idx])
+            vlin_p = wp.spatial_top(body_qd[body])
+            omega_p = wp.spatial_bottom(body_qd[body])
+            rim = wp.dot(omega_p, normal) * radius
+            br_body = tendon_link_body[seg_active_link_r[seg_right]]
+            bl_body = tendon_link_body[seg_active_link_l[seg_left]]
+            a_far_r = seg_attachment_r[seg_right]
+            a_far_l = seg_attachment_l[seg_left]
+            p_out = seg_attachment_l[seg_right]
+            p_in = seg_attachment_r[seg_left]
+            comw_r = wp.transform_point(body_q[br_body], body_com[br_body])
+            comw_l = wp.transform_point(body_q[bl_body], body_com[bl_body])
+            v_far_r = wp.spatial_top(body_qd[br_body]) + wp.cross(
+                wp.spatial_bottom(body_qd[br_body]), a_far_r - comw_r
+            )
+            v_far_l = wp.spatial_top(body_qd[bl_body]) + wp.cross(
+                wp.spatial_bottom(body_qd[bl_body]), a_far_l - comw_l
+            )
+            t_far_r = a_far_r - p_out
+            t_far_l = a_far_l - p_in
+            lt_r = wp.length(t_far_r)
+            lt_l = wp.length(t_far_l)
+            fr = float(0.0)
+            fl = float(0.0)
+            if lt_r > 1.0e-8:
+                fr = wp.dot(t_far_r / lt_r, v_far_r - vlin_p)
+            if lt_l > 1.0e-8:
+                fl = wp.dot(t_far_l / lt_l, v_far_l - vlin_p)
+            total_slide = total_slide + (0.5 * (fr - fl) - rim)
+        # +1: cable sliding toward the last link (high side is the +index end).
+        # -1: toward link 0.  0: not sliding (static everywhere).
+        slide_dir = 0.0
+        if total_slide > 1.0e-7:
+            slide_dir = 1.0
+        elif total_slide < -1.0e-7:
+            slide_dir = -1.0
+
+        # ===== Pass B: per-pulley friction. ====
         for i in range(1, num_links - 1):
             link_idx = link_start + i
             if tendon_link_type[link_idx] != int(TendonLinkType.ROLLING):
@@ -315,6 +376,48 @@ def update_tendon_attachments(
             cap_ratio = wp.exp(wp.min(wp.max(tendon_link_mu[link_idx], 0.0) * theta, 20.0))
             beta = (cap_ratio - 1.0) / (cap_ratio + 1.0)
 
+            # Per-pulley rim-relative slip fraction: rolling-with-cable (frac ~ 0,
+            # gripping) vs sliding-on-rim (frac ~ 1).  Rate-independent, so a slow
+            # stiff cable still reads kinetic while a no-slip dynamic pulley reads
+            # static.
+            vlin_p = wp.spatial_top(body_qd[body])
+            omega_p = wp.spatial_bottom(body_qd[body])
+            rim = wp.dot(omega_p, normal) * radius
+            br_body = tendon_link_body[seg_active_link_r[seg_right]]
+            bl_body = tendon_link_body[seg_active_link_l[seg_left]]
+            a_far_r = seg_attachment_r[seg_right]
+            a_far_l = seg_attachment_l[seg_left]
+            p_out = seg_attachment_l[seg_right]
+            p_in = seg_attachment_r[seg_left]
+            comw_r = wp.transform_point(body_q[br_body], body_com[br_body])
+            comw_l = wp.transform_point(body_q[bl_body], body_com[bl_body])
+            v_far_r = wp.spatial_top(body_qd[br_body]) + wp.cross(
+                wp.spatial_bottom(body_qd[br_body]), a_far_r - comw_r
+            )
+            v_far_l = wp.spatial_top(body_qd[bl_body]) + wp.cross(
+                wp.spatial_bottom(body_qd[bl_body]), a_far_l - comw_l
+            )
+            t_far_r = a_far_r - p_out
+            t_far_l = a_far_l - p_in
+            lt_r = wp.length(t_far_r)
+            lt_l = wp.length(t_far_l)
+            feed_r = float(0.0)
+            feed_l = float(0.0)
+            if lt_r > 1.0e-8:
+                feed_r = wp.dot(t_far_r / lt_r, v_far_r - vlin_p)
+            if lt_l > 1.0e-8:
+                feed_l = wp.dot(t_far_l / lt_l, v_far_l - vlin_p)
+            flux = 0.5 * (feed_r - feed_l)
+            slip = flux - rim
+            denom_slip = wp.max(wp.abs(flux), wp.abs(rim))
+            slip_frac = float(0.0)
+            if denom_slip > 1.0e-7:
+                slip_frac = wp.abs(slip) / denom_slip
+
+            # Rolling kinematics: the cable rides with the rim (this is also how a
+            # motorized/driven pulley feeds the cable through the route).  Always
+            # applied; the capstan tension limit (deadband for a gripping pulley,
+            # kinetic pin for a sliding one) is layered on top.
             rest_l = seg_rest_length[seg_left] + seg_rolling_delta_r[seg_left] * beta
             rest_r = seg_rest_length[seg_right] + seg_rolling_delta_l[seg_right] * beta
             if rest_l < min_rest:
@@ -324,44 +427,93 @@ def update_tendon_attachments(
             seg_rest_length[seg_left] = rest_l
             seg_rest_length[seg_right] = rest_r
 
-            len_l = wp.length(seg_attachment_r[seg_left] - seg_attachment_l[seg_left])
-            len_r = wp.length(seg_attachment_r[seg_right] - seg_attachment_l[seg_right])
-            d_l = len_l - seg_rest_length[seg_left]
-            d_r = len_r - seg_rest_length[seg_right]
-            if d_l < 0.0:
-                d_l = 0.0
-            if d_r < 0.0:
-                d_r = 0.0
-
-            comp_l = wp.max(seg_compliance[seg_left], 1.0e-8)
-            comp_r = wp.max(seg_compliance[seg_right], 1.0e-8)
-            force_l = d_l / comp_l
-            force_r = d_r / comp_r
             delta = float(0.0)
             max_delta = float(0.0)
 
-            if force_l > force_r * cap_ratio:
-                delta = (comp_r * d_l - cap_ratio * comp_l * d_r) / (comp_r + cap_ratio * comp_l)
-                if delta < 0.0:
-                    delta = 0.0
-                max_delta = seg_rest_length[seg_right] - min_rest
-                if max_delta < 0.0:
-                    max_delta = 0.0
-                if delta > max_delta:
-                    delta = max_delta
-                seg_rest_length[seg_left] = seg_rest_length[seg_left] + delta
-                seg_rest_length[seg_right] = seg_rest_length[seg_right] - delta
-            elif force_r > force_l * cap_ratio:
-                delta = (comp_l * d_r - cap_ratio * comp_r * d_l) / (comp_l + cap_ratio * comp_r)
-                if delta < 0.0:
-                    delta = 0.0
-                max_delta = seg_rest_length[seg_left] - min_rest
-                if max_delta < 0.0:
-                    max_delta = 0.0
-                if delta > max_delta:
-                    delta = max_delta
-                seg_rest_length[seg_left] = seg_rest_length[seg_left] - delta
-                seg_rest_length[seg_right] = seg_rest_length[seg_right] + delta
+            if slip_frac > 0.3 and slide_dir != 0.0:
+                # KINETIC capstan: the cable is sliding on this pulley.  Pin the
+                # tension ratio to the boundary T_hi = T_lo * exp(mu*theta),
+                # rest-conservingly (transfer delta between the two spans -> total
+                # cable length preserved).  High side is the GLOBAL slide target,
+                # so the cascade stays coherent across all pulleys.  This replaces
+                # (does not stack with) the static deadband + slip nudge.
+                len_l = wp.length(seg_attachment_r[seg_left] - seg_attachment_l[seg_left])
+                len_r = wp.length(seg_attachment_r[seg_right] - seg_attachment_l[seg_right])
+                d_l = len_l - seg_rest_length[seg_left]
+                d_r = len_r - seg_rest_length[seg_right]
+                if d_l < 0.0:
+                    d_l = 0.0
+                if d_r < 0.0:
+                    d_r = 0.0
+                comp_l = wp.max(seg_compliance[seg_left], 1.0e-8)
+                comp_r = wp.max(seg_compliance[seg_right], 1.0e-8)
+                if slide_dir > 0.0:
+                    # right (toward last link) is the high-tension side
+                    delta = (comp_l * d_r - cap_ratio * comp_r * d_l) / (comp_l + cap_ratio * comp_r)
+                    if delta > 0.0:
+                        max_delta = seg_rest_length[seg_left] - min_rest
+                    else:
+                        max_delta = seg_rest_length[seg_right] - min_rest
+                    if max_delta < 0.0:
+                        max_delta = 0.0
+                    if delta > max_delta:
+                        delta = max_delta
+                    if -delta > max_delta:
+                        delta = -max_delta
+                    seg_rest_length[seg_left] = seg_rest_length[seg_left] - delta
+                    seg_rest_length[seg_right] = seg_rest_length[seg_right] + delta
+                else:
+                    # left (toward link 0) is the high-tension side
+                    delta = (comp_r * d_l - cap_ratio * comp_l * d_r) / (comp_r + cap_ratio * comp_l)
+                    if delta > 0.0:
+                        max_delta = seg_rest_length[seg_right] - min_rest
+                    else:
+                        max_delta = seg_rest_length[seg_left] - min_rest
+                    if max_delta < 0.0:
+                        max_delta = 0.0
+                    if delta > max_delta:
+                        delta = max_delta
+                    if -delta > max_delta:
+                        delta = -max_delta
+                    seg_rest_length[seg_left] = seg_rest_length[seg_left] + delta
+                    seg_rest_length[seg_right] = seg_rest_length[seg_right] - delta
+            else:
+                # STATIC / gripping: capstan-cone deadband on the post-nudge rest.
+                len_l = wp.length(seg_attachment_r[seg_left] - seg_attachment_l[seg_left])
+                len_r = wp.length(seg_attachment_r[seg_right] - seg_attachment_l[seg_right])
+                d_l = len_l - seg_rest_length[seg_left]
+                d_r = len_r - seg_rest_length[seg_right]
+                if d_l < 0.0:
+                    d_l = 0.0
+                if d_r < 0.0:
+                    d_r = 0.0
+                comp_l = wp.max(seg_compliance[seg_left], 1.0e-8)
+                comp_r = wp.max(seg_compliance[seg_right], 1.0e-8)
+                force_l = d_l / comp_l
+                force_r = d_r / comp_r
+
+                if force_l > force_r * cap_ratio:
+                    delta = (comp_r * d_l - cap_ratio * comp_l * d_r) / (comp_r + cap_ratio * comp_l)
+                    if delta < 0.0:
+                        delta = 0.0
+                    max_delta = seg_rest_length[seg_right] - min_rest
+                    if max_delta < 0.0:
+                        max_delta = 0.0
+                    if delta > max_delta:
+                        delta = max_delta
+                    seg_rest_length[seg_left] = seg_rest_length[seg_left] + delta
+                    seg_rest_length[seg_right] = seg_rest_length[seg_right] - delta
+                elif force_r > force_l * cap_ratio:
+                    delta = (comp_l * d_r - cap_ratio * comp_r * d_l) / (comp_l + cap_ratio * comp_r)
+                    if delta < 0.0:
+                        delta = 0.0
+                    max_delta = seg_rest_length[seg_left] - min_rest
+                    if max_delta < 0.0:
+                        max_delta = 0.0
+                    if delta > max_delta:
+                        delta = max_delta
+                    seg_rest_length[seg_left] = seg_rest_length[seg_left] - delta
+                    seg_rest_length[seg_right] = seg_rest_length[seg_right] + delta
 
     if apply_pinhole_slip == 0:
         return
