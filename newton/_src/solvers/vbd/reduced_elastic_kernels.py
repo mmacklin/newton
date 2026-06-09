@@ -334,6 +334,7 @@ def assemble_elastic_joints(
     body_elastic_index: wp.array(dtype=wp.int32),
     body_q: wp.array(dtype=wp.transform),
     body_q_prev: wp.array(dtype=wp.transform),
+    body_com: wp.array(dtype=wp.vec3),
     body_world: wp.array(dtype=wp.int32),
     gravity: wp.array(dtype=wp.vec3),
     joint_type: wp.array(dtype=int),
@@ -373,6 +374,17 @@ def assemble_elastic_joints(
     body_R = wp.quat_to_matrix(body_rot)
     body_R_T = wp.transpose(body_R)
     body_g = body_R_T * gravity[wp.max(body_world[body], 0)]
+    body_qd_start = joint_qd_start[owner_joint]
+    com_v_prev = wp.vec3(
+        joint_qd_prev[body_qd_start + 0], joint_qd_prev[body_qd_start + 1], joint_qd_prev[body_qd_start + 2]
+    )
+    omega_prev = wp.vec3(
+        joint_qd_prev[body_qd_start + 3], joint_qd_prev[body_qd_start + 4], joint_qd_prev[body_qd_start + 5]
+    )
+    com_offset = wp.quat_rotate(wp.transform_get_rotation(body_q_prev[body]), body_com[body])
+    origin_v_prev = com_v_prev - wp.cross(omega_prev, com_offset)
+    origin_v = (wp.transform_get_translation(body_q[body]) - wp.transform_get_translation(body_q_prev[body])) * inv_dt
+    body_a = body_R_T * ((origin_v - origin_v_prev) * inv_dt)
     block_vec_start = elastic_index * max_modes
     block_mat_start = elastic_index * max_modes * max_modes
 
@@ -393,7 +405,7 @@ def assemble_elastic_joints(
         mass = elastic_mode_mass[mode_data]
         stiffness = elastic_mode_stiffness[mode_data]
         damping = elastic_mode_damping[mode_data]
-        force = joint_f[qd_idx] + wp.dot(elastic_mode_coupling_linear[mode_data], body_g)
+        force = joint_f[qd_idx] + wp.dot(elastic_mode_coupling_linear[mode_data], body_g - body_a)
 
         h = stiffness
         grad = stiffness * q - force

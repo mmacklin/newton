@@ -1586,6 +1586,7 @@ class SolverVBD(SolverBase):
                 model.body_elastic_index,
                 state_out.body_q,
                 self.body_q_prev,
+                model.body_com,
                 model.body_world,
                 model.gravity,
                 model.joint_type,

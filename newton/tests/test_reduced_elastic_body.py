@@ -16,6 +16,7 @@ from newton.examples.basic._reduced_elastic import (
     joint_endpoint_world,
     mesh_volume,
 )
+from newton.examples.basic.example_basic_reduced_elastic_base_excitation import Example as BaseExcitationExample
 from newton.examples.basic.example_basic_reduced_elastic_chair_stick_slip import Example as ChairStickSlipExample
 from newton.examples.basic.example_basic_reduced_elastic_dipper import Example as DipperExample
 from newton.examples.basic.example_basic_reduced_elastic_gravity_coupling import Example as GravityCouplingExample
@@ -1272,6 +1273,42 @@ def test_elastic_gravity_modal_force(test, device):
     np.testing.assert_allclose(state_1.joint_q.numpy()[q_start + 7], q_expected, rtol=1.0e-4, atol=1.0e-9)
 
 
+def test_elastic_free_fall_no_modal_force(test, device):
+    # A free-falling frame has a_R = g, so the gravito-inertial modal force
+    # S . (g_local - a_R_local) cancels (equivalence principle) and the mode
+    # stays undeflected. Fails with the gravity term alone (no a_R coupling).
+    g = 9.81
+    dt = 0.005
+    basis = newton.ModalBasis(
+        sample_points=[[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        sample_phi=[[[0.0, 0.0, 1.0]], [[0.0, 0.0, 1.0]]],
+        sample_mass=[1.0, 1.0],
+        mode_stiffness=[18.0],
+        mode_damping=[0.0],
+    )
+    builder = newton.ModelBuilder(gravity=-g)
+    body = builder.add_body_elastic(
+        mass=1.0, inertia=_identity_inertia(), modal_basis=basis, mode_q=[0.0], mode_qd=[0.0]
+    )
+    builder.add_shape_box(body, hx=0.05, hy=0.05, hz=0.05)
+    builder.color()
+    model = builder.finalize(device=device)
+
+    state_0 = model.state()
+    state_1 = model.state()
+    control = model.control()
+    owner_joint = int(model.elastic_joint.numpy()[0])
+    q_start = int(model.joint_q_start.numpy()[owner_joint])
+
+    solver = newton.solvers.SolverVBD(model, iterations=16)
+    max_abs_q = 0.0
+    for _ in range(40):
+        solver.step(state_0, state_1, control, None, dt)
+        state_0, state_1 = state_1, state_0
+        max_abs_q = max(max_abs_q, abs(float(state_0.joint_q.numpy()[q_start + 7])))
+    test.assertLess(max_abs_q, 1.0e-3)
+
+
 def test_vbd_revolute_uses_elastic_endpoint(test, device):
     eta = 0.2
     rest_anchor = -0.5
@@ -1739,6 +1776,16 @@ def test_gravity_coupling_example(test, device):
         example.test_final()
 
 
+def test_base_excitation_example(test, device):
+    with wp.ScopedDevice(device):
+        viewer = newton.viewer.ViewerNull()
+        example = BaseExcitationExample(viewer, None)
+        for _ in range(120):
+            example.step()
+            example.render()
+        example.test_final()
+
+
 def _run_reduced_elastic_contact_example(example_cls, frame_count: int, device):
     with wp.ScopedDevice(device):
         viewer = newton.viewer.ViewerNull()
@@ -1849,6 +1896,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_elastic_gravity_modal_force",
         test_elastic_gravity_modal_force,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_free_fall_no_modal_force",
+        test_elastic_free_fall_no_modal_force,
         devices=[device],
     )
     add_function_test(TestReducedElasticBody, "test_elastic_link_layout", test_elastic_link_layout, devices=[device])
@@ -2031,6 +2084,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_gravity_coupling_example",
         test_gravity_coupling_example,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_base_excitation_example",
+        test_base_excitation_example,
         devices=[device],
     )
     if wp.get_device(device).is_cuda:
