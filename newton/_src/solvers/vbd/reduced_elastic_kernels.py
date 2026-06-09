@@ -324,6 +324,7 @@ def assemble_elastic_joints(
     elastic_mode_mass: wp.array(dtype=float),
     elastic_mode_stiffness: wp.array(dtype=float),
     elastic_mode_damping: wp.array(dtype=float),
+    elastic_mode_coupling_linear: wp.array(dtype=wp.vec3),
     elastic_endpoint_count: int,
     elastic_endpoint_joint: wp.array(dtype=wp.int32),
     elastic_endpoint_side: wp.array(dtype=wp.int32),
@@ -333,6 +334,8 @@ def assemble_elastic_joints(
     body_elastic_index: wp.array(dtype=wp.int32),
     body_q: wp.array(dtype=wp.transform),
     body_q_prev: wp.array(dtype=wp.transform),
+    body_world: wp.array(dtype=wp.int32),
+    gravity: wp.array(dtype=wp.vec3),
     joint_type: wp.array(dtype=int),
     joint_enabled: wp.array(dtype=bool),
     joint_parent: wp.array(dtype=int),
@@ -369,6 +372,7 @@ def assemble_elastic_joints(
     body_rot = wp.transform_get_rotation(body_q[body])
     body_R = wp.quat_to_matrix(body_rot)
     body_R_T = wp.transpose(body_R)
+    body_g = body_R_T * gravity[wp.max(body_world[body], 0)]
     block_vec_start = elastic_index * max_modes
     block_mat_start = elastic_index * max_modes * max_modes
 
@@ -389,7 +393,7 @@ def assemble_elastic_joints(
         mass = elastic_mode_mass[mode_data]
         stiffness = elastic_mode_stiffness[mode_data]
         damping = elastic_mode_damping[mode_data]
-        force = joint_f[qd_idx]
+        force = joint_f[qd_idx] + wp.dot(elastic_mode_coupling_linear[mode_data], body_g)
 
         h = stiffness
         grad = stiffness * q - force
