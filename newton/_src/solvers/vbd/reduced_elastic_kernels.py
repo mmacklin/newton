@@ -3,6 +3,7 @@
 
 import warp as wp
 
+from newton._src.math.spatial import quat_velocity
 from newton._src.sim import JointType
 from newton._src.solvers.vbd.rigid_vbd_kernels import (
     _SMALL_LENGTH_EPS,
@@ -325,6 +326,7 @@ def assemble_elastic_joints(
     elastic_mode_stiffness: wp.array(dtype=float),
     elastic_mode_damping: wp.array(dtype=float),
     elastic_mode_coupling_linear: wp.array(dtype=wp.vec3),
+    elastic_mode_coupling_angular: wp.array(dtype=wp.vec3),
     elastic_endpoint_count: int,
     elastic_endpoint_joint: wp.array(dtype=wp.int32),
     elastic_endpoint_side: wp.array(dtype=wp.int32),
@@ -375,6 +377,7 @@ def assemble_elastic_joints(
     body_R_T = wp.transpose(body_R)
     body_g = body_R_T * gravity[wp.max(body_world[body], 0)]
     body_qd_start = joint_qd_start[owner_joint]
+
     com_v_prev = wp.vec3(
         joint_qd_prev[body_qd_start + 0], joint_qd_prev[body_qd_start + 1], joint_qd_prev[body_qd_start + 2]
     )
@@ -385,6 +388,9 @@ def assemble_elastic_joints(
     origin_v_prev = com_v_prev - wp.cross(omega_prev, com_offset)
     origin_v = (wp.transform_get_translation(body_q[body]) - wp.transform_get_translation(body_q_prev[body])) * inv_dt
     body_a = body_R_T * ((origin_v - origin_v_prev) * inv_dt)
+    omega = quat_velocity(body_rot, wp.transform_get_rotation(body_q_prev[body]), dt)
+    body_alpha = body_R_T * ((omega - omega_prev) * inv_dt)
+
     block_vec_start = elastic_index * max_modes
     block_mat_start = elastic_index * max_modes * max_modes
 
@@ -405,7 +411,11 @@ def assemble_elastic_joints(
         mass = elastic_mode_mass[mode_data]
         stiffness = elastic_mode_stiffness[mode_data]
         damping = elastic_mode_damping[mode_data]
-        force = joint_f[qd_idx] + wp.dot(elastic_mode_coupling_linear[mode_data], body_g - body_a)
+        force = (
+            joint_f[qd_idx]
+            + wp.dot(elastic_mode_coupling_linear[mode_data], body_g - body_a)
+            + wp.dot(elastic_mode_coupling_angular[mode_data], body_alpha)
+        )
 
         h = stiffness
         grad = stiffness * q - force

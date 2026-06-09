@@ -16,7 +16,12 @@ from newton.examples.basic._reduced_elastic import (
     joint_endpoint_world,
     mesh_volume,
 )
+from newton.examples.basic._reduced_elastic_contact import (
+    apply_kinematic_targets,
+    finite_difference_target_velocities,
+)
 from newton.examples.basic.example_basic_reduced_elastic_base_excitation import Example as BaseExcitationExample
+from newton.examples.basic.example_basic_reduced_elastic_base_rotation import Example as BaseRotationExample
 from newton.examples.basic.example_basic_reduced_elastic_chair_stick_slip import Example as ChairStickSlipExample
 from newton.examples.basic.example_basic_reduced_elastic_dipper import Example as DipperExample
 from newton.examples.basic.example_basic_reduced_elastic_gravity_coupling import Example as GravityCouplingExample
@@ -1309,6 +1314,73 @@ def test_elastic_free_fall_no_modal_force(test, device):
     test.assertLess(max_abs_q, 1.0e-3)
 
 
+def test_elastic_euler_modal_force(test, device):
+    # A cantilever clamped to a base that angularly accelerates about y (axis
+    # through the clamp, so a_R = 0) is excited purely through the Euler term
+    # S_ang . omega_dot. A symmetric mode would not respond; the cantilever
+    # bending mode has nonzero angular coupling and oscillates.
+    length = 0.8
+    n = 17
+    xs = np.linspace(0.0, length, n, dtype=np.float32)
+    sample_points = np.column_stack([xs, np.zeros(n), np.zeros(n)]).astype(np.float32)
+    sample_phi = np.zeros((n, 1, 3), dtype=np.float32)
+    sample_phi[:, 0, 2] = (xs * xs * (3.0 * length - xs)) / (2.0 * length**3)  # cantilever cubic, phi(0)=0
+    basis = newton.ModalBasis(
+        sample_points=sample_points,
+        sample_phi=sample_phi,
+        sample_mass=np.full(n, 1.0 / n, dtype=np.float32),
+        mode_stiffness=[40.0],
+        mode_damping=[0.4],
+    )
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    base = builder.add_body(xform=wp.transform_identity(), mass=2.0, inertia=_identity_inertia(), is_kinematic=True)
+    beam = builder.add_body_elastic(
+        xform=wp.transform_identity(), mass=0.2, inertia=_identity_inertia(), modal_basis=basis
+    )
+    builder.add_joint_fixed(
+        parent=base, child=beam, parent_xform=wp.transform_identity(), child_xform=wp.transform_identity()
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+
+    state_0 = model.state()
+    state_1 = model.state()
+    control = model.control()
+    joint_parent = model.joint_parent.numpy()
+    joint_child = model.joint_child.numpy()
+    base_q_start = base_qd_start = -1
+    for j in range(len(joint_child)):
+        if int(joint_child[j]) == base and int(joint_parent[j]) == -1:
+            base_q_start = int(model.joint_q_start.numpy()[j])
+            base_qd_start = int(model.joint_qd_start.numpy()[j])
+    owner = int(model.elastic_joint.numpy()[0])
+    q_index = int(model.joint_q_start.numpy()[owner]) + 7
+
+    solver = newton.solvers.SolverVBD(model, iterations=24)
+    dt = 1.0 / 240.0
+    amp = 0.15
+    freq = 1.0
+
+    def targets(t):
+        angle = amp * math.sin(2.0 * math.pi * freq * t)
+        return {base: (wp.vec3(0.0, 0.0, 0.0), wp.quat_from_axis_angle(wp.vec3(0.0, 1.0, 0.0), angle))}
+
+    max_abs_q = 0.0
+    t = 0.0
+    for _ in range(240):
+        tgt = targets(t)
+        prev = targets(max(t - dt, 0.0))
+        vel = finite_difference_target_velocities(tgt, prev, dt)
+        apply_kinematic_targets(state_0, {base: base_q_start}, tgt, vel, {base: base_qd_start})
+        state_0.clear_forces()
+        solver.step(state_0, state_1, control, None, dt)
+        state_0, state_1 = state_1, state_0
+        max_abs_q = max(max_abs_q, abs(float(state_0.joint_q.numpy()[q_index])))
+        t += dt
+    test.assertGreater(max_abs_q, 5.0e-3)
+
+
 def test_vbd_revolute_uses_elastic_endpoint(test, device):
     eta = 0.2
     rest_anchor = -0.5
@@ -1786,6 +1858,16 @@ def test_base_excitation_example(test, device):
         example.test_final()
 
 
+def test_base_rotation_example(test, device):
+    with wp.ScopedDevice(device):
+        viewer = newton.viewer.ViewerNull()
+        example = BaseRotationExample(viewer, None)
+        for _ in range(120):
+            example.step()
+            example.render()
+        example.test_final()
+
+
 def _run_reduced_elastic_contact_example(example_cls, frame_count: int, device):
     with wp.ScopedDevice(device):
         viewer = newton.viewer.ViewerNull()
@@ -1902,6 +1984,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_elastic_free_fall_no_modal_force",
         test_elastic_free_fall_no_modal_force,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_euler_modal_force",
+        test_elastic_euler_modal_force,
         devices=[device],
     )
     add_function_test(TestReducedElasticBody, "test_elastic_link_layout", test_elastic_link_layout, devices=[device])
@@ -2090,6 +2178,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_base_excitation_example",
         test_base_excitation_example,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_base_rotation_example",
+        test_base_rotation_example,
         devices=[device],
     )
     if wp.get_device(device).is_cuda:
