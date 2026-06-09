@@ -13,6 +13,8 @@
 - Add sampled `ModalBasis` and modal generators for reusable reduced elastic mode construction
 - Add `ModalGeneratorFEM` for matrix-based reduced elastic modes from nodal mass, stiffness, and damping matrices
 - Add `ModalBasis` floating-frame inertia coupling integrals (`sample_mass`, `mode_coupling_linear`, `mode_coupling_angular`), computed exactly by `ModalGeneratorFEM` and by lumped quadrature from per-sample masses; `mode_mass` is now optional and derived from `sample_mass` when omitted
+- Add floating-frame gravity and translational-acceleration coupling for reduced elastic modes in `SolverVBD` (modal force `S·(g − a)`), so a basis with per-sample masses sags under gravity and is excited by base motion
+- Add a reduced elastic gravity coupling example contrasting a coupled and an uncoupled cantilever under self-weight
 - Add a reduced elastic cantilever vibration example with finite modal mass dynamics
 - Add a reduced elastic prismatic compression example with Poisson bulging and parent rotation validation
 - Add reduced elastic crank-slider, Watt linkage, and bell-crank examples with analytic geometry checks
