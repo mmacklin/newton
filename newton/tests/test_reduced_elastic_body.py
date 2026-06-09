@@ -341,6 +341,9 @@ def test_modal_basis_coupling_unavailable_without_mass(test, device):
     test.assertIsNone(basis.sample_mass)
     test.assertIsNone(basis.mode_coupling_linear)
     test.assertIsNone(basis.mode_coupling_angular)
+    # With neither mass source, mode_mass stays the unit default (an array, not None).
+    test.assertIsNotNone(basis.mode_mass)
+    np.testing.assert_allclose(basis.mode_mass, [1.0], atol=1.0e-7)
 
 
 def test_modal_basis_coupling_explicit_override(test, device):
@@ -406,6 +409,73 @@ def test_modal_generator_pod_inertia_coupling(test, device):
     sample_mass = np.full(2, 1.0)
     expected_linear = np.einsum("s,smc->mc", sample_mass, basis.sample_phi.astype(np.float64))
     np.testing.assert_allclose(basis.mode_coupling_linear, expected_linear, atol=1.0e-6)
+
+
+def test_modal_basis_mode_mass_from_sample_mass(test, device):
+    basis = newton.ModalBasis(
+        sample_points=[[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        sample_phi=[
+            [[0.0, 0.0, 1.0], [0.0, 0.0, -1.0]],
+            [[0.0, 0.0, 1.0], [0.0, 0.0, 1.0]],
+        ],
+        sample_mass=[1.0, 1.0],
+    )
+    # mode_mass omitted -> derived as sum_s mass_s |phi_i(x_s)|^2 = 1 + 1 = 2.
+    np.testing.assert_allclose(basis.mode_mass, [2.0, 2.0], atol=1.0e-6)
+
+
+def test_modal_basis_mode_mass_explicit_wins(test, device):
+    # An explicit mode_mass takes precedence over the sample_mass-derived value.
+    basis = newton.ModalBasis(
+        sample_points=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        sample_phi=[[[0.0, 0.0, 1.0]], [[0.0, 0.0, 1.0]]],
+        sample_mass=[1.0, 1.0],
+        mode_mass=[99.0],
+    )
+    np.testing.assert_allclose(basis.mode_mass, [99.0], atol=1.0e-6)
+
+
+def test_elastic_mode_coupling_arrays(test, device):
+    basis = newton.ModalBasis(
+        sample_points=[[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        sample_phi=[[[0.0, 0.0, 1.0]], [[0.0, 0.0, 1.0]]],
+        sample_mass=[1.0, 1.0],
+    )
+    builder = newton.ModelBuilder(gravity=0.0)
+    builder.add_body_elastic(mass=1.0, inertia=_identity_inertia(), modal_basis=basis, label="coupled")
+    # A body without a basis has no coupling data -> zero rows.
+    builder.add_body_elastic(
+        mass=1.0, inertia=_identity_inertia(), mode_count=1, mode_mass=[1.0], mode_stiffness=[1.0], label="plain"
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+
+    np.testing.assert_allclose(
+        model.elastic_mode_coupling_linear.numpy(), [[0.0, 0.0, 2.0], [0.0, 0.0, 0.0]], atol=1.0e-6
+    )
+    np.testing.assert_allclose(
+        model.elastic_mode_coupling_angular.numpy(), [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], atol=1.0e-6
+    )
+
+
+def test_elastic_mode_coupling_arrays_merge(test, device):
+    basis = newton.ModalBasis(
+        sample_points=[[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        sample_phi=[[[0.0, 0.0, 1.0]], [[0.0, 0.0, 1.0]]],
+        sample_mass=[1.0, 1.0],
+    )
+    sub = newton.ModelBuilder(gravity=0.0)
+    sub.add_body_elastic(mass=1.0, inertia=_identity_inertia(), modal_basis=basis, label="e")
+    main = newton.ModelBuilder(gravity=0.0)
+    main.add_builder(sub)
+    main.add_builder(sub)
+    main.color()
+    model = main.finalize(device=device)
+
+    # add_builder must carry the coupling rows in lockstep with the other mode arrays.
+    np.testing.assert_allclose(
+        model.elastic_mode_coupling_linear.numpy(), [[0.0, 0.0, 2.0], [0.0, 0.0, 2.0]], atol=1.0e-6
+    )
 
 
 def _deformed_endpoint_world(model, state, joint: int, side: str) -> np.ndarray:
@@ -1700,6 +1770,30 @@ for device in devices:
         TestReducedElasticBody,
         "test_modal_generator_pod_inertia_coupling",
         test_modal_generator_pod_inertia_coupling,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_modal_basis_mode_mass_from_sample_mass",
+        test_modal_basis_mode_mass_from_sample_mass,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_modal_basis_mode_mass_explicit_wins",
+        test_modal_basis_mode_mass_explicit_wins,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_mode_coupling_arrays",
+        test_elastic_mode_coupling_arrays,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_mode_coupling_arrays_merge",
+        test_elastic_mode_coupling_arrays_merge,
         devices=[device],
     )
     add_function_test(TestReducedElasticBody, "test_elastic_link_layout", test_elastic_link_layout, devices=[device])
