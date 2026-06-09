@@ -37,14 +37,16 @@ class ModalBasis:
         sample_points: Body-local sample points [m], shape ``[sample_count, 3]``.
         sample_phi: Translational mode values [m per modal coordinate], shape
             ``[sample_count, mode_count, 3]``.
-        sample_mass: Optional per-sample lumped mass [kg], shape
-            ``[sample_count]``. When supplied (and the coupling integrals below
-            are not given explicitly), the floating-frame inertia coupling
-            integrals are computed from it by lumped quadrature.
-        mode_mass: Modal masses [kg], shape ``[mode_count]``.
+        sample_mass: Optional per-sample lumped mass [kg], shape ``[sample_count]``.
+            When supplied, ``mode_mass``, ``mode_coupling_linear``, and
+            ``mode_coupling_angular`` are computed from it if not explicitly provided.
+        mode_mass: Optional modal mass [kg], shape ``[mode_count]``. When
+            omitted, it is derived as ``sum_s mass_s |phi_i(x_s)|^2`` so the modal
+            mass and the coupling integrals share one mass distribution. Either
+            ``sample_mass`` or ``mode_mass`` must be provided.
         mode_stiffness: Modal stiffness values [N/m], shape ``[mode_count]``.
         mode_damping: Modal damping values [N s/m], shape ``[mode_count]``.
-        mode_coupling_linear: Optional translation coupling integral
+        mode_coupling_linear: Optional linear coupling integral
             ``S_i = sum_s mass_s phi_i(x_s)`` [kg], shape ``[mode_count, 3]``.
             Couples floating-frame translational acceleration and gravity into
             each mode. ``None`` when unavailable.
@@ -98,22 +100,26 @@ class ModalBasis:
 
         self.sample_points = np.array(points, dtype=np.float32, copy=True)
         self.sample_phi = np.array(phi, dtype=np.float32, copy=True)
+        self.sample_mass = self._coerce_sample_mass(sample_mass, points.shape[0])
+
+        lumped_mass = lumped_linear = lumped_angular = None
+        if self.sample_mass is not None and mode_count > 0:
+            lumped_mass, lumped_linear, lumped_angular = self._lumped_reduced_inertia(
+                self.sample_points, self.sample_phi, self.sample_mass
+            )
+
         self.mode_mass = self._coerce_mode_array(mode_mass, mode_count, 1.0, "mode_mass")
         self.mode_stiffness = self._coerce_mode_array(mode_stiffness, mode_count, 0.0, "mode_stiffness")
         self.mode_damping = self._coerce_mode_array(mode_damping, mode_count, 0.0, "mode_damping")
-
-        self.sample_mass = self._coerce_sample_mass(sample_mass, points.shape[0])
         self.mode_coupling_linear = self._coerce_coupling(mode_coupling_linear, mode_count, "mode_coupling_linear")
         self.mode_coupling_angular = self._coerce_coupling(mode_coupling_angular, mode_count, "mode_coupling_angular")
-        # Fill coupling integrals not supplied explicitly by lumped quadrature.
-        if self.sample_mass is not None and mode_count > 0:
-            lumped_linear, lumped_angular = self._lumped_inertia_couplings(
-                self.sample_points, self.sample_phi, self.sample_mass
-            )
-            if self.mode_coupling_linear is None:
-                self.mode_coupling_linear = lumped_linear
-            if self.mode_coupling_angular is None:
-                self.mode_coupling_angular = lumped_angular
+
+        if mode_mass is None and lumped_mass is not None:
+            self.mode_mass = lumped_mass
+        if self.mode_coupling_linear is None:
+            self.mode_coupling_linear = lumped_linear
+        if self.mode_coupling_angular is None:
+            self.mode_coupling_angular = lumped_angular
 
     @property
     def mode_count(self) -> int:
@@ -177,23 +183,25 @@ class ModalBasis:
         return np.array(array, dtype=np.float32, copy=True)
 
     @staticmethod
-    def _lumped_inertia_couplings(
+    def _lumped_reduced_inertia(
         points: np.ndarray,
         phi: np.ndarray,
         sample_mass: np.ndarray,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Return lumped translation and angular inertia coupling integrals.
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return lumped modal mass and the linear/angular coupling integrals.
 
+        ``mass[i] = sum_s mass_s |phi_i(x_s)|^2`` [kg], shape ``[mode_count]``;
         ``linear[i] = sum_s mass_s phi_i(x_s)`` [kg] and
         ``angular[i] = sum_s mass_s (phi_i(x_s) x x_s)`` [kg m], each shape
         ``[mode_count, 3]``.
         """
         mass = sample_mass.astype(np.float64)
         phi64 = phi.astype(np.float64)
+        modal_mass = np.einsum("s,smc,smc->m", mass, phi64, phi64)
         linear = np.einsum("s,smc->mc", mass, phi64)
         cross = np.cross(phi64, points.astype(np.float64)[:, None, :])
         angular = np.einsum("s,smc->mc", mass, cross)
-        return linear.astype(np.float32), angular.astype(np.float32)
+        return modal_mass.astype(np.float32), linear.astype(np.float32), angular.astype(np.float32)
 
     def copy(self) -> ModalBasis:
         """Return a deep copy of this basis."""
