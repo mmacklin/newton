@@ -18,6 +18,7 @@ from newton.examples.basic._reduced_elastic import (
 )
 from newton.examples.basic.example_basic_reduced_elastic_chair_stick_slip import Example as ChairStickSlipExample
 from newton.examples.basic.example_basic_reduced_elastic_dipper import Example as DipperExample
+from newton.examples.basic.example_basic_reduced_elastic_gravity_coupling import Example as GravityCouplingExample
 from newton.examples.basic.example_basic_reduced_elastic_gripper_contact import Example as GripperContactExample
 from newton.examples.basic.example_basic_reduced_elastic_matrix_rom import Example as MatrixROMExample
 from newton.examples.basic.example_basic_reduced_elastic_scraper_contact import Example as ScraperContactExample
@@ -1233,6 +1234,44 @@ def test_elastic_modal_implicit_solution_vbd(test, device):
     np.testing.assert_allclose(state_1.joint_qd.numpy()[qd_start + 6], v_expected, rtol=1.0e-6, atol=1.0e-7)
 
 
+def test_elastic_gravity_modal_force(test, device):
+    # A kinematic frame does not free-fall (a_R = 0), isolating the gravity
+    # coupling Q = S . g_local. One implicit step from rest then solves
+    # (K + M/dt^2) q = Q for a single uncoupled mode.
+    g = 9.81
+    stiffness = 18.0
+    dt = 0.01
+    basis = newton.ModalBasis(
+        sample_points=[[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        sample_phi=[[[0.0, 0.0, 1.0]], [[0.0, 0.0, 1.0]]],  # one uniform +z mode
+        sample_mass=[1.0, 1.0],
+        mode_stiffness=[stiffness],
+        mode_damping=[0.0],
+    )
+    builder = newton.ModelBuilder(gravity=-g)  # g_world = (0, 0, -g)
+    body = builder.add_body_elastic(
+        mass=1.0, inertia=_identity_inertia(), modal_basis=basis, mode_q=[0.0], mode_qd=[0.0], is_kinematic=True
+    )
+    builder.add_shape_box(body, hx=0.05, hy=0.05, hz=0.05)
+    builder.color()
+    model = builder.finalize(device=device)
+
+    state_0 = model.state()
+    state_1 = model.state()
+    control = model.control()
+    owner_joint = int(model.elastic_joint.numpy()[0])
+    q_start = int(model.joint_q_start.numpy()[owner_joint])
+
+    solver = newton.solvers.SolverVBD(model, iterations=16)
+    solver.step(state_0, state_1, control, None, dt)
+
+    coupling_z = 2.0  # S_z = sum_s m_s phi_z = 1 + 1
+    modal_mass = 2.0  # derived: sum_s m_s |phi|^2
+    modal_force = coupling_z * (-g)  # S . g_local
+    q_expected = modal_force / (stiffness + modal_mass / dt**2)
+    np.testing.assert_allclose(state_1.joint_q.numpy()[q_start + 7], q_expected, rtol=1.0e-4, atol=1.0e-9)
+
+
 def test_vbd_revolute_uses_elastic_endpoint(test, device):
     eta = 0.2
     rest_anchor = -0.5
@@ -1690,6 +1729,16 @@ def test_dipper_arm_example(test, device):
         example.test_final()
 
 
+def test_gravity_coupling_example(test, device):
+    with wp.ScopedDevice(device):
+        viewer = newton.viewer.ViewerNull()
+        example = GravityCouplingExample(viewer, None)
+        for _ in range(120):
+            example.step()
+            example.render()
+        example.test_final()
+
+
 def _run_reduced_elastic_contact_example(example_cls, frame_count: int, device):
     with wp.ScopedDevice(device):
         viewer = newton.viewer.ViewerNull()
@@ -1794,6 +1843,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_elastic_mode_coupling_arrays_merge",
         test_elastic_mode_coupling_arrays_merge,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_gravity_modal_force",
+        test_elastic_gravity_modal_force,
         devices=[device],
     )
     add_function_test(TestReducedElasticBody, "test_elastic_link_layout", test_elastic_link_layout, devices=[device])
@@ -1970,6 +2025,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_dipper_arm_example",
         test_dipper_arm_example,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_gravity_coupling_example",
+        test_gravity_coupling_example,
         devices=[device],
     )
     if wp.get_device(device).is_cuda:
