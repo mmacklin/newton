@@ -63,6 +63,7 @@ from .particle_vbd_kernels import (
 )
 from .reduced_elastic_kernels import (
     _NUM_ELASTIC_CONTACT_THREADS_PER_BODY,
+    accumulate_elastic_frame_coupling,
     assemble_elastic_contacts,
     assemble_elastic_joints,
     copy_body_frame_to_elastic_joint,
@@ -2258,6 +2259,33 @@ class SolverVBD(SolverBase):
         self.body_hessian_aa.zero_()
         self.body_hessian_al.zero_()
         self.body_hessian_ll.zero_()
+
+        if getattr(model, "elastic_body_count", 0) > 0:
+            wp.launch(
+                kernel=accumulate_elastic_frame_coupling,
+                dim=model.elastic_body_count,
+                inputs=[
+                    dt,
+                    model.elastic_body,
+                    model.elastic_joint,
+                    model.elastic_mode_start,
+                    model.elastic_mode_count,
+                    model.elastic_mode_coupling_linear,
+                    model.elastic_mode_coupling_angular,
+                    state_in.body_q,
+                    model.body_com,
+                    model.joint_q_start,
+                    model.joint_qd_start,
+                    state_out.joint_q,
+                    state_in.joint_q,
+                    state_in.joint_qd,
+                ],
+                outputs=[
+                    self.body_forces,
+                    self.body_torques,
+                ],
+                device=self.device,
+            )
 
         body_color_groups = model.body_color_groups
 
