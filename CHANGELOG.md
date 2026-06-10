@@ -15,11 +15,13 @@
 - Add `ModalBasis` floating-frame inertia coupling integrals (`sample_mass`, `mode_coupling_linear`, `mode_coupling_angular`, `mode_coupling_centrifugal`, `mode_coupling_coriolis`), computed exactly by `ModalGeneratorFEM` and by lumped quadrature from per-sample masses; `mode_mass` is now optional and derived from `sample_mass` when omitted
 - Add floating-frame gravity and translational-acceleration coupling for reduced elastic modes in `SolverVBD` (modal force `S·(g − a)`), so a basis with per-sample masses sags under gravity and is excited by base motion
 - Add floating-frame rotational coupling for reduced elastic modes in `SolverVBD` (Euler, centrifugal, and Coriolis modal forces), so a basis with per-sample masses responds to angular acceleration and steady rotation of its frame
+- Add the reduced elastic modal-to-frame inertia coupling in `SolverVBD` (the back-reaction force and matching moment), so a free-floating elastic body's modal vibration conserves linear and angular momentum
 - Add a reduced elastic gravity coupling example contrasting a coupled and an uncoupled cantilever under self-weight
 - Add a reduced elastic base excitation example contrasting a coupled and an uncoupled cantilever on a vertically oscillating base
 - Add a reduced elastic base rotation example demonstrating the floating-frame rotational (Euler) coupling and its invariance to reference-frame placement
 - Add a reduced elastic centrifugal example where a spinning hub stretches a coupled beam through an axial mode while an uncoupled beam stays rigid
 - Add a reduced elastic Coriolis example where a spinning hub precesses a coupled beam's plucked bending mode into the perpendicular direction while an uncoupled beam keeps swinging in its original plane
+- Add a reduced elastic frame coupling example where a coupled free-floating beam recoils against its plucked bump mode to keep its center of mass fixed while an uncoupled beam lets the center of mass slosh
 - Add a reduced elastic cantilever vibration example with finite modal mass dynamics
 - Add a reduced elastic prismatic compression example with Poisson bulging and parent rotation validation
 - Add reduced elastic crank-slider, Watt linkage, and bell-crank examples with analytic geometry checks

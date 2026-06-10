@@ -26,6 +26,7 @@ from newton.examples.basic.example_basic_reduced_elastic_centrifugal import Exam
 from newton.examples.basic.example_basic_reduced_elastic_chair_stick_slip import Example as ChairStickSlipExample
 from newton.examples.basic.example_basic_reduced_elastic_coriolis import Example as CoriolisExample
 from newton.examples.basic.example_basic_reduced_elastic_dipper import Example as DipperExample
+from newton.examples.basic.example_basic_reduced_elastic_frame_coupling import Example as FrameCouplingExample
 from newton.examples.basic.example_basic_reduced_elastic_gravity_coupling import Example as GravityCouplingExample
 from newton.examples.basic.example_basic_reduced_elastic_gripper_contact import Example as GripperContactExample
 from newton.examples.basic.example_basic_reduced_elastic_matrix_rom import Example as MatrixROMExample
@@ -1508,6 +1509,121 @@ def test_elastic_coriolis_modal_force(test, device):
     test.assertGreater(spinning, 10.0 * still)
 
 
+def test_elastic_frame_coupling_conserves_com(test, device):
+    total_mass = 1.0
+    stiffness = 50.0
+    pluck = 0.1
+    n = 21
+    length = 1.0
+    xs = np.linspace(-0.5 * length, 0.5 * length, n, dtype=np.float32)
+    sample_points = np.column_stack([xs, np.zeros(n), np.zeros(n)]).astype(np.float32)
+    sample_phi = np.zeros((n, 1, 3), dtype=np.float32)
+    sample_phi[:, 0, 2] = 1.0 - (2.0 * xs / length) ** 2
+    basis = newton.ModalBasis(
+        sample_points=sample_points,
+        sample_phi=sample_phi,
+        sample_mass=np.full(n, total_mass / n, dtype=np.float32),
+        mode_stiffness=[stiffness],
+        mode_damping=[0.0],
+    )
+    com_factor = float(basis.mode_coupling_linear[0][2]) / total_mass
+    builder = newton.ModelBuilder(gravity=0.0)
+    beam = builder.add_body_elastic(
+        xform=wp.transform_identity(),
+        com=wp.vec3(0.0, 0.0, 0.0),
+        mass=total_mass,
+        inertia=_identity_inertia(),
+        mode_q=[pluck],
+        modal_basis=basis,
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+    state_0 = model.state()
+    state_1 = model.state()
+    control = model.control()
+    q_start, _ = _elastic_free_joint_starts(model, beam)
+    frame_z_index = q_start + 2
+    mode_index = q_start + 7
+
+    solver = newton.solvers.SolverVBD(model, iterations=24)
+    dt = 1.0 / 240.0
+
+    def frame_and_com():
+        jq = state_0.joint_q.numpy()
+        frame_z = float(jq[frame_z_index])
+        return frame_z, frame_z + com_factor * float(jq[mode_index])
+
+    frame_z0, com0 = frame_and_com()
+    max_com_drift = 0.0
+    max_frame_move = 0.0
+    for _ in range(150):
+        solver.step(state_0, state_1, control, None, dt)
+        state_0, state_1 = state_1, state_0
+        frame_z, com = frame_and_com()
+        max_com_drift = max(max_com_drift, abs(com - com0))
+        max_frame_move = max(max_frame_move, abs(frame_z - frame_z0))
+
+    test.assertGreater(max_frame_move, 0.05)
+    test.assertLess(max_com_drift, 0.01 * max_frame_move)
+
+
+def test_elastic_frame_coupling_conserves_angular_momentum(test, device):
+    total_mass = 1.0
+    stiffness = 10.0
+    pluck = 0.1
+    inertia_yy = 0.3
+    n = 11
+    length = 1.0
+    xs = np.linspace(-0.5 * length, 0.5 * length, n, dtype=np.float32)
+    sample_points = np.column_stack([xs, np.zeros(n), np.zeros(n)]).astype(np.float32)
+    sample_phi = np.zeros((n, 1, 3), dtype=np.float32)
+    sample_phi[:, 0, 2] = xs / length
+    basis = newton.ModalBasis(
+        sample_points=sample_points,
+        sample_phi=sample_phi,
+        sample_mass=np.full(n, total_mass / n, dtype=np.float32),
+        mode_stiffness=[stiffness],
+        mode_damping=[0.0],
+    )
+    angular_y = float(basis.mode_coupling_angular[0][1])
+    builder = newton.ModelBuilder(gravity=0.0)
+    beam = builder.add_body_elastic(
+        xform=wp.transform_identity(),
+        com=wp.vec3(0.0, 0.0, 0.0),
+        mass=total_mass,
+        inertia=wp.mat33(inertia_yy, 0.0, 0.0, 0.0, inertia_yy, 0.0, 0.0, 0.0, inertia_yy),
+        mode_q=[pluck],
+        modal_basis=basis,
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+    state_0 = model.state()
+    state_1 = model.state()
+    control = model.control()
+    _, qd_start = _elastic_free_joint_starts(model, beam)
+    frame_wy_index = qd_start + 4
+    mode_vel_index = qd_start + 6
+
+    solver = newton.solvers.SolverVBD(model, iterations=24)
+    dt = 1.0 / 240.0
+    max_total_h = 0.0
+    max_frame_spin = 0.0
+    modal_h_scale = 0.0
+    for _ in range(150):
+        solver.step(state_0, state_1, control, None, dt)
+        state_0, state_1 = state_1, state_0
+        jqd = state_0.joint_qd.numpy()
+        frame_wy = float(jqd[frame_wy_index])
+        mode_vel = float(jqd[mode_vel_index])
+        total_h = inertia_yy * frame_wy - angular_y * mode_vel
+        max_total_h = max(max_total_h, abs(total_h))
+        max_frame_spin = max(max_frame_spin, abs(frame_wy))
+        modal_h_scale = max(modal_h_scale, abs(angular_y * mode_vel))
+
+    test.assertGreater(max_frame_spin, 0.05)
+    test.assertLess(max_total_h, 0.02 * max(modal_h_scale, 1.0e-9))
+
+
 def test_vbd_revolute_uses_elastic_endpoint(test, device):
     eta = 0.2
     rest_anchor = -0.5
@@ -2015,6 +2131,16 @@ def test_coriolis_example(test, device):
         example.test_final()
 
 
+def test_frame_coupling_example(test, device):
+    with wp.ScopedDevice(device):
+        viewer = newton.viewer.ViewerNull()
+        example = FrameCouplingExample(viewer, None)
+        for _ in range(180):
+            example.step()
+            example.render()
+        example.test_final()
+
+
 def _run_reduced_elastic_contact_example(example_cls, frame_count: int, device):
     with wp.ScopedDevice(device):
         viewer = newton.viewer.ViewerNull()
@@ -2155,6 +2281,18 @@ for device in devices:
         TestReducedElasticBody,
         "test_elastic_coriolis_modal_force",
         test_elastic_coriolis_modal_force,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_frame_coupling_conserves_com",
+        test_elastic_frame_coupling_conserves_com,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_frame_coupling_conserves_angular_momentum",
+        test_elastic_frame_coupling_conserves_angular_momentum,
         devices=[device],
     )
     add_function_test(TestReducedElasticBody, "test_elastic_link_layout", test_elastic_link_layout, devices=[device])
@@ -2361,6 +2499,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_coriolis_example",
         test_coriolis_example,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_frame_coupling_example",
+        test_frame_coupling_example,
         devices=[device],
     )
     if wp.get_device(device).is_cuda:

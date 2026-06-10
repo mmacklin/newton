@@ -576,6 +576,49 @@ def assemble_elastic_joints(
 
 
 @wp.kernel
+def accumulate_elastic_frame_coupling(
+    dt: float,
+    elastic_body: wp.array(dtype=wp.int32),
+    elastic_joint: wp.array(dtype=wp.int32),
+    elastic_mode_start: wp.array(dtype=wp.int32),
+    elastic_mode_count: wp.array(dtype=wp.int32),
+    elastic_mode_coupling_linear: wp.array(dtype=wp.vec3),
+    elastic_mode_coupling_angular: wp.array(dtype=wp.vec3),
+    body_q: wp.array(dtype=wp.transform),
+    body_com: wp.array(dtype=wp.vec3),
+    joint_q_start: wp.array(dtype=wp.int32),
+    joint_qd_start: wp.array(dtype=wp.int32),
+    joint_q: wp.array(dtype=float),
+    joint_q_prev: wp.array(dtype=float),
+    joint_qd_prev: wp.array(dtype=float),
+    body_forces: wp.array(dtype=wp.vec3),
+    body_torques: wp.array(dtype=wp.vec3),
+):
+    elastic_index = wp.tid()
+    body = elastic_body[elastic_index]
+    owner_joint = elastic_joint[elastic_index]
+    q_start = joint_q_start[owner_joint] + 7
+    qd_start = joint_qd_start[owner_joint] + 6
+    mode_start = elastic_mode_start[elastic_index]
+    mode_count = elastic_mode_count[elastic_index]
+    inv_dt_sq = 1.0 / (dt * dt)
+
+    rot = wp.transform_get_rotation(body_q[body])
+    com = body_com[body]
+
+    s_qdd = wp.vec3(0.0, 0.0, 0.0)
+    sang_qdd = wp.vec3(0.0, 0.0, 0.0)
+    for i in range(mode_count):
+        mode_data = mode_start + i
+        qddot = (joint_q[q_start + i] - joint_q_prev[q_start + i] - dt * joint_qd_prev[qd_start + i]) * inv_dt_sq
+        s_qdd = s_qdd + elastic_mode_coupling_linear[mode_data] * qddot
+        sang_qdd = sang_qdd + elastic_mode_coupling_angular[mode_data] * qddot
+
+    wp.atomic_add(body_forces, body, wp.quat_rotate(rot, -s_qdd))
+    wp.atomic_add(body_torques, body, wp.quat_rotate(rot, sang_qdd + wp.cross(com, s_qdd)))
+
+
+@wp.kernel
 def assemble_elastic_contacts(
     dt: float,
     elastic_body: wp.array(dtype=wp.int32),
