@@ -1578,6 +1578,8 @@ class SolverVBD(SolverBase):
                 model.elastic_mode_damping,
                 model.elastic_mode_coupling_linear,
                 model.elastic_mode_coupling_angular,
+                model.elastic_mode_coupling_centrifugal,
+                model.elastic_mode_coupling_coriolis,
                 model.elastic_endpoint_count,
                 model.elastic_endpoint_joint,
                 model.elastic_endpoint_side,

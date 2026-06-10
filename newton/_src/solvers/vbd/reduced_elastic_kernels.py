@@ -327,6 +327,8 @@ def assemble_elastic_joints(
     elastic_mode_damping: wp.array(dtype=float),
     elastic_mode_coupling_linear: wp.array(dtype=wp.vec3),
     elastic_mode_coupling_angular: wp.array(dtype=wp.vec3),
+    elastic_mode_coupling_centrifugal: wp.array(dtype=wp.mat33),
+    elastic_mode_coupling_coriolis: wp.array(dtype=wp.vec3),
     elastic_endpoint_count: int,
     elastic_endpoint_joint: wp.array(dtype=wp.int32),
     elastic_endpoint_side: wp.array(dtype=wp.int32),
@@ -366,6 +368,7 @@ def assemble_elastic_joints(
     owner_joint = elastic_joint[elastic_index]
     q_start = joint_q_start[owner_joint] + 7
     qd_start = joint_qd_start[owner_joint] + 6
+    body_qd_start = joint_qd_start[owner_joint]
     mode_start = elastic_mode_start[elastic_index]
     mode_count = elastic_mode_count[elastic_index]
     max_modes = elastic_max_mode_count
@@ -375,8 +378,7 @@ def assemble_elastic_joints(
     body_rot = wp.transform_get_rotation(body_q[body])
     body_R = wp.quat_to_matrix(body_rot)
     body_R_T = wp.transpose(body_R)
-    body_g = body_R_T * gravity[wp.max(body_world[body], 0)]
-    body_qd_start = joint_qd_start[owner_joint]
+    g_local = body_R_T * gravity[wp.max(body_world[body], 0)]
 
     com_v_prev = wp.vec3(
         joint_qd_prev[body_qd_start + 0], joint_qd_prev[body_qd_start + 1], joint_qd_prev[body_qd_start + 2]
@@ -387,9 +389,12 @@ def assemble_elastic_joints(
     com_offset = wp.quat_rotate(wp.transform_get_rotation(body_q_prev[body]), body_com[body])
     origin_v_prev = com_v_prev - wp.cross(omega_prev, com_offset)
     origin_v = (wp.transform_get_translation(body_q[body]) - wp.transform_get_translation(body_q_prev[body])) * inv_dt
-    body_a = body_R_T * ((origin_v - origin_v_prev) * inv_dt)
+    a_local = body_R_T * ((origin_v - origin_v_prev) * inv_dt)
     omega = quat_velocity(body_rot, wp.transform_get_rotation(body_q_prev[body]), dt)
-    body_alpha = body_R_T * ((omega - omega_prev) * inv_dt)
+    alpha_local = body_R_T * ((omega - omega_prev) * inv_dt)
+    omega_local = body_R_T * omega
+    omega_skew = wp.skew(omega_local)
+    omega_skew_sq = omega_skew * omega_skew
 
     block_vec_start = elastic_index * max_modes
     block_mat_start = elastic_index * max_modes * max_modes
@@ -411,10 +416,18 @@ def assemble_elastic_joints(
         mass = elastic_mode_mass[mode_data]
         stiffness = elastic_mode_stiffness[mode_data]
         damping = elastic_mode_damping[mode_data]
+        coriolis = wp.vec3(0.0, 0.0, 0.0)
+        for j in range(mode_count):
+            coriolis = (
+                coriolis
+                + elastic_mode_coupling_coriolis[block_mat_start + mode * max_modes + j] * (joint_qd_prev[qd_start + j])
+            )
         force = (
             joint_f[qd_idx]
-            + wp.dot(elastic_mode_coupling_linear[mode_data], body_g - body_a)
-            + wp.dot(elastic_mode_coupling_angular[mode_data], body_alpha)
+            + wp.dot(elastic_mode_coupling_linear[mode_data], g_local - a_local)
+            + wp.dot(elastic_mode_coupling_angular[mode_data], alpha_local)
+            - wp.ddot(omega_skew_sq, elastic_mode_coupling_centrifugal[mode_data])
+            - 2.0 * wp.dot(omega_local, coriolis)
         )
 
         h = stiffness

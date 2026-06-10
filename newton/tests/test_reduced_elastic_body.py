@@ -22,7 +22,9 @@ from newton.examples.basic._reduced_elastic_contact import (
 )
 from newton.examples.basic.example_basic_reduced_elastic_base_excitation import Example as BaseExcitationExample
 from newton.examples.basic.example_basic_reduced_elastic_base_rotation import Example as BaseRotationExample
+from newton.examples.basic.example_basic_reduced_elastic_centrifugal import Example as CentrifugalExample
 from newton.examples.basic.example_basic_reduced_elastic_chair_stick_slip import Example as ChairStickSlipExample
+from newton.examples.basic.example_basic_reduced_elastic_coriolis import Example as CoriolisExample
 from newton.examples.basic.example_basic_reduced_elastic_dipper import Example as DipperExample
 from newton.examples.basic.example_basic_reduced_elastic_gravity_coupling import Example as GravityCouplingExample
 from newton.examples.basic.example_basic_reduced_elastic_gripper_contact import Example as GripperContactExample
@@ -324,7 +326,6 @@ def test_modal_generator_fem_matrix_rom(test, device):
 
 def test_modal_basis_lumped_inertia_coupling(test, device):
     points = np.array([[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=np.float32)
-    # mode 0: uniform +z translation; mode 1: phi_z = x (antisymmetric about origin).
     sample_phi = np.array(
         [
             [[0.0, 0.0, 1.0], [0.0, 0.0, -1.0]],
@@ -334,9 +335,7 @@ def test_modal_basis_lumped_inertia_coupling(test, device):
     )
     basis = newton.ModalBasis(sample_points=points, sample_phi=sample_phi, sample_mass=[1.0, 1.0])
 
-    # S_i = sum_s mass_s phi_i(x_s): mode 0 sums to 2 in z, mode 1 cancels.
     np.testing.assert_allclose(basis.mode_coupling_linear, [[0.0, 0.0, 2.0], [0.0, 0.0, 0.0]], atol=1.0e-6)
-    # sum_s mass_s (phi_i(x_s) x x_s): mode 0 cancels, mode 1 sums to 2 about y.
     np.testing.assert_allclose(basis.mode_coupling_angular, [[0.0, 0.0, 0.0], [0.0, 2.0, 0.0]], atol=1.0e-6)
 
 
@@ -348,7 +347,6 @@ def test_modal_basis_coupling_unavailable_without_mass(test, device):
     test.assertIsNone(basis.sample_mass)
     test.assertIsNone(basis.mode_coupling_linear)
     test.assertIsNone(basis.mode_coupling_angular)
-    # With neither mass source, mode_mass stays the unit default (an array, not None).
     test.assertIsNotNone(basis.mode_mass)
     np.testing.assert_allclose(basis.mode_mass, [1.0], atol=1.0e-7)
 
@@ -361,11 +359,8 @@ def test_modal_basis_coupling_explicit_override(test, device):
         sample_mass=[1.0, 1.0],
         mode_coupling_linear=explicit,
     )
-    # An explicit integral is preserved, not overwritten by lumped quadrature.
     np.testing.assert_allclose(basis.mode_coupling_linear, explicit, atol=1.0e-7)
-    # The unspecified angular coupling is still filled from sample_mass.
     test.assertIsNotNone(basis.mode_coupling_angular)
-    # Wrong trailing dimension is rejected.
     with test.assertRaises(ValueError):
         newton.ModalBasis(
             sample_points=[[0.0, 0.0, 0.0]],
@@ -391,10 +386,8 @@ def test_modal_generator_fem_inertia_coupling(test, device):
         mode_count=3,
     ).build()
 
-    # The exact-from-M integrals must equal the lumped definition for a diagonal
-    # (lumped) mass matrix with samples at the nodes.
-    node_mass = np.array([1.0, 2.0])  # isotropic per-node mass from the diagonal
-    phi_nodes = np.stack([basis.sample_value(0), basis.sample_value(1)]).astype(np.float64)  # [node, mode, 3]
+    node_mass = np.array([1.0, 2.0])
+    phi_nodes = np.stack([basis.sample_value(0), basis.sample_value(1)]).astype(np.float64)
     expected_linear = np.einsum("j,jmc->mc", node_mass, phi_nodes)
     expected_angular = np.einsum("j,jmc->mc", node_mass, np.cross(phi_nodes, nodes[:, None, :].astype(np.float64)))
     np.testing.assert_allclose(basis.mode_coupling_linear, expected_linear, atol=1.0e-5)
@@ -412,7 +405,6 @@ def test_modal_generator_pod_inertia_coupling(test, device):
     ).build()
 
     test.assertIsNotNone(basis.mode_coupling_linear)
-    # Mass is lumped uniformly: total_mass / sample_count = 1.0 per sample.
     sample_mass = np.full(2, 1.0)
     expected_linear = np.einsum("s,smc->mc", sample_mass, basis.sample_phi.astype(np.float64))
     np.testing.assert_allclose(basis.mode_coupling_linear, expected_linear, atol=1.0e-6)
@@ -427,12 +419,10 @@ def test_modal_basis_mode_mass_from_sample_mass(test, device):
         ],
         sample_mass=[1.0, 1.0],
     )
-    # mode_mass omitted -> derived as sum_s mass_s |phi_i(x_s)|^2 = 1 + 1 = 2.
     np.testing.assert_allclose(basis.mode_mass, [2.0, 2.0], atol=1.0e-6)
 
 
 def test_modal_basis_mode_mass_explicit_wins(test, device):
-    # An explicit mode_mass takes precedence over the sample_mass-derived value.
     basis = newton.ModalBasis(
         sample_points=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
         sample_phi=[[[0.0, 0.0, 1.0]], [[0.0, 0.0, 1.0]]],
@@ -450,7 +440,6 @@ def test_elastic_mode_coupling_arrays(test, device):
     )
     builder = newton.ModelBuilder(gravity=0.0)
     builder.add_body_elastic(mass=1.0, inertia=_identity_inertia(), modal_basis=basis, label="coupled")
-    # A body without a basis has no coupling data -> zero rows.
     builder.add_body_elastic(
         mass=1.0, inertia=_identity_inertia(), mode_count=1, mode_mass=[1.0], mode_stiffness=[1.0], label="plain"
     )
@@ -463,6 +452,31 @@ def test_elastic_mode_coupling_arrays(test, device):
     np.testing.assert_allclose(
         model.elastic_mode_coupling_angular.numpy(), [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], atol=1.0e-6
     )
+    np.testing.assert_allclose(model.elastic_mode_coupling_centrifugal.numpy(), np.zeros((2, 3, 3)), atol=1.0e-6)
+    np.testing.assert_allclose(model.elastic_mode_coupling_coriolis.numpy(), np.zeros((2, 3)), atol=1.0e-6)
+
+
+def test_elastic_coriolis_array_padding(test, device):
+    basis_a = newton.ModalBasis(
+        sample_points=[[1.0, 0.0, 0.0]],
+        sample_phi=[[[0.0, 0.0, 1.0]]],
+        sample_mass=[1.0],
+    )
+    basis_b = newton.ModalBasis(
+        sample_points=[[1.0, 0.0, 0.0]],
+        sample_phi=[[[0.0, 0.0, 1.0], [0.0, 1.0, 0.0]]],
+        sample_mass=[2.0],
+    )
+    builder = newton.ModelBuilder(gravity=0.0)
+    builder.add_body_elastic(mass=1.0, inertia=_identity_inertia(), modal_basis=basis_a, label="a")
+    builder.add_body_elastic(mass=1.0, inertia=_identity_inertia(), modal_basis=basis_b, label="b")
+    builder.color()
+    model = builder.finalize(device=device)
+
+    expected = np.zeros((8, 3), dtype=np.float32)
+    expected[5] = [2.0, 0.0, 0.0]
+    expected[6] = [-2.0, 0.0, 0.0]
+    np.testing.assert_allclose(model.elastic_mode_coupling_coriolis.numpy(), expected, atol=1.0e-6)
 
 
 def test_elastic_mode_coupling_arrays_merge(test, device):
@@ -479,7 +493,6 @@ def test_elastic_mode_coupling_arrays_merge(test, device):
     main.color()
     model = main.finalize(device=device)
 
-    # add_builder must carry the coupling rows in lockstep with the other mode arrays.
     np.testing.assert_allclose(
         model.elastic_mode_coupling_linear.numpy(), [[0.0, 0.0, 2.0], [0.0, 0.0, 2.0]], atol=1.0e-6
     )
@@ -1241,20 +1254,17 @@ def test_elastic_modal_implicit_solution_vbd(test, device):
 
 
 def test_elastic_gravity_modal_force(test, device):
-    # A kinematic frame does not free-fall (a_R = 0), isolating the gravity
-    # coupling Q = S . g_local. One implicit step from rest then solves
-    # (K + M/dt^2) q = Q for a single uncoupled mode.
     g = 9.81
     stiffness = 18.0
     dt = 0.01
     basis = newton.ModalBasis(
         sample_points=[[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
-        sample_phi=[[[0.0, 0.0, 1.0]], [[0.0, 0.0, 1.0]]],  # one uniform +z mode
+        sample_phi=[[[0.0, 0.0, 1.0]], [[0.0, 0.0, 1.0]]],
         sample_mass=[1.0, 1.0],
         mode_stiffness=[stiffness],
         mode_damping=[0.0],
     )
-    builder = newton.ModelBuilder(gravity=-g)  # g_world = (0, 0, -g)
+    builder = newton.ModelBuilder(gravity=-g)
     body = builder.add_body_elastic(
         mass=1.0, inertia=_identity_inertia(), modal_basis=basis, mode_q=[0.0], mode_qd=[0.0], is_kinematic=True
     )
@@ -1271,17 +1281,14 @@ def test_elastic_gravity_modal_force(test, device):
     solver = newton.solvers.SolverVBD(model, iterations=16)
     solver.step(state_0, state_1, control, None, dt)
 
-    coupling_z = 2.0  # S_z = sum_s m_s phi_z = 1 + 1
-    modal_mass = 2.0  # derived: sum_s m_s |phi|^2
-    modal_force = coupling_z * (-g)  # S . g_local
+    coupling_z = 2.0
+    modal_mass = 2.0
+    modal_force = coupling_z * (-g)
     q_expected = modal_force / (stiffness + modal_mass / dt**2)
     np.testing.assert_allclose(state_1.joint_q.numpy()[q_start + 7], q_expected, rtol=1.0e-4, atol=1.0e-9)
 
 
 def test_elastic_free_fall_no_modal_force(test, device):
-    # A free-falling frame has a_R = g, so the gravito-inertial modal force
-    # S . (g_local - a_R_local) cancels (equivalence principle) and the mode
-    # stays undeflected. Fails with the gravity term alone (no a_R coupling).
     g = 9.81
     dt = 0.005
     basis = newton.ModalBasis(
@@ -1315,16 +1322,12 @@ def test_elastic_free_fall_no_modal_force(test, device):
 
 
 def test_elastic_euler_modal_force(test, device):
-    # A cantilever clamped to a base that angularly accelerates about y (axis
-    # through the clamp, so a_R = 0) is excited purely through the Euler term
-    # S_ang . omega_dot. A symmetric mode would not respond; the cantilever
-    # bending mode has nonzero angular coupling and oscillates.
     length = 0.8
     n = 17
     xs = np.linspace(0.0, length, n, dtype=np.float32)
     sample_points = np.column_stack([xs, np.zeros(n), np.zeros(n)]).astype(np.float32)
     sample_phi = np.zeros((n, 1, 3), dtype=np.float32)
-    sample_phi[:, 0, 2] = (xs * xs * (3.0 * length - xs)) / (2.0 * length**3)  # cantilever cubic, phi(0)=0
+    sample_phi[:, 0, 2] = (xs * xs * (3.0 * length - xs)) / (2.0 * length**3)
     basis = newton.ModalBasis(
         sample_points=sample_points,
         sample_phi=sample_phi,
@@ -1379,6 +1382,130 @@ def test_elastic_euler_modal_force(test, device):
         max_abs_q = max(max_abs_q, abs(float(state_0.joint_q.numpy()[q_index])))
         t += dt
     test.assertGreater(max_abs_q, 5.0e-3)
+
+
+def _elastic_free_joint_starts(model, body):
+    joint_parent = model.joint_parent.numpy()
+    joint_child = model.joint_child.numpy()
+    for j in range(len(joint_child)):
+        if int(joint_child[j]) == body and int(joint_parent[j]) == -1:
+            return int(model.joint_q_start.numpy()[j]), int(model.joint_qd_start.numpy()[j])
+    raise RuntimeError("no free joint")
+
+
+def test_elastic_centrifugal_modal_force(test, device):
+    length = 1.0
+    n = 21
+    xs = np.linspace(0.0, length, n, dtype=np.float32)
+    sample_points = np.column_stack([xs, np.zeros(n), np.zeros(n)]).astype(np.float32)
+    sample_phi = np.zeros((n, 1, 3), dtype=np.float32)
+    sample_phi[:, 0, 0] = xs / length
+    stiffness = 50.0
+    basis = newton.ModalBasis(
+        sample_points=sample_points,
+        sample_phi=sample_phi,
+        sample_mass=np.full(n, 1.0 / n, dtype=np.float32),
+        mode_stiffness=[stiffness],
+        mode_damping=[3.0],
+    )
+    m_xx = float(basis.mode_coupling_centrifugal[0][0, 0])
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    base = builder.add_body(xform=wp.transform_identity(), mass=2.0, inertia=_identity_inertia(), is_kinematic=True)
+    beam = builder.add_body_elastic(
+        xform=wp.transform_identity(), mass=0.2, inertia=_identity_inertia(), modal_basis=basis
+    )
+    builder.add_joint_fixed(
+        parent=base, child=beam, parent_xform=wp.transform_identity(), child_xform=wp.transform_identity()
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+
+    state_0 = model.state()
+    state_1 = model.state()
+    control = model.control()
+    base_q_start, base_qd_start = _elastic_free_joint_starts(model, base)
+    owner = int(model.elastic_joint.numpy()[0])
+    q_index = int(model.joint_q_start.numpy()[owner]) + 7
+
+    solver = newton.solvers.SolverVBD(model, iterations=24)
+    dt = 1.0 / 240.0
+    omega = 4.0
+    velocities = {base: (wp.vec3(0.0, 0.0, 0.0), wp.vec3(0.0, 0.0, omega))}
+    t = 0.0
+    for _ in range(600):
+        quat = wp.quat_from_axis_angle(wp.vec3(0.0, 0.0, 1.0), omega * t)
+        targets = {base: (wp.vec3(0.0, 0.0, 0.0), quat)}
+        apply_kinematic_targets(state_0, {base: base_q_start}, targets, velocities, {base: base_qd_start})
+        state_0.clear_forces()
+        solver.step(state_0, state_1, control, None, dt)
+        state_0, state_1 = state_1, state_0
+        t += dt
+
+    q_final = float(state_0.joint_q.numpy()[q_index])
+    expected = omega * omega * m_xx / stiffness
+    test.assertGreater(q_final, 0.0)
+    test.assertAlmostEqual(q_final, expected, delta=0.1 * expected)
+
+
+def test_elastic_coriolis_modal_force(test, device):
+    length = 1.0
+    n = 21
+    xs = np.linspace(0.0, length, n, dtype=np.float32)
+    sample_points = np.column_stack([xs, np.zeros(n), np.zeros(n)]).astype(np.float32)
+    sample_phi = np.zeros((n, 2, 3), dtype=np.float32)
+    sample_phi[:, 0, 2] = xs / length
+    sample_phi[:, 1, 1] = xs / length
+    basis = newton.ModalBasis(
+        sample_points=sample_points,
+        sample_phi=sample_phi,
+        sample_mass=np.full(n, 1.0 / n, dtype=np.float32),
+        mode_stiffness=[30.0, 30.0],
+        mode_damping=[0.0, 0.0],
+    )
+
+    def max_abs_mode0(omega):
+        builder = newton.ModelBuilder(gravity=0.0)
+        base = builder.add_body(xform=wp.transform_identity(), mass=2.0, inertia=_identity_inertia(), is_kinematic=True)
+        beam = builder.add_body_elastic(
+            xform=wp.transform_identity(),
+            mass=0.2,
+            inertia=_identity_inertia(),
+            modal_basis=basis,
+            mode_qd=[0.0, 1.0],
+        )
+        builder.add_joint_fixed(
+            parent=base, child=beam, parent_xform=wp.transform_identity(), child_xform=wp.transform_identity()
+        )
+        builder.color()
+        model = builder.finalize(device=device)
+        state_0 = model.state()
+        state_1 = model.state()
+        control = model.control()
+        base_q_start, base_qd_start = _elastic_free_joint_starts(model, base)
+        owner = int(model.elastic_joint.numpy()[0])
+        q0_index = int(model.joint_q_start.numpy()[owner]) + 7
+        solver = newton.solvers.SolverVBD(model, iterations=24)
+        dt = 1.0 / 240.0
+        velocities = {base: (wp.vec3(0.0, 0.0, 0.0), wp.vec3(omega, 0.0, 0.0))}
+        peak = 0.0
+        t = 0.0
+        for _ in range(500):
+            quat = wp.quat_from_axis_angle(wp.vec3(1.0, 0.0, 0.0), omega * t)
+            targets = {base: (wp.vec3(0.0, 0.0, 0.0), quat)}
+            apply_kinematic_targets(state_0, {base: base_q_start}, targets, velocities, {base: base_qd_start})
+            state_0.clear_forces()
+            solver.step(state_0, state_1, control, None, dt)
+            state_0, state_1 = state_1, state_0
+            peak = max(peak, abs(float(state_0.joint_q.numpy()[q0_index])))
+            t += dt
+        return peak
+
+    spinning = max_abs_mode0(6.0)
+    still = max_abs_mode0(0.0)
+    test.assertLess(still, 1.0e-3)
+    test.assertGreater(spinning, 1.0e-2)
+    test.assertGreater(spinning, 10.0 * still)
 
 
 def test_vbd_revolute_uses_elastic_endpoint(test, device):
@@ -1868,6 +1995,26 @@ def test_base_rotation_example(test, device):
         example.test_final()
 
 
+def test_centrifugal_example(test, device):
+    with wp.ScopedDevice(device):
+        viewer = newton.viewer.ViewerNull()
+        example = CentrifugalExample(viewer, None)
+        for _ in range(150):
+            example.step()
+            example.render()
+        example.test_final()
+
+
+def test_coriolis_example(test, device):
+    with wp.ScopedDevice(device):
+        viewer = newton.viewer.ViewerNull()
+        example = CoriolisExample(viewer, None)
+        for _ in range(180):
+            example.step()
+            example.render()
+        example.test_final()
+
+
 def _run_reduced_elastic_contact_example(example_cls, frame_count: int, device):
     with wp.ScopedDevice(device):
         viewer = newton.viewer.ViewerNull()
@@ -1970,6 +2117,12 @@ for device in devices:
     )
     add_function_test(
         TestReducedElasticBody,
+        "test_elastic_coriolis_array_padding",
+        test_elastic_coriolis_array_padding,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
         "test_elastic_mode_coupling_arrays_merge",
         test_elastic_mode_coupling_arrays_merge,
         devices=[device],
@@ -1990,6 +2143,18 @@ for device in devices:
         TestReducedElasticBody,
         "test_elastic_euler_modal_force",
         test_elastic_euler_modal_force,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_centrifugal_modal_force",
+        test_elastic_centrifugal_modal_force,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_coriolis_modal_force",
+        test_elastic_coriolis_modal_force,
         devices=[device],
     )
     add_function_test(TestReducedElasticBody, "test_elastic_link_layout", test_elastic_link_layout, devices=[device])
@@ -2184,6 +2349,18 @@ for device in devices:
         TestReducedElasticBody,
         "test_base_rotation_example",
         test_base_rotation_example,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_centrifugal_example",
+        test_centrifugal_example,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_coriolis_example",
+        test_coriolis_example,
         devices=[device],
     )
     if wp.get_device(device).is_cuda:
