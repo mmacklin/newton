@@ -2,35 +2,26 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ###########################################################################
-# Example Basic Reduced Elastic Base Rotation
+# Example Basic Reduced Elastic Centrifugal
 #
-# Demonstrates the floating-frame rotational (Euler) acceleration coupling
-# for reduced elastic bodies, and that it is invariant to the choice of
-# reference-frame origin. Three identical cantilevers occupying the same
-# world span are clamped to a kinematic base that oscillates in rotation
-# about the y axis. They share the same modal mass, stiffness, and mode
-# shape; only the placement of the body frame (and the inertia coupling
-# integrals computed about it) differs.
+# Demonstrates the floating-frame centrifugal coupling for reduced elastic
+# bodies: two identical beams are clamped to a kinematic hub that spins at a
+# constant rate about the vertical z axis, each carrying a single axial
+# (stretch) mode. They share the same modal mass, stiffness, and mode shape;
+# only the inertia coupling integrals differ.
 #
-#   - "coupled_clamp": the body frame sits at the clamp, on the rotation
-#     axis, so its origin only rotates and never translates. The
-#     translational coupling -S_lin . a stays near zero and the
-#     angular-acceleration term -S_ang . alpha alone bends the beam.
-#   - "coupled_mid": the body frame sits at the beam center, off the axis,
-#     so its origin swings. Here -S_lin . a and -S_ang . alpha both
-#     contribute -- but their sum reproduces the exact same physical
-#     deformation as "coupled_clamp", because the per-point acceleration is
-#     independent of how the frame is split. The two coupled beams track
-#     each other to within a few percent.
-#   - "uncoupled": no sample mass (all coupling integrals are zero), so it
-#     rides the base rigidly with no modal deformation.
+#   - The "coupled" beam's basis carries per-sample masses, so the steady
+#     rotation drives the mode through the centrifugal force -floor(omega)^2 . M
+#     and the beam stretches radially outward until stiffness balances it.
+#   - The "uncoupled" beam's basis has no sample mass (all coupling integrals
+#     are zero), so it spins rigidly with no stretch.
 #
-# As with the base-excitation example the clamp uses the cantilever tip
-# mode (phi = 0 at the clamp), so the joint reaction projects to zero on the
-# mode; the floating-frame inertia coupling is the only thing that bends the
-# beam.
+# Each beam's frame sits at its clamp on the spin axis, so the frame origin
+# only rotates (no translational acceleration), the spin is steady (no Euler
+# term), and a single mode has no Coriolis coupling -- leaving the centrifugal
+# term as the only thing that deforms the beam.
 #
-# Command: python -m newton.examples basic_reduced_elastic_base_rotation
+# Command: python -m newton.examples basic_reduced_elastic_centrifugal
 #
 ###########################################################################
 
@@ -41,19 +32,8 @@ import warp as wp
 
 import newton
 import newton.examples
-from newton.examples.basic._reduced_elastic import beam_render_sample_points
+from newton.examples.basic._reduced_elastic import beam_render_sample_points, poisson_axial_mode
 from newton.examples.basic._reduced_elastic_contact import apply_kinematic_targets
-
-
-def _cantilever_tip_mode(points: np.ndarray, length: float) -> np.ndarray:
-    points = np.asarray(points, dtype=np.float32)
-    s = np.clip(points[:, 0] + 0.5 * length, 0.0, length)
-    phi = (s * s * (3.0 * length - s)) / (2.0 * length**3)
-    slope = (3.0 * s * (2.0 * length - s)) / (2.0 * length**3)
-    out = np.zeros_like(points, dtype=np.float32)
-    out[:, 0] = -points[:, 2] * slope
-    out[:, 2] = phi
-    return out
 
 
 def _find_free_joint_q_start(model: newton.Model, body: int) -> tuple[int, int]:
@@ -95,10 +75,11 @@ class Example:
         self.hy = 0.04
         self.hz = 0.03
         self.base_height = 0.8
-        self.y_offset = 0.22
-        self.base_amplitude = 0.25
-        self.base_frequency = 1.5
+        self.z_gap = 0.18
+        self.spin_rate = 5.0
+        self.ramp_time = 1.0
         self.beam_mass = 1.0
+        self.poisson = 0.3
 
         centered_points = beam_render_sample_points(
             self.length,
@@ -106,30 +87,22 @@ class Example:
             self.hz,
             extra_points=((-0.5 * self.length, 0.0, 0.0), (0.5 * self.length, 0.0, 0.0)),
         )
-        phi = _cantilever_tip_mode(centered_points, self.length)
         clamp_points = centered_points + np.array([0.5 * self.length, 0.0, 0.0], dtype=np.float32)
+        phi = poisson_axial_mode(clamp_points, self.length, self.poisson)
 
-        sample_mass = np.full(centered_points.shape[0], self.beam_mass / centered_points.shape[0], dtype=np.float32)
+        sample_mass = np.full(clamp_points.shape[0], self.beam_mass / clamp_points.shape[0], dtype=np.float32)
         modal_mass = float(np.sum(sample_mass * np.sum(phi * phi, axis=1)))
         mode_stiffness = 60.0
-        mode_damping = 2.0 * 0.15 * math.sqrt(mode_stiffness * modal_mass)
+        mode_damping = 2.0 * 0.2 * math.sqrt(mode_stiffness * modal_mass)
 
         phi_3d = phi.reshape((-1, 1, 3))
-        coupled_clamp_basis = newton.ModalBasis(
+        coupled_basis = newton.ModalBasis(
             sample_points=clamp_points,
             sample_phi=phi_3d,
             sample_mass=sample_mass,
             mode_stiffness=[mode_stiffness],
             mode_damping=[mode_damping],
-            label="base_rotation_coupled_clamp_basis",
-        )
-        coupled_mid_basis = newton.ModalBasis(
-            sample_points=centered_points,
-            sample_phi=phi_3d,
-            sample_mass=sample_mass,
-            mode_stiffness=[mode_stiffness],
-            mode_damping=[mode_damping],
-            label="base_rotation_coupled_mid_basis",
+            label="centrifugal_coupled_basis",
         )
         uncoupled_basis = newton.ModalBasis(
             sample_points=clamp_points,
@@ -137,7 +110,7 @@ class Example:
             mode_mass=[modal_mass],
             mode_stiffness=[mode_stiffness],
             mode_damping=[mode_damping],
-            label="base_rotation_uncoupled_basis",
+            label="centrifugal_uncoupled_basis",
         )
 
         builder = newton.ModelBuilder(gravity=0.0)
@@ -154,29 +127,35 @@ class Example:
             mass=2.0,
             inertia=wp.mat33(0.05, 0.0, 0.0, 0.0, 0.05, 0.0, 0.0, 0.0, 0.05),
             is_kinematic=True,
-            label="rocking_base",
+            label="spinning_base",
         )
-        builder.add_shape_box(self.base, hx=0.05, hy=0.5 * self.length, hz=0.05, cfg=shape_cfg)
+        builder.add_shape_box(
+            self.base,
+            xform=wp.transform(wp.vec3(0.0, 0.0, 0.5 * self.z_gap), wp.quat_identity()),
+            hx=0.06,
+            hy=0.06,
+            hz=0.5 * self.z_gap + 0.04,
+            cfg=shape_cfg,
+        )
 
         half = 0.5 * self.length
         self.beams = {}
-        for name, basis, y, origin_x in (
-            ("coupled_clamp", coupled_clamp_basis, -self.y_offset, 0.0),
-            ("coupled_mid", coupled_mid_basis, 0.0, half),
-            ("uncoupled", uncoupled_basis, self.y_offset, 0.0),
+        for name, basis, z in (
+            ("coupled", coupled_basis, 0.0),
+            ("uncoupled", uncoupled_basis, self.z_gap),
         ):
             beam = builder.add_body_elastic(
-                xform=wp.transform(wp.vec3(origin_x, y, self.base_height), wp.quat_identity()),
-                com=wp.vec3(half - origin_x, 0.0, 0.0),
+                xform=wp.transform(wp.vec3(0.0, 0.0, self.base_height + z), wp.quat_identity()),
+                com=wp.vec3(half, 0.0, 0.0),
                 mass=0.2,
                 inertia=inertia,
                 mode_q=[0.0],
                 modal_basis=basis,
-                label=f"base_rotation_{name}_beam",
+                label=f"centrifugal_{name}_beam",
             )
             builder.add_shape_box(
                 beam,
-                xform=wp.transform(wp.vec3(half - origin_x, 0.0, 0.0), wp.quat_identity()),
+                xform=wp.transform(wp.vec3(half, 0.0, 0.0), wp.quat_identity()),
                 hx=half,
                 hy=self.hy,
                 hz=self.hz,
@@ -185,8 +164,8 @@ class Example:
             builder.add_joint_fixed(
                 parent=self.base,
                 child=beam,
-                parent_xform=wp.transform(wp.vec3(0.0, y, 0.0), wp.quat_identity()),
-                child_xform=wp.transform(wp.vec3(-origin_x, 0.0, 0.0), wp.quat_identity()),
+                parent_xform=wp.transform(wp.vec3(0.0, 0.0, z), wp.quat_identity()),
+                child_xform=wp.transform(wp.vec3(0.0, 0.0, 0.0), wp.quat_identity()),
                 label=f"clamp_{name}",
             )
             self.beams[name] = beam
@@ -213,36 +192,31 @@ class Example:
             self._q_index[name] = int(joint_q_start[owner]) + 7
 
         self.max_abs_q = dict.fromkeys(self.beams, 0.0)
-        self.max_abs_invariance_error = 0.0
 
         self.solver = newton.solvers.SolverVBD(self.model, iterations=32)
 
         self.viewer.set_model(self.model)
         self.viewer.show_elastic_strain = True
-        self.viewer.elastic_strain_color_max = 0.02
-        swing = self.length * math.sin(self.base_amplitude)
-        bounds_min = np.array([-0.15, -self.y_offset - 0.1, self.base_height - swing - 0.15])
-        bounds_max = np.array([self.length + 0.15, self.y_offset + 0.1, self.base_height + swing + 0.15])
-        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.35, -1.0, 0.35]))
+        self.viewer.elastic_strain_color_max = 0.18
+        reach = self.length + 0.25
+        bounds_min = np.array([-reach, -reach, self.base_height - 0.2])
+        bounds_max = np.array([reach, reach, self.base_height + self.z_gap + 0.2])
+        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.6, -1.0, 0.5]))
 
-    def _base_angle(self, t: float) -> float:
-        return self.base_amplitude * math.sin(2.0 * math.pi * self.base_frequency * t)
+    def _spin_rate_at(self, t: float) -> float:
+        return self.spin_rate * min(t / self.ramp_time, 1.0)
 
-    def _base_rate(self, t: float) -> float:
-        return (
-            self.base_amplitude
-            * 2.0
-            * math.pi
-            * self.base_frequency
-            * math.cos(2.0 * math.pi * self.base_frequency * t)
-        )
+    def _spin_angle(self, t: float) -> float:
+        if t < self.ramp_time:
+            return self.spin_rate * t * t / (2.0 * self.ramp_time)
+        return self.spin_rate * (t - 0.5 * self.ramp_time)
 
     def _drive_targets(self, t: float):
-        quat = wp.quat_from_axis_angle(wp.vec3(0.0, 1.0, 0.0), self._base_angle(t))
+        quat = wp.quat_from_axis_angle(wp.vec3(0.0, 0.0, 1.0), self._spin_angle(t))
         return {self.base: (wp.vec3(0.0, 0.0, self.base_height), quat)}
 
     def _drive_velocities(self, t: float):
-        return {self.base: (wp.vec3(0.0, 0.0, 0.0), wp.vec3(0.0, self._base_rate(t), 0.0))}
+        return {self.base: (wp.vec3(0.0, 0.0, 0.0), wp.vec3(0.0, 0.0, self._spin_rate_at(t)))}
 
     def _mode_value(self, name: str) -> float:
         return float(self.state_0.joint_q.numpy()[self._q_index[name]])
@@ -261,10 +235,8 @@ class Example:
     def step(self):
         self.simulate()
         self.sim_time += self.frame_dt
-        q = {name: self._mode_value(name) for name in self.beams}
-        for name, value in q.items():
-            self.max_abs_q[name] = max(self.max_abs_q[name], abs(value))
-        self.max_abs_invariance_error = max(self.max_abs_invariance_error, abs(q["coupled_clamp"] - q["coupled_mid"]))
+        for name in self.beams:
+            self.max_abs_q[name] = max(self.max_abs_q[name], abs(self._mode_value(name)))
 
     def render(self):
         self.viewer.begin_frame(self.sim_time)
@@ -274,19 +246,12 @@ class Example:
     def test_final(self):
         if not np.isfinite(self.state_0.joint_q.numpy()).all():
             raise AssertionError("joint coordinates contain non-finite values")
-        for name in ("coupled_clamp", "coupled_mid"):
-            if self.max_abs_q[name] < 2.0e-2:
-                raise AssertionError(
-                    f"{name} beam was not excited by base rotation: max |q| = {self.max_abs_q[name]:.3e}"
-                )
+        if self.max_abs_q["coupled"] < 2.0e-2:
+            raise AssertionError(f"coupled beam did not stretch under spin: max |q| = {self.max_abs_q['coupled']:.3e}")
+        if self._mode_value("coupled") <= 0.0:
+            raise AssertionError("coupled beam should stretch outward (positive q) under centrifugal load")
         if self.max_abs_q["uncoupled"] > 2.0e-3:
-            raise AssertionError(f"uncoupled beam unexpectedly deflected: max |q| = {self.max_abs_q['uncoupled']:.3e}")
-        reference = max(self.max_abs_q["coupled_clamp"], self.max_abs_q["coupled_mid"])
-        if self.max_abs_invariance_error > 0.05 * reference:
-            raise AssertionError(
-                f"deformation depends on frame placement: max |q_clamp - q_mid| = "
-                f"{self.max_abs_invariance_error:.3e} vs max |q| = {reference:.3e}"
-            )
+            raise AssertionError(f"uncoupled beam unexpectedly deformed: max |q| = {self.max_abs_q['uncoupled']:.3e}")
 
 
 if __name__ == "__main__":
