@@ -37,9 +37,33 @@ class ModalBasis:
         sample_points: Body-local sample points [m], shape ``[sample_count, 3]``.
         sample_phi: Translational mode values [m per modal coordinate], shape
             ``[sample_count, mode_count, 3]``.
-        mode_mass: Modal masses [kg], shape ``[mode_count]``.
+        sample_mass: Optional per-sample lumped mass [kg], shape ``[sample_count]``.
+            When supplied, ``mode_mass`` and any unspecified inertia coupling
+            integrals (``mode_coupling_linear``, ``_angular``, ``_centrifugal``,
+            ``_coriolis``) are computed from it.
+        mode_mass: Optional modal mass [kg], shape ``[mode_count]``. An explicit
+            value always takes precedence; when omitted it is derived from
+            ``sample_mass`` as ``sum_s mass_s |phi_i(x_s)|^2``, sharing the mass
+            distribution used for the coupling integrals.
         mode_stiffness: Modal stiffness values [N/m], shape ``[mode_count]``.
         mode_damping: Modal damping values [N s/m], shape ``[mode_count]``.
+        mode_coupling_linear: Optional linear coupling integral
+            ``S_i = sum_s mass_s phi_i(x_s)`` [kg], shape ``[mode_count, 3]``.
+            Couples floating-frame translational acceleration and gravity into
+            each mode. ``None`` when unavailable.
+        mode_coupling_angular: Optional angular coupling integral
+            ``sum_s mass_s (phi_i(x_s) cross x_s)`` [kg m], shape
+            ``[mode_count, 3]``. Couples floating-frame angular acceleration
+            into each mode. ``None`` when unavailable.
+        mode_coupling_centrifugal: Optional centrifugal coupling integral
+            ``sum_s mass_s (phi_i(x_s) outer x_s)`` [kg m^2], shape
+            ``[mode_count, 3, 3]``. Couples the floating-frame centrifugal
+            acceleration into each mode. ``None`` when unavailable.
+        mode_coupling_coriolis: Optional Coriolis coupling integral
+            ``sum_s mass_s (phi_j(x_s) cross phi_i(x_s))`` [kg m^2], shape
+            ``[mode_count, mode_count, 3]``. Couples the floating-frame angular
+            velocity with the modal velocities. Antisymmetric in ``(i, j)``, so
+            it vanishes for a single mode. ``None`` when unavailable.
         label: Optional basis label.
         interpolation_epsilon: Distance regularizer [m] used for inverse-distance
             interpolation.
@@ -49,9 +73,14 @@ class ModalBasis:
         self,
         sample_points: Sequence[Sequence[float]] | np.ndarray | None = None,
         sample_phi: Sequence[Sequence[Sequence[float]]] | np.ndarray | None = None,
+        sample_mass: Sequence[float] | np.ndarray | None = None,
         mode_mass: Sequence[float] | np.ndarray | None = None,
         mode_stiffness: Sequence[float] | np.ndarray | None = None,
         mode_damping: Sequence[float] | np.ndarray | None = None,
+        mode_coupling_linear: Sequence[Sequence[float]] | np.ndarray | None = None,
+        mode_coupling_angular: Sequence[Sequence[float]] | np.ndarray | None = None,
+        mode_coupling_centrifugal: Sequence[Sequence[Sequence[float]]] | np.ndarray | None = None,
+        mode_coupling_coriolis: Sequence[Sequence[Sequence[float]]] | np.ndarray | None = None,
         label: str | None = None,
         interpolation_epsilon: float = 1.0e-8,
     ):
@@ -83,9 +112,40 @@ class ModalBasis:
 
         self.sample_points = np.array(points, dtype=np.float32, copy=True)
         self.sample_phi = np.array(phi, dtype=np.float32, copy=True)
+        self.sample_mass = self._coerce_sample_mass(sample_mass, points.shape[0])
+
+        lumped_mass = lumped_linear = lumped_angular = lumped_centrifugal = lumped_coriolis = None
+        if self.sample_mass is not None and mode_count > 0:
+            (
+                lumped_mass,
+                lumped_linear,
+                lumped_angular,
+                lumped_centrifugal,
+                lumped_coriolis,
+            ) = self._lumped_reduced_inertia(self.sample_points, self.sample_phi, self.sample_mass)
+
         self.mode_mass = self._coerce_mode_array(mode_mass, mode_count, 1.0, "mode_mass")
         self.mode_stiffness = self._coerce_mode_array(mode_stiffness, mode_count, 0.0, "mode_stiffness")
         self.mode_damping = self._coerce_mode_array(mode_damping, mode_count, 0.0, "mode_damping")
+        self.mode_coupling_linear = self._coerce_coupling(mode_coupling_linear, mode_count, "mode_coupling_linear")
+        self.mode_coupling_angular = self._coerce_coupling(mode_coupling_angular, mode_count, "mode_coupling_angular")
+        self.mode_coupling_centrifugal = self._coerce_coupling_matrix(
+            mode_coupling_centrifugal, mode_count, "mode_coupling_centrifugal"
+        )
+        self.mode_coupling_coriolis = self._coerce_coupling_pairs(
+            mode_coupling_coriolis, mode_count, "mode_coupling_coriolis"
+        )
+
+        if mode_mass is None and lumped_mass is not None:
+            self.mode_mass = lumped_mass
+        if self.mode_coupling_linear is None:
+            self.mode_coupling_linear = lumped_linear
+        if self.mode_coupling_angular is None:
+            self.mode_coupling_angular = lumped_angular
+        if self.mode_coupling_centrifugal is None:
+            self.mode_coupling_centrifugal = lumped_centrifugal
+        if self.mode_coupling_coriolis is None:
+            self.mode_coupling_coriolis = lumped_coriolis
 
     @property
     def mode_count(self) -> int:
@@ -123,14 +183,103 @@ class ModalBasis:
             raise ValueError(f"{name} must have length {mode_count}, got {array.shape[0]}")
         return np.array(array, dtype=np.float32, copy=True)
 
+    @staticmethod
+    def _coerce_sample_mass(
+        values: Sequence[float] | np.ndarray | None,
+        sample_count: int,
+    ) -> np.ndarray | None:
+        if values is None:
+            return None
+        array = np.asarray(values, dtype=np.float32).reshape((-1,))
+        if array.shape[0] != sample_count:
+            raise ValueError(f"sample_mass must have length {sample_count}, got {array.shape[0]}")
+        return np.array(array, dtype=np.float32, copy=True)
+
+    @staticmethod
+    def _coerce_coupling(
+        values: Sequence[Sequence[float]] | np.ndarray | None,
+        mode_count: int,
+        name: str,
+    ) -> np.ndarray | None:
+        if values is None:
+            return None
+        array = np.asarray(values, dtype=np.float32)
+        if array.shape != (mode_count, 3):
+            raise ValueError(f"{name} must have shape ({mode_count}, 3), got {array.shape}")
+        return np.array(array, dtype=np.float32, copy=True)
+
+    @staticmethod
+    def _coerce_coupling_matrix(
+        values: Sequence[Sequence[Sequence[float]]] | np.ndarray | None,
+        mode_count: int,
+        name: str,
+    ) -> np.ndarray | None:
+        if values is None:
+            return None
+        array = np.asarray(values, dtype=np.float32)
+        if array.shape != (mode_count, 3, 3):
+            raise ValueError(f"{name} must have shape ({mode_count}, 3, 3), got {array.shape}")
+        return np.array(array, dtype=np.float32, copy=True)
+
+    @staticmethod
+    def _coerce_coupling_pairs(
+        values: Sequence[Sequence[Sequence[float]]] | np.ndarray | None,
+        mode_count: int,
+        name: str,
+    ) -> np.ndarray | None:
+        if values is None:
+            return None
+        array = np.asarray(values, dtype=np.float32)
+        if array.shape != (mode_count, mode_count, 3):
+            raise ValueError(f"{name} must have shape ({mode_count}, {mode_count}, 3), got {array.shape}")
+        return np.array(array, dtype=np.float32, copy=True)
+
+    @staticmethod
+    def _lumped_reduced_inertia(
+        points: np.ndarray,
+        phi: np.ndarray,
+        sample_mass: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Return lumped modal mass and the floating-frame coupling integrals.
+
+        ``mass[i] = sum_s mass_s |phi_i(x_s)|^2`` [kg], shape ``[mode_count]``;
+        ``linear[i] = sum_s mass_s phi_i(x_s)`` [kg] and
+        ``angular[i] = sum_s mass_s (phi_i(x_s) cross x_s)`` [kg m], each shape
+        ``[mode_count, 3]``; ``centrifugal[i] = sum_s mass_s (phi_i(x_s) outer x_s)``
+        [kg m^2], shape ``[mode_count, 3, 3]``; ``coriolis[i, j] = sum_s mass_s
+        (phi_j(x_s) cross phi_i(x_s))`` [kg m^2], shape ``[mode_count, mode_count, 3]``.
+        """
+        mass = sample_mass.astype(np.float64)
+        phi64 = phi.astype(np.float64)
+        points64 = points.astype(np.float64)
+        modal_mass = np.einsum("s,smc,smc->m", mass, phi64, phi64)
+        linear = np.einsum("s,smc->mc", mass, phi64)
+        cross = np.cross(phi64, points64[:, None, :])
+        angular = np.einsum("s,smc->mc", mass, cross)
+        centrifugal = np.einsum("s,smc,sd->mcd", mass, phi64, points64)
+        cross_pairs = np.cross(phi64[:, None, :, :], phi64[:, :, None, :])
+        coriolis = np.einsum("s,sijc->ijc", mass, cross_pairs)
+        return (
+            modal_mass.astype(np.float32),
+            linear.astype(np.float32),
+            angular.astype(np.float32),
+            centrifugal.astype(np.float32),
+            coriolis.astype(np.float32),
+        )
+
     def copy(self) -> ModalBasis:
         """Return a deep copy of this basis."""
         return ModalBasis(
-            self.sample_points,
-            self.sample_phi,
-            self.mode_mass,
-            self.mode_stiffness,
-            self.mode_damping,
+            sample_points=self.sample_points,
+            sample_phi=self.sample_phi,
+            sample_mass=self.sample_mass,
+            mode_mass=self.mode_mass,
+            mode_stiffness=self.mode_stiffness,
+            mode_damping=self.mode_damping,
+            mode_coupling_linear=self.mode_coupling_linear,
+            mode_coupling_angular=self.mode_coupling_angular,
+            mode_coupling_centrifugal=self.mode_coupling_centrifugal,
+            mode_coupling_coriolis=self.mode_coupling_coriolis,
             label=self.label,
             interpolation_epsilon=self.interpolation_epsilon,
         )
@@ -256,11 +405,11 @@ class ModalGeneratorSampled:
     def build(self) -> ModalBasis:
         """Build the sampled modal basis."""
         return ModalBasis(
-            self.sample_points,
-            self.sample_phi,
-            self.mode_mass,
-            self.mode_stiffness,
-            self.mode_damping,
+            sample_points=self.sample_points,
+            sample_phi=self.sample_phi,
+            mode_mass=self.mode_mass,
+            mode_stiffness=self.mode_stiffness,
+            mode_damping=self.mode_damping,
             label=self.label,
         )
 
@@ -354,12 +503,23 @@ class ModalGeneratorPOD:
                     * math.sqrt(max(float(mode_mass[i]), 0.0) * max(float(mode_stiffness[i]), 0.0))
                 )
 
+        # Lump the total mass uniformly over the samples (as the modal-mass
+        # estimate does) so the basis can form the coupling integrals.
+        sample_mass = None
+        if self.total_mass is not None and self.sample_points.shape[0] > 0:
+            sample_mass = np.full(
+                self.sample_points.shape[0],
+                float(self.total_mass) / float(self.sample_points.shape[0]),
+                dtype=np.float32,
+            )
+
         return ModalBasis(
-            self.sample_points,
-            sample_phi,
-            mode_mass,
-            mode_stiffness,
-            mode_damping,
+            sample_points=self.sample_points,
+            sample_phi=sample_phi,
+            sample_mass=sample_mass,
+            mode_mass=mode_mass,
+            mode_stiffness=mode_stiffness,
+            mode_damping=mode_damping,
             label=self.label,
         )
 
@@ -568,11 +728,11 @@ class ModalGeneratorFEM:
         nodal_phi = np.transpose(full_modes.reshape((self.node_count, 3, -1)), (0, 2, 1))
         if self.sample_node_indices is None:
             nodal_basis = ModalBasis(
-                self.node_positions,
-                nodal_phi,
-                mode_mass,
-                mode_stiffness,
-                mode_damping,
+                sample_points=self.node_positions,
+                sample_phi=nodal_phi,
+                mode_mass=mode_mass,
+                mode_stiffness=mode_stiffness,
+                mode_damping=mode_damping,
                 label=self.label,
             )
             sample_phi = np.asarray([nodal_basis.evaluate(point) for point in self.sample_points], dtype=np.float32)
@@ -582,12 +742,36 @@ class ModalGeneratorFEM:
         self.eigenvalues = mode_stiffness / np.maximum(mode_mass, 1.0e-12)
         self.frequencies = np.sqrt(np.maximum(self.eigenvalues, 0.0)) / (2.0 * math.pi)
         self.modal_matrix = np.array(full_modes, dtype=np.float64, copy=True)
+
+        # Exact inertia coupling integrals from the consistent mass matrix
+        translation_modes = np.tile(np.eye(3, dtype=np.float64), (self.node_count, 1))
+        rotation_modes = np.zeros((self.dof_count, 3), dtype=np.float64)
+        for j in range(self.node_count):
+            position = self.node_positions[j].astype(np.float64)
+            for axis in range(3):
+                unit = np.zeros(3, dtype=np.float64)
+                unit[axis] = 1.0
+                rotation_modes[3 * j : 3 * j + 3, axis] = np.cross(unit, position)
+        mass_modes = self.mass_matrix @ full_modes
+        coupling_linear = (mass_modes.T @ translation_modes).astype(np.float32)
+        coupling_angular = (-mass_modes.T @ rotation_modes).astype(np.float32)
+        mass_modes_n = mass_modes.T.reshape((-1, self.node_count, 3))  # [mode, node, 3]
+        node_positions = self.node_positions.astype(np.float64)
+        coupling_centrifugal = np.einsum("isc,sd->icd", mass_modes_n, node_positions).astype(np.float32)
+        mass_phi = mass_modes_n.transpose(1, 0, 2)  # [node, mode, 3]
+        nodal_phi64 = nodal_phi.astype(np.float64)
+        coupling_coriolis = np.cross(nodal_phi64[:, None, :, :], mass_phi[:, :, None, :]).sum(axis=0).astype(np.float32)
+
         return ModalBasis(
-            self.sample_points,
-            sample_phi,
-            mode_mass,
-            mode_stiffness,
-            mode_damping,
+            sample_points=self.sample_points,
+            sample_phi=sample_phi,
+            mode_mass=mode_mass,
+            mode_stiffness=mode_stiffness,
+            mode_damping=mode_damping,
+            mode_coupling_linear=coupling_linear,
+            mode_coupling_angular=coupling_angular,
+            mode_coupling_centrifugal=coupling_centrifugal,
+            mode_coupling_coriolis=coupling_coriolis,
             label=self.label,
         )
 
@@ -716,7 +900,14 @@ class ModalGeneratorBeam:
                     * math.sqrt(max(float(mode_mass[i]), 0.0) * max(float(mode_stiffness[i]), 0.0))
                 )
 
-        return ModalBasis(points, sample_phi, mode_mass, mode_stiffness, mode_damping, label=self.label)
+        return ModalBasis(
+            sample_points=points,
+            sample_phi=sample_phi,
+            mode_mass=mode_mass,
+            mode_stiffness=mode_stiffness,
+            mode_damping=mode_damping,
+            label=self.label,
+        )
 
     def _sample_points(self) -> np.ndarray:
         yz: list[tuple[float, float]] = [(0.0, 0.0)]

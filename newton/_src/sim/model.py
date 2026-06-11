@@ -723,6 +723,14 @@ class Model:
         """Reduced elastic modal stiffness values [N/m], shape [sum(elastic_mode_count)], float."""
         self.elastic_mode_damping: wp.array(dtype=wp.float32) | None = None
         """Reduced elastic modal damping values [N s/m], shape [sum(elastic_mode_count)], float."""
+        self.elastic_mode_coupling_linear: wp.array(dtype=wp.vec3) | None = None
+        """Reduced elastic linear inertia coupling ``S_i`` [kg], shape [sum(elastic_mode_count)], dtype :class:`vec3`."""
+        self.elastic_mode_coupling_angular: wp.array(dtype=wp.vec3) | None = None
+        """Reduced elastic angular inertia coupling [kg m], shape [sum(elastic_mode_count)], dtype :class:`vec3`."""
+        self.elastic_mode_coupling_centrifugal: wp.array(dtype=wp.mat33) | None = None
+        """Reduced elastic centrifugal coupling [kg m^2], shape [sum(elastic_mode_count)], dtype :class:`mat33`."""
+        self.elastic_mode_coupling_coriolis: wp.array(dtype=wp.vec3) | None = None
+        """Reduced elastic Coriolis coupling [kg m^2], shape [elastic_body_count * elastic_max_mode_count^2], dtype :class:`vec3`."""
         self.elastic_endpoint_joint: wp.array(dtype=wp.int32) | None = None
         """Joint index for each internal reduced elastic endpoint, shape [elastic_endpoint_count], int."""
         self.elastic_endpoint_side: wp.array(dtype=wp.int32) | None = None
