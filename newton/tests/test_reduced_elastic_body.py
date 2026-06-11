@@ -1516,7 +1516,7 @@ def test_elastic_coriolis_modal_force(test, device):
 def test_elastic_frame_coupling_conserves_com(test, device):
     total_mass = 1.0
     stiffness = 50.0
-    pluck = 0.1
+    deflection = 0.1
     n = 21
     length = 1.0
     xs = np.linspace(-0.5 * length, 0.5 * length, n, dtype=np.float32)
@@ -1537,7 +1537,7 @@ def test_elastic_frame_coupling_conserves_com(test, device):
         com=wp.vec3(0.0, 0.0, 0.0),
         mass=total_mass,
         inertia=_identity_inertia(),
-        mode_q=[pluck],
+        mode_q=[deflection],
         modal_basis=basis,
     )
     builder.color()
@@ -1574,7 +1574,7 @@ def test_elastic_frame_coupling_conserves_com(test, device):
 def test_elastic_frame_coupling_conserves_angular_momentum(test, device):
     total_mass = 1.0
     stiffness = 10.0
-    pluck = 0.1
+    deflection = 0.1
     inertia_yy = 0.3
     n = 11
     length = 1.0
@@ -1596,7 +1596,7 @@ def test_elastic_frame_coupling_conserves_angular_momentum(test, device):
         com=wp.vec3(0.0, 0.0, 0.0),
         mass=total_mass,
         inertia=wp.mat33(inertia_yy, 0.0, 0.0, 0.0, inertia_yy, 0.0, 0.0, 0.0, inertia_yy),
-        mode_q=[pluck],
+        mode_q=[deflection],
         modal_basis=basis,
     )
     builder.color()
@@ -1631,7 +1631,7 @@ def test_elastic_frame_coupling_conserves_angular_momentum(test, device):
 def test_elastic_frame_coupling_conserves_spinning_momentum(test, device):
     total_mass = 1.0
     stiffness = 60.0
-    pluck = 0.1
+    deflection = 0.1
     spin = 5.0
     n = 21
     length = 1.0
@@ -1653,7 +1653,7 @@ def test_elastic_frame_coupling_conserves_spinning_momentum(test, device):
         com=wp.vec3(0.0, 0.0, 0.0),
         mass=total_mass,
         inertia=wp.mat33(0.2, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.2),
-        mode_q=[pluck],
+        mode_q=[deflection],
         modal_basis=basis,
     )
     builder.color()
@@ -1690,7 +1690,7 @@ def test_elastic_frame_coupling_conserves_spinning_momentum(test, device):
         max_spin_angle = max(max_spin_angle, 2.0 * math.atan2(abs(float(bq[5])), abs(float(bq[6]))))
 
     test.assertGreater(max_spin_angle, 1.0)
-    test.assertGreater(max_mode_excursion, 0.5 * pluck)
+    test.assertGreater(max_mode_excursion, 0.5 * deflection)
     test.assertLess(max_com_drift, 0.1)
 
 

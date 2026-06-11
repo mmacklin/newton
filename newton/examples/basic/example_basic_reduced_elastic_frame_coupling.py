@@ -7,7 +7,7 @@
 # Demonstrates the floating-frame modal-to-frame inertia coupling (the
 # back-reaction) for reduced elastic bodies: two identical beams float freely
 # in zero gravity with nothing holding or driving them, each carrying a single
-# transverse bump mode 1 - (2x/L)^2 that is plucked at t = 0 and released.
+# transverse bump mode 1 - (2x/L)^2 that is deflected at t = 0 and released.
 #
 #   - The "coupled" beam's basis carries per-sample masses, so the modal
 #     vibration pushes back on its frame through -A . S q_ddot. The frame
@@ -90,8 +90,8 @@ class Example:
         self.height = 1.0
         self.y_gap = 0.6
         self.beam_mass = 1.0
-        self.pluck = 0.12
-        mode_stiffness = 50.0
+        self.deflection = 0.12
+        mode_stiffness = 10.0
 
         centered_points = beam_render_sample_points(
             self.length,
@@ -146,7 +146,7 @@ class Example:
                 com=wp.vec3(0.0, 0.0, 0.0),
                 mass=self.beam_mass,
                 inertia=inertia,
-                mode_q=[self.pluck],
+                mode_q=[self.deflection],
                 modal_basis=basis,
                 label=f"frame_coupling_{name}_beam",
             )
@@ -193,7 +193,7 @@ class Example:
         y_half = 0.5 * self.y_gap + self.hy
         bounds_min = np.array([-half - 0.1, -y_half - 0.1, self.height - 0.3])
         bounds_max = np.array([half + 0.1, y_half + 0.1, self.height + 0.3])
-        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.35, -1.0, 0.35]))
+        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.4, -1.0, 0.45]))
 
     def _frame_z(self, name: str) -> float:
         return float(self.state_0.joint_q.numpy()[self._frame_z_index[name]])

@@ -11,7 +11,7 @@
 # Both beams are deflected in z and released. They share the same modal mass,
 # stiffness, and mode shapes; only the inertia coupling integrals differ.
 #
-#   - The "coupled" beam's basis carries per-sample masses, so as the plucked
+#   - The "coupled" beam's basis carries per-sample masses, so as the deflected
 #     z mode vibrates while spinning, the Coriolis term -2 omega . G qdot pumps
 #     energy into the perpendicular y mode and the bending plane rotates
 #     (the spinning-shaft whirl): in the inertial frame the swing plane stays
@@ -93,7 +93,7 @@ class Example:
         self.hz = 0.035
         self.base_height = 0.8
         self.spin_rate = 1.5
-        self.pluck = 0.25
+        self.deflection = 0.25
         self.beam_mass = 1.0
 
         centered_points = beam_render_sample_points(
@@ -157,7 +157,7 @@ class Example:
                 com=wp.vec3(half, 0.0, 0.0),
                 mass=0.2,
                 inertia=inertia,
-                mode_q=[self.pluck, 0.0],
+                mode_q=[self.deflection, 0.0],
                 modal_basis=basis,
                 label=f"coriolis_{name}_beam",
             )
@@ -205,12 +205,12 @@ class Example:
 
         self.viewer.set_model(self.model)
         self.viewer.show_elastic_strain = True
-        self.viewer.elastic_strain_color_max = self.pluck
-        reach = self.length + 0.2
-        span = self.pluck + 0.2
+        self.viewer.elastic_strain_color_max = self.deflection
+        reach = self.length + 0.05
+        span = self.deflection + 0.2
         bounds_min = np.array([-reach, -span, self.base_height - span])
         bounds_max = np.array([reach, span, self.base_height + span])
-        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.4, -1.0, 0.35]))
+        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.4, -1.0, 0.45]))
 
     def _drive_targets(self, t: float):
         quat = wp.quat_from_axis_angle(wp.vec3(1.0, 0.0, 0.0), self.spin_rate * t)
