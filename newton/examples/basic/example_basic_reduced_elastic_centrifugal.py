@@ -32,32 +32,13 @@ import warp as wp
 
 import newton
 import newton.examples
-from newton.examples.basic._reduced_elastic import beam_render_sample_points, poisson_axial_mode
+from newton.examples.basic._reduced_elastic import (
+    beam_render_sample_points,
+    find_free_joint_q_start,
+    poisson_axial_mode,
+    set_camera_from_bounds,
+)
 from newton.examples.basic._reduced_elastic_contact import apply_kinematic_targets
-
-
-def _find_free_joint_q_start(model: newton.Model, body: int) -> tuple[int, int]:
-    joint_parent = model.joint_parent.numpy()
-    joint_child = model.joint_child.numpy()
-    joint_q_start = model.joint_q_start.numpy()
-    joint_qd_start = model.joint_qd_start.numpy()
-    for j in range(len(joint_child)):
-        if int(joint_child[j]) == body and int(joint_parent[j]) == -1:
-            return int(joint_q_start[j]), int(joint_qd_start[j])
-    raise RuntimeError(f"No free joint found for body {body}")
-
-
-def _set_camera_from_bounds(viewer, bounds_min: np.ndarray, bounds_max: np.ndarray, offset_dir: np.ndarray):
-    center = 0.5 * (bounds_min + bounds_max)
-    extent = float(np.max(bounds_max - bounds_min))
-    distance = max(extent, 1.0) / (2.0 * math.tan(math.radians(45.0) * 0.5)) * 1.35
-    offset_dir = offset_dir / np.linalg.norm(offset_dir)
-    pos = center + offset_dir * distance
-    front = center - pos
-    front /= np.linalg.norm(front)
-    yaw = math.degrees(math.atan2(front[1], front[0]))
-    pitch = math.degrees(math.asin(front[2]))
-    viewer.set_camera(wp.vec3(*pos), pitch, yaw)
 
 
 class Example:
@@ -179,7 +160,7 @@ class Example:
         self.control = self.model.control()
         self.contacts = None
 
-        base_q_start, base_qd_start = _find_free_joint_q_start(self.model, self.base)
+        base_q_start, base_qd_start = find_free_joint_q_start(self.model, self.base)
         self._base_q_starts = {self.base: base_q_start}
         self._base_qd_starts = {self.base: base_qd_start}
 
@@ -201,7 +182,7 @@ class Example:
         reach = self.length + 0.05
         bounds_min = np.array([-reach, -reach, self.base_height - 0.2])
         bounds_max = np.array([reach, reach, self.base_height + self.z_gap + 0.2])
-        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.4, -1.0, 0.45]))
+        set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.4, -1.0, 0.45]))
 
     def _spin_rate_at(self, t: float) -> float:
         return self.spin_rate * min(t / self.ramp_time, 1.0)

@@ -25,51 +25,17 @@
 #
 ###########################################################################
 
-import math
 
 import numpy as np
 import warp as wp
 
 import newton
 import newton.examples
-from newton.examples.basic._reduced_elastic import beam_render_sample_points
-
-
-def _find_free_joint_q_start(model: newton.Model, body: int) -> tuple[int, int]:
-    joint_parent = model.joint_parent.numpy()
-    joint_child = model.joint_child.numpy()
-    joint_q_start = model.joint_q_start.numpy()
-    joint_qd_start = model.joint_qd_start.numpy()
-    for j in range(len(joint_child)):
-        if int(joint_child[j]) == body and int(joint_parent[j]) == -1:
-            return int(joint_q_start[j]), int(joint_qd_start[j])
-    raise RuntimeError(f"No free joint found for body {body}")
-
-
-def _set_camera_from_bounds(viewer, bounds_min: np.ndarray, bounds_max: np.ndarray, offset_dir: np.ndarray):
-    center = 0.5 * (bounds_min + bounds_max)
-    extent = float(np.max(bounds_max - bounds_min))
-    distance = max(extent, 1.0) / (2.0 * math.tan(math.radians(45.0) * 0.5)) * 1.35
-    offset_dir = offset_dir / np.linalg.norm(offset_dir)
-    pos = center + offset_dir * distance
-    front = center - pos
-    front /= np.linalg.norm(front)
-    yaw = math.degrees(math.atan2(front[1], front[0]))
-    pitch = math.degrees(math.asin(front[2]))
-    viewer.set_camera(wp.vec3(*pos), pitch, yaw)
-
-
-def _quat_rotate(q: np.ndarray, v: np.ndarray) -> np.ndarray:
-    qv = np.asarray(q[:3], dtype=np.float64)
-    w = float(q[3])
-    t = 2.0 * np.cross(qv, v)
-    return np.asarray(v, dtype=np.float64) + w * t + np.cross(qv, t)
-
-
-_FRAME_AXES = (
-    (np.array([1.0, 0.0, 0.0]), (1.0, 0.25, 0.25)),
-    (np.array([0.0, 1.0, 0.0]), (0.25, 1.0, 0.25)),
-    (np.array([0.0, 0.0, 1.0]), (0.35, 0.45, 1.0)),
+from newton.examples.basic._reduced_elastic import (
+    FRAME_AXES,
+    beam_render_sample_points,
+    quat_rotate,
+    set_camera_from_bounds,
 )
 
 
@@ -193,7 +159,7 @@ class Example:
         y_half = 0.5 * self.y_gap + self.hy
         bounds_min = np.array([-half - 0.1, -y_half - 0.1, self.height - 0.3])
         bounds_max = np.array([half + 0.1, y_half + 0.1, self.height + 0.3])
-        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.4, -1.0, 0.45]))
+        set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.4, -1.0, 0.45]))
 
     def _frame_z(self, name: str) -> float:
         return float(self.state_0.joint_q.numpy()[self._frame_z_index[name]])
@@ -226,9 +192,9 @@ class Example:
         for beam in self.beams.values():
             bq = self.state_0.body_q.numpy()[beam]
             origin = np.array(bq[:3], dtype=np.float32)
-            for axis, color in _FRAME_AXES:
+            for axis, color in FRAME_AXES:
                 starts.append(origin)
-                ends.append((origin + _quat_rotate(bq[3:7], axis) * axis_len).astype(np.float32))
+                ends.append((origin + quat_rotate(bq[3:7], axis) * axis_len).astype(np.float32))
                 colors.append(color)
         self.viewer.log_lines(
             "frames",

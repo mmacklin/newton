@@ -30,46 +30,16 @@ import warp as wp
 
 import newton
 import newton.examples
-from newton.examples.basic._reduced_elastic import beam_render_sample_points
+from newton.examples.basic._reduced_elastic import (
+    beam_render_sample_points,
+    cantilever_tip_mode,
+    find_free_joint_q_start,
+    set_camera_from_bounds,
+)
 from newton.examples.basic._reduced_elastic_contact import (
     apply_kinematic_targets,
     finite_difference_target_velocities,
 )
-
-
-def _cantilever_tip_mode(points: np.ndarray, length: float) -> np.ndarray:
-    points = np.asarray(points, dtype=np.float32)
-    s = np.clip(points[:, 0] + 0.5 * length, 0.0, length)
-    phi = (s * s * (3.0 * length - s)) / (2.0 * length**3)
-    slope = (3.0 * s * (2.0 * length - s)) / (2.0 * length**3)
-    out = np.zeros_like(points, dtype=np.float32)
-    out[:, 0] = -points[:, 2] * slope
-    out[:, 2] = phi
-    return out
-
-
-def _find_free_joint_q_start(model: newton.Model, body: int) -> tuple[int, int]:
-    joint_parent = model.joint_parent.numpy()
-    joint_child = model.joint_child.numpy()
-    joint_q_start = model.joint_q_start.numpy()
-    joint_qd_start = model.joint_qd_start.numpy()
-    for j in range(len(joint_child)):
-        if int(joint_child[j]) == body and int(joint_parent[j]) == -1:
-            return int(joint_q_start[j]), int(joint_qd_start[j])
-    raise RuntimeError(f"No free joint found for body {body}")
-
-
-def _set_camera_from_bounds(viewer, bounds_min: np.ndarray, bounds_max: np.ndarray, offset_dir: np.ndarray):
-    center = 0.5 * (bounds_min + bounds_max)
-    extent = float(np.max(bounds_max - bounds_min))
-    distance = max(extent, 1.0) / (2.0 * math.tan(math.radians(45.0) * 0.5)) * 1.35
-    offset_dir = offset_dir / np.linalg.norm(offset_dir)
-    pos = center + offset_dir * distance
-    front = center - pos
-    front /= np.linalg.norm(front)
-    yaw = math.degrees(math.atan2(front[1], front[0]))
-    pitch = math.degrees(math.asin(front[2]))
-    viewer.set_camera(wp.vec3(*pos), pitch, yaw)
 
 
 class Example:
@@ -98,7 +68,7 @@ class Example:
             self.hz,
             extra_points=((-0.5 * self.length, 0.0, 0.0), (0.5 * self.length, 0.0, 0.0)),
         )
-        phi = _cantilever_tip_mode(sample_points, self.length)
+        phi = cantilever_tip_mode(sample_points, self.length)
 
         sample_mass = np.full(sample_points.shape[0], self.beam_mass / sample_points.shape[0], dtype=np.float32)
         modal_mass = float(np.sum(sample_mass * np.sum(phi * phi, axis=1)))
@@ -173,7 +143,7 @@ class Example:
         self.control = self.model.control()
         self.contacts = None
 
-        base_q_start, base_qd_start = _find_free_joint_q_start(self.model, self.base)
+        base_q_start, base_qd_start = find_free_joint_q_start(self.model, self.base)
         self._base_q_starts = {self.base: base_q_start}
         self._base_qd_starts = {self.base: base_qd_start}
 
@@ -197,7 +167,7 @@ class Example:
         bounds_max = np.array(
             [0.5 * self.length + 0.1, self.y_offset + 0.1, self.base_height + self.base_amplitude + 0.1]
         )
-        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.4, -1.0, 0.45]))
+        set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.4, -1.0, 0.45]))
 
     def _base_z(self, t: float) -> float:
         return self.base_height + self.base_amplitude * math.sin(2.0 * math.pi * self.base_frequency * t)
