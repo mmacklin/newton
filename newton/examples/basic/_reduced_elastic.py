@@ -3,11 +3,20 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 
 import numpy as np
+import warp as wp
+
+import newton
 
 BOX_RENDER_MAX_EDGE_LENGTH = 0.01
+FRAME_AXES = (
+    (np.array([1.0, 0.0, 0.0]), (1.0, 0.25, 0.25)),
+    (np.array([0.0, 1.0, 0.0]), (0.25, 1.0, 0.25)),
+    (np.array([0.0, 0.0, 1.0]), (0.35, 0.45, 1.0)),
+)
 ELASTIC_SOLVER_METRIC_KEYS = (
     "initial_residual_norm",
     "solve_residual_norm",
@@ -124,6 +133,44 @@ def poisson_axial_mode(
     phi[:, 1] = -float(poisson_ratio) * points[:, 1] * inv_length * lateral_profile
     phi[:, 2] = -float(poisson_ratio) * points[:, 2] * inv_length * lateral_profile
     return phi
+
+
+def set_camera_from_bounds(viewer, bounds_min: np.ndarray, bounds_max: np.ndarray, offset_dir: np.ndarray):
+    """Aim the viewer camera at a bounding box along a normalized offset direction."""
+    center = 0.5 * (bounds_min + bounds_max)
+    extent = float(np.max(bounds_max - bounds_min))
+    distance = max(extent, 1.0) / (2.0 * math.tan(math.radians(45.0) * 0.5)) * 1.35
+    offset_dir = offset_dir / np.linalg.norm(offset_dir)
+    pos = center + offset_dir * distance
+    front = center - pos
+    front /= np.linalg.norm(front)
+    yaw = math.degrees(math.atan2(front[1], front[0]))
+    pitch = math.degrees(math.asin(front[2]))
+    viewer.set_camera(wp.vec3(*pos), pitch, yaw)
+
+
+def find_free_joint_q_start(model: newton.Model, body: int) -> tuple[int, int]:
+    """Return the joint coordinate and velocity start indices of a body's free joint."""
+    joint_parent = model.joint_parent.numpy()
+    joint_child = model.joint_child.numpy()
+    joint_q_start = model.joint_q_start.numpy()
+    joint_qd_start = model.joint_qd_start.numpy()
+    for j in range(len(joint_child)):
+        if int(joint_child[j]) == body and int(joint_parent[j]) == -1:
+            return int(joint_q_start[j]), int(joint_qd_start[j])
+    raise RuntimeError(f"No free joint found for body {body}")
+
+
+def cantilever_tip_mode(points: np.ndarray, length: float) -> np.ndarray:
+    """Cubic cantilever tip mode: phi(0)=0 at the clamp, phi(L)=1 at the tip."""
+    points = np.asarray(points, dtype=np.float32)
+    s = np.clip(points[:, 0] + 0.5 * length, 0.0, length)
+    phi = (s * s * (3.0 * length - s)) / (2.0 * length**3)
+    slope = (3.0 * s * (2.0 * length - s)) / (2.0 * length**3)
+    out = np.zeros_like(points, dtype=np.float32)
+    out[:, 0] = -points[:, 2] * slope
+    out[:, 2] = phi
+    return out
 
 
 def quat_rotate(q: np.ndarray, v: np.ndarray) -> np.ndarray:

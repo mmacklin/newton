@@ -52,15 +52,15 @@ class ModalBasis:
             Couples floating-frame translational acceleration and gravity into
             each mode. ``None`` when unavailable.
         mode_coupling_angular: Optional angular coupling integral
-            ``sum_s mass_s (phi_i(x_s) x x_s)`` [kg m], shape ``[mode_count, 3]``.
-            Couples floating-frame angular acceleration into each mode. ``None``
-            when unavailable.
+            ``sum_s mass_s (phi_i(x_s) cross x_s)`` [kg m], shape
+            ``[mode_count, 3]``. Couples floating-frame angular acceleration
+            into each mode. ``None`` when unavailable.
         mode_coupling_centrifugal: Optional centrifugal coupling integral
             ``sum_s mass_s (phi_i(x_s) outer x_s)`` [kg m^2], shape
             ``[mode_count, 3, 3]``. Couples the floating-frame centrifugal
             acceleration into each mode. ``None`` when unavailable.
         mode_coupling_coriolis: Optional Coriolis coupling integral
-            ``sum_s mass_s (phi_j(x_s) x phi_i(x_s))`` [kg m^2], shape
+            ``sum_s mass_s (phi_j(x_s) cross phi_i(x_s))`` [kg m^2], shape
             ``[mode_count, mode_count, 3]``. Couples the floating-frame angular
             velocity with the modal velocities. Antisymmetric in ``(i, j)``, so
             it vanishes for a single mode. ``None`` when unavailable.
@@ -244,11 +244,10 @@ class ModalBasis:
 
         ``mass[i] = sum_s mass_s |phi_i(x_s)|^2`` [kg], shape ``[mode_count]``;
         ``linear[i] = sum_s mass_s phi_i(x_s)`` [kg] and
-        ``angular[i] = sum_s mass_s (phi_i(x_s) x x_s)`` [kg m], each shape
-        ``[mode_count, 3]``; ``centrifugal[i] = sum_s mass_s (phi_i(x_s) outer
-        x_s)`` [kg m^2], shape ``[mode_count, 3, 3]``; ``coriolis[i, j] = sum_s
-        mass_s (phi_j(x_s) x phi_i(x_s))`` [kg m^2], shape ``[mode_count,
-        mode_count, 3]``.
+        ``angular[i] = sum_s mass_s (phi_i(x_s) cross x_s)`` [kg m], each shape
+        ``[mode_count, 3]``; ``centrifugal[i] = sum_s mass_s (phi_i(x_s) outer x_s)``
+        [kg m^2], shape ``[mode_count, 3, 3]``; ``coriolis[i, j] = sum_s mass_s
+        (phi_j(x_s) cross phi_i(x_s))`` [kg m^2], shape ``[mode_count, mode_count, 3]``.
         """
         mass = sample_mass.astype(np.float64)
         phi64 = phi.astype(np.float64)
@@ -758,7 +757,7 @@ class ModalGeneratorFEM:
         coupling_angular = (-mass_modes.T @ rotation_modes).astype(np.float32)
         mass_modes_n = mass_modes.T.reshape((-1, self.node_count, 3))  # [mode, node, 3]
         node_positions = self.node_positions.astype(np.float64)
-        coupling_centrifugal = np.einsum("inc,nd->icd", mass_modes_n, node_positions).astype(np.float32)
+        coupling_centrifugal = np.einsum("isc,sd->icd", mass_modes_n, node_positions).astype(np.float32)
         mass_phi = mass_modes_n.transpose(1, 0, 2)  # [node, mode, 3]
         nodal_phi64 = nodal_phi.astype(np.float64)
         coupling_coriolis = np.cross(nodal_phi64[:, None, :, :], mass_phi[:, :, None, :]).sum(axis=0).astype(np.float32)
