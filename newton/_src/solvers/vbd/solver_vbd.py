@@ -2273,6 +2273,7 @@ class SolverVBD(SolverBase):
                     model.elastic_mode_coupling_linear,
                     model.elastic_mode_coupling_angular,
                     state_in.body_q,
+                    self.body_q_prev,
                     model.body_com,
                     model.joint_q_start,
                     model.joint_qd_start,

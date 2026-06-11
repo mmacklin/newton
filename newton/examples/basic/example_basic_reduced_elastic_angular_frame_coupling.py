@@ -2,26 +2,31 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ###########################################################################
-# Example Basic Reduced Elastic Frame Coupling
+# Example Basic Reduced Elastic Angular Frame Coupling
 #
-# Demonstrates the floating-frame modal-to-frame inertia coupling (the
-# back-reaction) for reduced elastic bodies: two identical beams float freely
-# in zero gravity with nothing holding or driving them, each carrying a single
-# transverse bump mode 1 - (2x/L)^2 that is plucked at t = 0 and released.
+# Demonstrates the floating-frame modal-to-frame angular coupling for reduced
+# elastic bodies: the rotational twin of the frame coupling example. Two
+# identical beams float freely in zero gravity with nothing holding or driving
+# them, each carrying a single antisymmetric bending mode (2x/L)(1 - (2x/L)^2)
+# that deflects in y. The mode shape is odd, so its linear coupling S vanishes
+# exactly -- there is no linear recoil -- but it carries angular momentum G qdot
+# about z. Both modes are set oscillating from the rest shape by an initial
+# modal velocity, with the body's total angular momentum kept at zero.
 #
-#   - The "coupled" beam's basis carries per-sample masses, so the modal
-#     vibration pushes back on its frame through -A . S q_ddot. The frame
-#     recoils against the bulge and the body center of mass stays pinned where
-#     it started, conserving linear momentum.
+#   - The "coupled" beam's basis carries per-sample masses, so its moving mode
+#     carries angular momentum; its frame is given the matching counter-rotation
+#     so the total stays zero. As the mode oscillates the frame rocks back and
+#     forth about z (the moment A (G + floor(c) S) qddot) and returns to rest --
+#     the mode visibly turning the frame.
 #   - The "uncoupled" beam's basis has no sample mass (all coupling integrals
-#     are zero), so its frame stays put while the bulge oscillates and the
-#     center of mass sloshes back and forth, silently violating momentum.
+#     are zero), so its mode carries no momentum and its frame needs no
+#     counter-rotation: the mode wiggles while the frame stays put.
 #
-# The bump mode is symmetric on a uniform bar, so it has net linear coupling
-# but no net angular coupling: the recoil is a pure translation with no induced
-# rotation, exactly the term the current back-coupling implements.
+# This is the angular counterpart of the frame coupling example, where a
+# symmetric mode makes the frame translate; here an antisymmetric mode makes the
+# frame rotate.
 #
-# Command: python -m newton.examples basic_reduced_elastic_frame_coupling
+# Command: python -m newton.examples basic_reduced_elastic_angular_frame_coupling
 #
 ###########################################################################
 
@@ -33,17 +38,6 @@ import warp as wp
 import newton
 import newton.examples
 from newton.examples.basic._reduced_elastic import beam_render_sample_points
-
-
-def _find_free_joint_q_start(model: newton.Model, body: int) -> tuple[int, int]:
-    joint_parent = model.joint_parent.numpy()
-    joint_child = model.joint_child.numpy()
-    joint_q_start = model.joint_q_start.numpy()
-    joint_qd_start = model.joint_qd_start.numpy()
-    for j in range(len(joint_child)):
-        if int(joint_child[j]) == body and int(joint_parent[j]) == -1:
-            return int(joint_q_start[j]), int(joint_qd_start[j])
-    raise RuntimeError(f"No free joint found for body {body}")
 
 
 def _set_camera_from_bounds(viewer, bounds_min: np.ndarray, bounds_max: np.ndarray, offset_dir: np.ndarray):
@@ -77,7 +71,7 @@ class Example:
     def __init__(self, viewer, args):
         self.fps = 60
         self.frame_dt = 1.0 / self.fps
-        self.sim_substeps = 8
+        self.sim_substeps = 16
         self.sim_dt = self.frame_dt / self.sim_substeps
         self.sim_time = 0.0
 
@@ -85,12 +79,14 @@ class Example:
         self.args = args
 
         self.length = 1.0
-        self.hy = 0.05
-        self.hz = 0.04
+        self.hx = 0.5 * self.length
+        self.hy = 0.04
+        self.hz = 0.03
         self.height = 1.0
-        self.y_gap = 0.6
+        self.z_gap = 0.5
         self.beam_mass = 1.0
-        self.pluck = 0.12
+        self.mode_amplitude = 0.25
+        self.inertia_zz = 0.09
         mode_stiffness = 50.0
 
         centered_points = beam_render_sample_points(
@@ -99,9 +95,9 @@ class Example:
             self.hz,
             extra_points=((-0.5 * self.length, 0.0, 0.0), (0.5 * self.length, 0.0, 0.0)),
         )
-        xs = centered_points[:, 0]
+        xi = 2.0 * centered_points[:, 0] / self.length
         phi = np.zeros_like(centered_points, dtype=np.float32)
-        phi[:, 2] = 1.0 - (2.0 * xs / self.length) ** 2
+        phi[:, 1] = xi - xi**3
 
         sample_mass = np.full(centered_points.shape[0], self.beam_mass / centered_points.shape[0], dtype=np.float32)
         modal_mass = float(np.sum(sample_mass * np.sum(phi * phi, axis=1)))
@@ -113,7 +109,7 @@ class Example:
             sample_mass=sample_mass,
             mode_stiffness=[mode_stiffness],
             mode_damping=[0.0],
-            label="frame_coupling_coupled_basis",
+            label="angular_frame_coupling_coupled_basis",
         )
         uncoupled_basis = newton.ModalBasis(
             sample_points=centered_points,
@@ -121,39 +117,44 @@ class Example:
             mode_mass=[modal_mass],
             mode_stiffness=[mode_stiffness],
             mode_damping=[0.0],
-            label="frame_coupling_uncoupled_basis",
+            label="angular_frame_coupling_uncoupled_basis",
         )
 
-        self.com_factor = float(coupled_basis.mode_coupling_linear[0][2]) / self.beam_mass
+        coupling_z = float(coupled_basis.mode_coupling_angular[0][2])
+        coupled_modal_inertia = modal_mass - coupling_z**2 / self.inertia_zz
+        self.mode_kick = {
+            "uncoupled": self.mode_amplitude * math.sqrt(mode_stiffness / modal_mass),
+            "coupled": self.mode_amplitude * math.sqrt(mode_stiffness / coupled_modal_inertia),
+        }
+        self.frame_counter_spin = coupling_z / self.inertia_zz * self.mode_kick["coupled"]
 
         builder = newton.ModelBuilder(gravity=0.0)
         builder.add_ground_plane()
 
-        inertia = wp.mat33(0.02, 0.0, 0.0, 0.0, 0.02, 0.0, 0.0, 0.0, 0.02)
+        inertia = wp.mat33(0.1, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, self.inertia_zz)
         shape_cfg = newton.ModelBuilder.ShapeConfig()
         shape_cfg.density = 0.0
         shape_cfg.has_shape_collision = False
         shape_cfg.has_particle_collision = False
 
-        half = 0.5 * self.length
         self.beams = {}
-        for name, basis, y in (
-            ("coupled", coupled_basis, -0.5 * self.y_gap),
-            ("uncoupled", uncoupled_basis, 0.5 * self.y_gap),
+        for name, basis, z in (
+            ("uncoupled", uncoupled_basis, self.height),
+            ("coupled", coupled_basis, self.height + self.z_gap),
         ):
             beam = builder.add_body_elastic(
-                xform=wp.transform(wp.vec3(0.0, y, self.height), wp.quat_identity()),
+                xform=wp.transform(wp.vec3(0.0, 0.0, z), wp.quat_identity()),
                 com=wp.vec3(0.0, 0.0, 0.0),
                 mass=self.beam_mass,
                 inertia=inertia,
-                mode_q=[self.pluck],
+                mode_q=[0.0],
                 modal_basis=basis,
-                label=f"frame_coupling_{name}_beam",
+                label=f"angular_frame_coupling_{name}_beam",
             )
             builder.add_shape_box(
                 beam,
                 xform=wp.transform_identity(),
-                hx=half,
+                hx=self.hx,
                 hy=self.hy,
                 hz=self.hz,
                 cfg=shape_cfg,
@@ -170,39 +171,43 @@ class Example:
         self.contacts = None
 
         joint_q_start = self.model.joint_q_start.numpy()
+        joint_qd_start = self.model.joint_qd_start.numpy()
         elastic_joint = self.model.elastic_joint.numpy()
         body_elastic_index = self.model.body_elastic_index.numpy()
-        self._frame_z_index = {}
         self._q_index = {}
+        qd0 = self.state_0.joint_qd.numpy()
         for name, beam in self.beams.items():
             owner = int(elastic_joint[int(body_elastic_index[beam])])
-            self._frame_z_index[name] = int(joint_q_start[owner]) + 2
             self._q_index[name] = int(joint_q_start[owner]) + 7
+            qd0[int(joint_qd_start[owner]) + 6] = self.mode_kick[name]
+            if name == "coupled":
+                qd0[int(joint_qd_start[owner]) + 5] = self.frame_counter_spin
+        self.state_0.joint_qd.assign(qd0)
 
-        self._frame_z0 = {name: self._frame_z(name) for name in self.beams}
-        self._com0 = {name: self._com(name) for name in self.beams}
-        self.max_frame_move = dict.fromkeys(self.beams, 0.0)
-        self.max_com_drift = dict.fromkeys(self.beams, 0.0)
+        self._origin0 = {name: self._origin(name) for name in self.beams}
+        self.max_yaw = dict.fromkeys(self.beams, 0.0)
+        self.max_origin_move = dict.fromkeys(self.beams, 0.0)
+        self.max_mode_excursion = dict.fromkeys(self.beams, 0.0)
 
         self.solver = newton.solvers.SolverVBD(self.model, iterations=24)
 
         self.viewer.set_model(self.model)
         self.viewer.show_elastic_strain = True
-        self.viewer.elastic_strain_color_max = 0.12
-        half = 0.5 * self.length
-        y_half = 0.5 * self.y_gap + self.hy
-        bounds_min = np.array([-half - 0.1, -y_half - 0.1, self.height - 0.3])
-        bounds_max = np.array([half + 0.1, y_half + 0.1, self.height + 0.3])
-        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.35, -1.0, 0.35]))
+        self.viewer.elastic_strain_color_max = 0.18
+        reach = 0.5 * self.length + 0.2
+        bounds_min = np.array([-reach, -reach, self.height - 0.2])
+        bounds_max = np.array([reach, reach, self.height + self.z_gap + 0.2])
+        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.3, -0.6, 0.7]))
 
-    def _frame_z(self, name: str) -> float:
-        return float(self.state_0.joint_q.numpy()[self._frame_z_index[name]])
+    def _origin(self, name: str) -> np.ndarray:
+        return np.array(self.state_0.body_q.numpy()[self.beams[name]][:3], dtype=np.float64)
 
     def _mode_value(self, name: str) -> float:
         return float(self.state_0.joint_q.numpy()[self._q_index[name]])
 
-    def _com(self, name: str) -> float:
-        return self._frame_z(name) + self.com_factor * self._mode_value(name)
+    def _yaw(self, name: str) -> float:
+        bq = self.state_0.body_q.numpy()[self.beams[name]]
+        return 2.0 * math.atan2(abs(float(bq[5])), abs(float(bq[6])))
 
     def simulate(self):
         for _ in range(self.sim_substeps):
@@ -215,8 +220,11 @@ class Example:
         self.simulate()
         self.sim_time += self.frame_dt
         for name in self.beams:
-            self.max_frame_move[name] = max(self.max_frame_move[name], abs(self._frame_z(name) - self._frame_z0[name]))
-            self.max_com_drift[name] = max(self.max_com_drift[name], abs(self._com(name) - self._com0[name]))
+            self.max_yaw[name] = max(self.max_yaw[name], self._yaw(name))
+            self.max_origin_move[name] = max(
+                self.max_origin_move[name], float(np.linalg.norm(self._origin(name) - self._origin0[name]))
+            )
+            self.max_mode_excursion[name] = max(self.max_mode_excursion[name], abs(self._mode_value(name)))
 
     def _log_frames(self):
         axis_len = 0.225
@@ -247,20 +255,17 @@ class Example:
     def test_final(self):
         if not np.isfinite(self.state_0.joint_q.numpy()).all():
             raise AssertionError("joint coordinates contain non-finite values")
-        if self.max_frame_move["coupled"] < 0.02:
-            raise AssertionError(f"coupled frame did not recoil: max move = {self.max_frame_move['coupled']:.3e}")
-        if self.max_com_drift["coupled"] > 0.1 * self.max_frame_move["coupled"]:
+        if self.max_mode_excursion["coupled"] < 0.5 * self.mode_amplitude:
+            raise AssertionError(f"coupled mode did not vibrate: max |q| = {self.max_mode_excursion['coupled']:.3e}")
+        if self.max_yaw["coupled"] < 0.1:
+            raise AssertionError(f"coupled frame did not rotate: max yaw = {self.max_yaw['coupled']:.3e}")
+        if self.max_yaw["coupled"] > 0.4:
+            raise AssertionError(f"coupled frame ran away instead of rocking: max yaw = {self.max_yaw['coupled']:.3e}")
+        if self.max_yaw["uncoupled"] > 5.0e-3:
+            raise AssertionError(f"uncoupled frame unexpectedly rotated: max yaw = {self.max_yaw['uncoupled']:.3e}")
+        if self.max_origin_move["coupled"] > 5.0e-3:
             raise AssertionError(
-                f"coupled center of mass drifted: {self.max_com_drift['coupled']:.3e} "
-                f"vs frame move {self.max_frame_move['coupled']:.3e}"
-            )
-        if self.max_frame_move["uncoupled"] > 1.0e-3:
-            raise AssertionError(
-                f"uncoupled frame unexpectedly moved: max move = {self.max_frame_move['uncoupled']:.3e}"
-            )
-        if self.max_com_drift["uncoupled"] < 0.02:
-            raise AssertionError(
-                f"uncoupled center of mass should slosh: max drift = {self.max_com_drift['uncoupled']:.3e}"
+                f"coupled frame unexpectedly recoiled: max move = {self.max_origin_move['coupled']:.3e}"
             )
 
 
