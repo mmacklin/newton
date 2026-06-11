@@ -585,6 +585,7 @@ def accumulate_elastic_frame_coupling(
     elastic_mode_coupling_linear: wp.array(dtype=wp.vec3),
     elastic_mode_coupling_angular: wp.array(dtype=wp.vec3),
     body_q: wp.array(dtype=wp.transform),
+    body_q_prev: wp.array(dtype=wp.transform),
     body_com: wp.array(dtype=wp.vec3),
     joint_q_start: wp.array(dtype=wp.int32),
     joint_qd_start: wp.array(dtype=wp.int32),
@@ -601,21 +602,44 @@ def accumulate_elastic_frame_coupling(
     qd_start = joint_qd_start[owner_joint] + 6
     mode_start = elastic_mode_start[elastic_index]
     mode_count = elastic_mode_count[elastic_index]
-    inv_dt_sq = 1.0 / (dt * dt)
 
-    rot = wp.transform_get_rotation(body_q[body])
+    inv_dt = 1.0 / dt
+    inv_dt_sq = inv_dt * inv_dt
+    body_rot = wp.transform_get_rotation(body_q[body])
+    body_R_T = wp.transpose(wp.quat_to_matrix(body_rot))
     com = body_com[body]
 
+    origin_v = (wp.transform_get_translation(body_q[body]) - wp.transform_get_translation(body_q_prev[body])) * inv_dt
+    origin_v_local = body_R_T * origin_v
+    omega = quat_velocity(body_rot, wp.transform_get_rotation(body_q_prev[body]), dt)
+    omega_local = body_R_T * omega
+
+    s_qd = wp.vec3(0.0, 0.0, 0.0)
+    g_qd = wp.vec3(0.0, 0.0, 0.0)
     s_qdd = wp.vec3(0.0, 0.0, 0.0)
-    sang_qdd = wp.vec3(0.0, 0.0, 0.0)
+    g_qdd = wp.vec3(0.0, 0.0, 0.0)
     for i in range(mode_count):
         mode_data = mode_start + i
-        qddot = (joint_q[q_start + i] - joint_q_prev[q_start + i] - dt * joint_qd_prev[qd_start + i]) * inv_dt_sq
+        dq = joint_q[q_start + i] - joint_q_prev[q_start + i]
+        qdot = dq * inv_dt
+        qddot = (dq - dt * joint_qd_prev[qd_start + i]) * inv_dt_sq
+        s_qd = s_qd + elastic_mode_coupling_linear[mode_data] * qdot
+        g_qd = g_qd + elastic_mode_coupling_angular[mode_data] * qdot
         s_qdd = s_qdd + elastic_mode_coupling_linear[mode_data] * qddot
-        sang_qdd = sang_qdd + elastic_mode_coupling_angular[mode_data] * qddot
+        g_qdd = g_qdd + elastic_mode_coupling_angular[mode_data] * qddot
 
-    wp.atomic_add(body_forces, body, wp.quat_rotate(rot, -s_qdd))
-    wp.atomic_add(body_torques, body, wp.quat_rotate(rot, sang_qdd + wp.cross(com, s_qdd)))
+    omega_cross_s_qd = wp.cross(omega_local, s_qd)
+    force_local = -s_qdd - omega_cross_s_qd
+    torque_local = (
+        g_qdd
+        + wp.cross(com, s_qdd)
+        + wp.cross(omega_local, g_qd)
+        + wp.cross(com, omega_cross_s_qd)
+        - wp.cross(origin_v_local, s_qd)
+    )
+
+    wp.atomic_add(body_forces, body, wp.quat_rotate(body_rot, force_local))
+    wp.atomic_add(body_torques, body, wp.quat_rotate(body_rot, torque_local))
 
 
 @wp.kernel

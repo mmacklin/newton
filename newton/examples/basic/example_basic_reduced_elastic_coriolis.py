@@ -13,7 +13,7 @@
 #
 #   - The "coupled" beam's basis carries per-sample masses, so as the plucked
 #     z mode vibrates while spinning, the Coriolis term -2 omega . G qdot pumps
-#     energy into the perpendicular y mode and the bending plane precesses
+#     energy into the perpendicular y mode and the bending plane rotates
 #     (the spinning-shaft whirl): in the inertial frame the swing plane stays
 #     fixed while the hub turns under it.
 #   - The "uncoupled" beam's basis has no sample mass (all coupling integrals
