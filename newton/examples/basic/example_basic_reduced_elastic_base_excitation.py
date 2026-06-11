@@ -197,7 +197,7 @@ class Example:
         bounds_max = np.array(
             [0.5 * self.length + 0.1, self.y_offset + 0.1, self.base_height + self.base_amplitude + 0.1]
         )
-        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.35, -1.0, 0.35]))
+        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.4, -1.0, 0.45]))
 
     def _base_z(self, t: float) -> float:
         return self.base_height + self.base_amplitude * math.sin(2.0 * math.pi * self.base_frequency * t)

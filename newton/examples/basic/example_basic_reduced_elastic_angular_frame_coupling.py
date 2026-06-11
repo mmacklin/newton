@@ -87,7 +87,7 @@ class Example:
         self.beam_mass = 1.0
         self.mode_amplitude = 0.25
         self.inertia_zz = 0.09
-        mode_stiffness = 50.0
+        mode_stiffness = 5.0
 
         centered_points = beam_render_sample_points(
             self.length,
@@ -197,7 +197,7 @@ class Example:
         reach = 0.5 * self.length + 0.2
         bounds_min = np.array([-reach, -reach, self.height - 0.2])
         bounds_max = np.array([reach, reach, self.height + self.z_gap + 0.2])
-        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.3, -0.6, 0.7]))
+        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.4, -1.0, 0.45]))
 
     def _origin(self, name: str) -> np.ndarray:
         return np.array(self.state_0.body_q.numpy()[self.beams[name]][:3], dtype=np.float64)

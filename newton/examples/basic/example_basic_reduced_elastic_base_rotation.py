@@ -80,6 +80,20 @@ def _set_camera_from_bounds(viewer, bounds_min: np.ndarray, bounds_max: np.ndarr
     viewer.set_camera(wp.vec3(*pos), pitch, yaw)
 
 
+def _quat_rotate(q: np.ndarray, v: np.ndarray) -> np.ndarray:
+    qv = np.asarray(q[:3], dtype=np.float64)
+    w = float(q[3])
+    t = 2.0 * np.cross(qv, v)
+    return np.asarray(v, dtype=np.float64) + w * t + np.cross(qv, t)
+
+
+_FRAME_AXES = (
+    (np.array([1.0, 0.0, 0.0]), (1.0, 0.25, 0.25)),
+    (np.array([0.0, 1.0, 0.0]), (0.25, 1.0, 0.25)),
+    (np.array([0.0, 0.0, 1.0]), (0.35, 0.45, 1.0)),
+)
+
+
 class Example:
     def __init__(self, viewer, args):
         self.fps = 60
@@ -223,7 +237,7 @@ class Example:
         swing = self.length * math.sin(self.base_amplitude)
         bounds_min = np.array([-0.15, -self.y_offset - 0.1, self.base_height - swing - 0.15])
         bounds_max = np.array([self.length + 0.15, self.y_offset + 0.1, self.base_height + swing + 0.15])
-        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.35, -1.0, 0.35]))
+        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.4, -1.0, 0.45]))
 
     def _base_angle(self, t: float) -> float:
         return self.base_amplitude * math.sin(2.0 * math.pi * self.base_frequency * t)
@@ -266,9 +280,30 @@ class Example:
             self.max_abs_q[name] = max(self.max_abs_q[name], abs(value))
         self.max_abs_invariance_error = max(self.max_abs_invariance_error, abs(q["coupled_clamp"] - q["coupled_mid"]))
 
+    def _log_frames(self):
+        axis_len = 0.2
+        starts = []
+        ends = []
+        colors = []
+        for beam in self.beams.values():
+            bq = self.state_0.body_q.numpy()[beam]
+            origin = np.array(bq[:3], dtype=np.float32)
+            for axis, color in _FRAME_AXES:
+                starts.append(origin)
+                ends.append((origin + _quat_rotate(bq[3:7], axis) * axis_len).astype(np.float32))
+                colors.append(color)
+        self.viewer.log_lines(
+            "frames",
+            wp.array(np.array(starts, dtype=np.float32), dtype=wp.vec3),
+            wp.array(np.array(ends, dtype=np.float32), dtype=wp.vec3),
+            wp.array(np.array(colors, dtype=np.float32), dtype=wp.vec3),
+            width=0.012,
+        )
+
     def render(self):
         self.viewer.begin_frame(self.sim_time)
         self.viewer.log_state(self.state_0)
+        self._log_frames()
         self.viewer.end_frame()
 
     def test_final(self):

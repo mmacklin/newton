@@ -198,10 +198,10 @@ class Example:
         self.viewer.set_model(self.model)
         self.viewer.show_elastic_strain = True
         self.viewer.elastic_strain_color_max = 0.18
-        reach = self.length + 0.25
+        reach = self.length + 0.05
         bounds_min = np.array([-reach, -reach, self.base_height - 0.2])
         bounds_max = np.array([reach, reach, self.base_height + self.z_gap + 0.2])
-        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.6, -1.0, 0.5]))
+        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.4, -1.0, 0.45]))
 
     def _spin_rate_at(self, t: float) -> float:
         return self.spin_rate * min(t / self.ramp_time, 1.0)

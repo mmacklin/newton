@@ -120,6 +120,15 @@ class Example:
         shape_cfg.has_shape_collision = False
         shape_cfg.has_particle_collision = False
 
+        builder.add_shape_box(
+            -1,
+            xform=wp.transform(wp.vec3(-0.5 * self.length, 0.0, self.z), wp.quat_identity()),
+            hx=0.05,
+            hy=0.5 * self.length,
+            hz=0.04,
+            cfg=shape_cfg,
+        )
+
         self.beams = {}
         for name, basis, y in (
             ("coupled", coupled_basis, -self.y_offset),
@@ -177,7 +186,7 @@ class Example:
         self.viewer.elastic_strain_color_max = 0.02
         bounds_min = np.array([-0.5 * self.length - 0.06, -self.y_offset - 0.1, self.z + 1.4 * self.expected_q - 0.08])
         bounds_max = np.array([0.5 * self.length + 0.1, self.y_offset + 0.1, self.z + 0.1])
-        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.35, -1.0, 0.35]))
+        _set_camera_from_bounds(self.viewer, bounds_min, bounds_max, np.array([-0.4, -1.0, 0.45]))
 
     def _mode_value(self, name: str) -> float:
         return float(self.state_0.joint_q.numpy()[self._q_index[name]])
