@@ -8,6 +8,7 @@ acceptance criteria.  Test expectation changes in this file should follow
 ``docs/cable_joints_slip_plan.md``.
 """
 
+import math
 import unittest
 from itertools import pairwise
 
@@ -90,6 +91,56 @@ def build_pinhole_atwood(mass_left=1.0, mass_right=3.0, mu=0.0, compliance=1.0e-
 
     builder.add_ground_plane()
     return builder.finalize(), left, right
+
+
+def build_stiff_pinhole_capstan(n_pinholes=9, mu=0.1, compliance=2.0e-8):
+    """Build a stiff cable around a fixed pulley using frictional pinholes.
+
+    The 180-degree wrap has a fixed anchor on one side and a force-driven slider on the other.
+    Per-segment stretch is about 1e-7 m, near the float32 resolution of the segment lengths.
+    """
+    builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=0.0)
+    r, drop, axis = 0.005, 0.15, (0.0, 1.0, 0.0)
+
+    anchor = builder.add_body(xform=wp.transform(p=wp.vec3(-r, 0.0, -drop)), mass=0.0, is_kinematic=True)
+    builder.add_shape_sphere(anchor, radius=r * 0.15)
+    pulley = builder.add_body(xform=wp.transform(p=wp.vec3(0.0, 0.0, 0.0)), mass=0.0, is_kinematic=True)
+    slider = builder.add_link(xform=wp.transform(p=wp.vec3(r, 0.0, -drop)), mass=0.01)
+    builder.add_shape_sphere(slider, radius=r * 0.15, cfg=newton.ModelBuilder.ShapeConfig(density=0.0))
+    joint = builder.add_joint_d6(
+        parent=-1,
+        child=slider,
+        linear_axes=[newton.ModelBuilder.JointDofConfig(axis=Axis.Z)],
+        angular_axes=[],
+        parent_xform=wp.transform(p=wp.vec3(r, 0.0, -drop)),
+        child_xform=wp.transform(),
+    )
+    builder.add_articulation([joint])
+
+    builder.add_tendon()
+    builder.add_tendon_link(body=anchor, link_type=int(TendonLinkType.ATTACHMENT), offset=(0.0, 0.0, 0.0), axis=axis)
+    for i in range(n_pinholes):
+        a = math.pi - i * math.pi / (n_pinholes - 1)  # pi..0 over the top of the pulley
+        builder.add_tendon_link(
+            body=pulley,
+            link_type=int(TendonLinkType.PINHOLE),
+            mu=mu,
+            offset=(r * math.cos(a), 0.0, r * math.sin(a)),
+            axis=axis,
+            compliance=compliance,
+            damping=0.0,
+            rest_length=-1.0,
+        )
+    builder.add_tendon_link(
+        body=slider,
+        link_type=int(TendonLinkType.ATTACHMENT),
+        offset=(0.0, 0.0, 0.0),
+        axis=axis,
+        compliance=compliance,
+        damping=0.0,
+        rest_length=-1.0,
+    )
+    return builder.finalize(), slider
 
 
 def build_slack_pinhole_route():
@@ -1693,6 +1744,54 @@ def test_finite_friction_zero_span_respects_global_capstan_cone(test, device):
             )
 
 
+def test_stiff_pinhole_capstan_matches_euler_eytelwein(test, device):
+    """A stiff (low-compliance) cable wrapping a pinhole pulley must still obey the capstan
+    equation: under loading the anchor/slider tension ratio approaches exp(-mu*pi).
+
+    Regression for the stiff-cable under-shoot: when the per-segment stretch d = len - rest is
+    recomputed as a difference of ~1e-3 m lengths every relaxation sweep, the ~1e-9 m friction
+    transfers vanish into float32 cancellation and the cone is over-applied (ratio collapses to
+    ~0.5 instead of 0.73). Tracking d as precise state across the sweeps restores the bound.
+    """
+    with wp.ScopedDevice(device):
+        mu, fmax, substeps, fps = 0.1, 10.0, 48, 20
+        model, slider = build_stiff_pinhole_capstan(n_pinholes=9, mu=mu, compliance=2.0e-8)
+        solver = newton.solvers.SolverXPBD(model, iterations=64, joint_linear_relaxation=1.0)
+        state_0, state_1 = model.state(), model.state()
+        control, contacts = model.control(), model.contacts()
+        comp = model.tendon_seg_compliance.numpy()
+
+        frame_dt = 1.0 / fps
+        sub_dt = frame_dt / substeps
+        n_frames = fps  # ramp force 0 -> fmax over 1 s (loading only)
+        body_f = np.zeros((model.body_count, 6), dtype=np.float32)
+        ratios = []
+        for frame in range(n_frames):
+            f_cmd = fmax * (frame + 1) / n_frames
+            for _ in range(substeps):
+                state_0.clear_forces()
+                body_f[slider] = (0.0, 0.0, -f_cmd, 0.0, 0.0, 0.0)  # pull slider along -Z
+                state_0.body_f.assign(wp.array(body_f, dtype=wp.spatial_vector))
+                solver.step(state_0, state_1, control, contacts, sub_dt)
+                state_0, state_1 = state_1, state_0
+            if 0.6 * fmax <= f_cmd <= 0.95 * fmax:
+                att_l = solver.tendon_seg_attachment_l.numpy()
+                att_r = solver.tendon_seg_attachment_r.numpy()
+                rest = solver.tendon_seg_rest_length.numpy()
+                tension = np.maximum(np.linalg.norm(att_r - att_l, axis=1) - rest, 0.0) / comp
+                ratios.append(tension[0] / max(tension[-1], 1.0e-9))  # T_anchor / T_slider
+
+        ratio = float(np.mean(ratios))
+        target = math.exp(-mu * math.pi)  # 0.7304
+        # broken kernel collapses to ~0.5 (over-friction); fixed tracks the capstan bound.
+        test.assertGreater(
+            ratio, 0.66, f"stiff capstan under-shoots Euler-Eytelwein: ratio={ratio:.4f}, target={target:.4f}"
+        )
+        test.assertLess(
+            ratio, 0.81, f"stiff capstan over-shoots Euler-Eytelwein: ratio={ratio:.4f}, target={target:.4f}"
+        )
+
+
 devices = ["cpu"]
 if wp.is_cuda_available():
     devices.append("cuda:0")
@@ -1829,6 +1928,12 @@ add_test(
     "finite_friction_zero_span_respects_global_capstan_cone",
     devices,
     test_finite_friction_zero_span_respects_global_capstan_cone,
+)
+add_test(
+    TestTendonCapstan,
+    "stiff_pinhole_capstan_matches_euler_eytelwein",
+    devices,
+    test_stiff_pinhole_capstan_matches_euler_eytelwein,
 )
 
 

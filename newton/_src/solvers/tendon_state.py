@@ -102,6 +102,7 @@ class TendonStateMixin:
         if model.tendon_segment_count == 0:
             self.tendon_seg_rest_length = None
             self.tendon_seg_rest_length_step = None
+            self.tendon_seg_stretch = None
             self.tendon_seg_attachment_l = None
             self.tendon_seg_attachment_r = None
             self.tendon_seg_attachment_l_local = None
@@ -179,6 +180,9 @@ class TendonStateMixin:
             rest_np[auto_mask] = 0.0
             self.tendon_seg_rest_length = wp.array(rest_np, dtype=float, device=model.device)
             self.tendon_seg_rest_length_step = wp.array(rest_np.copy(), dtype=float, device=model.device)
+            # scratch: per-segment stretch d = len - rest, snapshot+telescoped inside the capstan
+            # transport (kept at its own scale so stiff-cable friction transfers survive float32)
+            self.tendon_seg_stretch = wp.zeros_like(self.tendon_seg_rest_length)
 
             route_rest_np, route_seg_mask = self._compute_active_route_rest_lengths(model)
             self.tendon_link_route_rest_length = wp.array(route_rest_np, dtype=float, device=model.device)
@@ -303,6 +307,7 @@ class TendonStateMixin:
                 model.tendon_link_axis,
                 self.tendon_seg_rest_length,
                 self.tendon_seg_rest_length_step,
+                self.tendon_seg_stretch,
                 model.tendon_seg_compliance,
                 model.tendon_seg_damping,
                 self.tendon_seg_active,
