@@ -164,6 +164,8 @@ def add_pulley(
     *,
     parent: int | None,
     sheave_mu: float,
+    contact_ke: float,
+    contact_kd: float,
     label: str | None = None,
 ) -> tuple[int, int | None]:
     """Add one XY-table pulley.
@@ -198,8 +200,8 @@ def add_pulley(
     groove_half_width = 1.55 * cable_radius
     flange_half_thickness = 0.6 * cable_radius
     flange_radius = radius + 3.2 * cable_radius
-    sheave_cfg = newton.ModelBuilder.ShapeConfig(density=1000.0, ke=1.0e5, kd=0.0, mu=sheave_mu)
-    flange_cfg = newton.ModelBuilder.ShapeConfig(density=1000.0, ke=1.0e5, kd=0.0, mu=0.0)
+    sheave_cfg = newton.ModelBuilder.ShapeConfig(density=1000.0, ke=contact_ke, kd=contact_kd, mu=sheave_mu)
+    flange_cfg = newton.ModelBuilder.ShapeConfig(density=1000.0, ke=contact_ke, kd=contact_kd, mu=0.0)
     flange_color = _dim_color(color, 0.68)
 
     for suffix, z, shape_radius, half_height, cfg, shape_color in (
@@ -418,9 +420,25 @@ class Example:
         fps = 60
         self.frame_dt = 1.0 / fps
         self.sim_time = 0.0
-        self.sim_substeps = 10
-        sim_iterations = 5
+        self.sim_substeps = getattr(args, "sim_substeps", 10)
+        sim_iterations = getattr(args, "sim_iterations", 5)
+        if self.sim_substeps < 1:
+            raise ValueError("sim_substeps must be at least 1.")
+        if sim_iterations < 1:
+            raise ValueError("sim_iterations must be at least 1.")
         self.sim_dt = self.frame_dt / self.sim_substeps
+        rigid_articulation_solve = getattr(args, "rigid_articulation_solve", "local")
+        rigid_articulation_relaxation = getattr(args, "rigid_articulation_relaxation", 0.65)
+        cable_bend_stiffness = getattr(args, "cable_bend_stiffness", 1.0e-2)
+        cable_bend_damping = getattr(args, "cable_bend_damping", 1.0e-2)
+        contact_ke = getattr(args, "contact_ke", 1.0e5)
+        contact_kd = getattr(args, "contact_kd", 0.0)
+        rigid_contact_k_start = getattr(args, "rigid_contact_k_start", 1.0e2)
+        rigid_avbd_beta = getattr(args, "rigid_avbd_beta", 0.0)
+        rigid_joint_linear_ke = getattr(args, "rigid_joint_linear_ke", 1.0e5)
+        rigid_joint_angular_ke = getattr(args, "rigid_joint_angular_ke", 1.0e5)
+        rigid_joint_linear_kd = getattr(args, "rigid_joint_linear_kd", 0.0)
+        rigid_joint_angular_kd = getattr(args, "rigid_joint_angular_kd", 0.0)
 
         # Cable and mechanism dimensions.
         cable_radius = 0.003
@@ -453,8 +471,8 @@ class Example:
         # so the cable remains guided by the pulley grooves.
         builder = newton.ModelBuilder()
         builder.rigid_gap = 5.0 * cable_radius
-        builder.default_shape_cfg.ke = 1.0e5
-        builder.default_shape_cfg.kd = 0.0
+        builder.default_shape_cfg.ke = contact_ke
+        builder.default_shape_cfg.kd = contact_kd
         builder.default_shape_cfg.mu = 1.0
 
         base_origin = wp.vec3(0.0, 0.0, base_z)
@@ -626,6 +644,8 @@ class Example:
                 color,
                 parent=parent,
                 sheave_mu=sheave_mu,
+                contact_ke=contact_ke,
+                contact_kd=contact_kd,
                 label=f"xy_table_{i}_{label}",
             )
             if pulley_joint is None:
@@ -687,8 +707,8 @@ class Example:
             cfg=cable_cfg,
             stretch_stiffness=1.0e5,
             stretch_damping=1.0e-4,
-            bend_stiffness=1.0e-2,
-            bend_damping=1.0e-2,
+            bend_stiffness=cable_bend_stiffness,
+            bend_damping=cable_bend_damping,
             wrap_in_articulation=False,
             label="xy_table_cable",
             body_frame_origin="com",
@@ -760,6 +780,14 @@ class Example:
             iterations=sim_iterations,
             rigid_body_contact_buffer_size=256,
             rigid_contact_hard=False,
+            rigid_contact_k_start=rigid_contact_k_start,
+            rigid_avbd_beta=rigid_avbd_beta,
+            rigid_articulation_solve=rigid_articulation_solve,
+            rigid_articulation_relaxation=rigid_articulation_relaxation,
+            rigid_joint_linear_ke=rigid_joint_linear_ke,
+            rigid_joint_angular_ke=rigid_joint_angular_ke,
+            rigid_joint_linear_kd=rigid_joint_linear_kd,
+            rigid_joint_angular_kd=rigid_joint_angular_kd,
         )
 
         self.state_0 = self.model.state()
@@ -963,8 +991,32 @@ class Example:
                 f"{TABLE_TRACKING_RMS_ERROR_TOLERANCE:.4f} m."
             )
 
+    @staticmethod
+    def create_parser():
+        parser = newton.examples.create_parser()
+        parser.add_argument(
+            "--rigid-articulation-solve",
+            choices=("local", "block_sparse_joints"),
+            default="local",
+        )
+        parser.add_argument("--sim-substeps", type=int, default=10)
+        parser.add_argument("--sim-iterations", type=int, default=5)
+        parser.add_argument("--rigid-articulation-relaxation", type=float, default=0.65)
+        parser.add_argument("--cable-bend-stiffness", type=float, default=1.0e-2)
+        parser.add_argument("--cable-bend-damping", type=float, default=1.0e-2)
+        parser.add_argument("--contact-ke", type=float, default=1.0e5)
+        parser.add_argument("--contact-kd", type=float, default=0.0)
+        parser.add_argument("--rigid-contact-k-start", type=float, default=1.0e2)
+        parser.add_argument("--rigid-avbd-beta", type=float, default=0.0)
+        parser.add_argument("--rigid-joint-linear-ke", type=float, default=1.0e5)
+        parser.add_argument("--rigid-joint-angular-ke", type=float, default=1.0e5)
+        parser.add_argument("--rigid-joint-linear-kd", type=float, default=0.0)
+        parser.add_argument("--rigid-joint-angular-kd", type=float, default=0.0)
+        return parser
+
 
 if __name__ == "__main__":
-    viewer, args = newton.examples.init()
+    parser = Example.create_parser()
+    viewer, args = newton.examples.init(parser)
     example = Example(viewer, args)
     newton.examples.run(example, args)
