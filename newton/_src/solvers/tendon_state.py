@@ -99,6 +99,15 @@ class TendonStateMixin:
 
     def _init_tendon_state(self, model: Model, allocate_xpbd_lambdas: bool = True) -> None:
         """Allocate mutable tendon state arrays and build segment/link mappings."""
+        # Solver-level cable cone parameters (a solver may override before calling this).
+        if not hasattr(self, "tendon_max_sweeps"):
+            self.tendon_max_sweeps = 256
+        if not hasattr(self, "tendon_settle_tol"):
+            self.tendon_settle_tol = 1.0e-3
+        if not 1 <= self.tendon_max_sweeps <= 256:
+            raise ValueError(f"tendon_max_sweeps must be between 1 and 256, got {self.tendon_max_sweeps}")
+        if self.tendon_settle_tol < 0.0:
+            raise ValueError(f"tendon_settle_tol must be non-negative, got {self.tendon_settle_tol}")
         if model.tendon_segment_count == 0:
             self.tendon_seg_rest_length = None
             self.tendon_seg_rest_length_step = None
@@ -113,6 +122,7 @@ class TendonStateMixin:
             self.tendon_seg_delta_lambda = None
             self.tendon_seg_rolling_delta_l = None
             self.tendon_seg_rolling_delta_r = None
+            self.tendon_cone_sweep_count = None
             self.tendon_seg_link_l = None
             self.tendon_seg_active = None
             self.tendon_seg_active_link_l = None
@@ -140,6 +150,7 @@ class TendonStateMixin:
             )
             self.tendon_seg_rolling_delta_l = wp.zeros(model.tendon_segment_count, dtype=float)
             self.tendon_seg_rolling_delta_r = wp.zeros(model.tendon_segment_count, dtype=float)
+            self.tendon_cone_sweep_count = wp.zeros(model.tendon_count, dtype=wp.int32)
             self.tendon_seg_active = wp.ones(model.tendon_segment_count, dtype=wp.int32)
             self.tendon_seg_active_link_l = wp.zeros(model.tendon_segment_count, dtype=wp.int32)
             self.tendon_seg_active_link_r = wp.zeros(model.tendon_segment_count, dtype=wp.int32)
@@ -325,8 +336,12 @@ class TendonStateMixin:
                 self.tendon_seg_attachment_r_local_step,
                 self.tendon_seg_rolling_delta_l,
                 self.tendon_seg_rolling_delta_r,
+                self.tendon_cone_sweep_count,
                 0,
                 0,
+                0,
+                self.tendon_max_sweeps,
+                self.tendon_settle_tol,
             ],
             device=model.device,
         )

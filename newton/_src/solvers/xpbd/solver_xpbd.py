@@ -115,9 +115,17 @@ class SolverXPBD(TendonStateMixin, SolverBase):
         rigid_contact_con_weighting: bool = True,
         angular_damping: float = 0.0,
         enable_restitution: bool = False,
+        tendon_max_sweeps: int = 256,
+        tendon_settle_tol: float = 1.0e-3,
     ):
         super().__init__(model=model)
         self.iterations = iterations
+        # Routed-cable capstan cone relaxation: up to tendon_max_sweeps Gauss-Seidel passes, stopping
+        # early once the relaxation has settled -- the max per-sweep relative tension change (largest
+        # tension change / peak tension, dimensionless) falls below tendon_settle_tol. Already-converged
+        # cables stop almost immediately; stiff/transient ones run up to the cap.
+        self.tendon_max_sweeps = tendon_max_sweeps
+        self.tendon_settle_tol = tendon_settle_tol
 
         self.soft_body_relaxation = soft_body_relaxation
         self.soft_contact_relaxation = soft_contact_relaxation
@@ -698,8 +706,12 @@ class SolverXPBD(TendonStateMixin, SolverBase):
                                 self.tendon_seg_attachment_r_local_step,
                                 self.tendon_seg_rolling_delta_l,
                                 self.tendon_seg_rolling_delta_r,
+                                self.tendon_cone_sweep_count,
                                 1,
                                 1,
+                                1,
+                                self.tendon_max_sweeps,
+                                self.tendon_settle_tol,
                             ],
                             device=model.device,
                         )
