@@ -198,8 +198,12 @@ def main() -> None:
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--robots", nargs="+", default=["h1", "g1"], choices=["h1", "g1"])
-    parser.add_argument("--modes", nargs="+", default=["local", "block_sparse_joints"], choices=["local", "block_sparse_joints"])
-    parser.add_argument("--joint-stiffness", nargs="+", default=["default", "fixed_high"], choices=["default", "fixed_high"])
+    parser.add_argument(
+        "--modes", nargs="+", default=["local", "block_sparse_joints"], choices=["local", "block_sparse_joints"]
+    )
+    parser.add_argument(
+        "--joint-stiffness", nargs="+", default=["default", "fixed_high"], choices=["default", "fixed_high"]
+    )
     parser.add_argument("--steps", type=int, default=90)
     parser.add_argument("--iterations", type=int, default=3)
     parser.add_argument("--width", type=int, default=WIDTH)

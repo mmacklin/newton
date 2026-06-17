@@ -673,9 +673,7 @@ class TestVBDSparseArticulation(unittest.TestCase):
         for joint_kind in ("prismatic", "d6", "cable"):
             with self.subTest(joint_kind=joint_kind):
                 local_linear, local_angular = _solve_projected_joint_split_residual(joint_kind, "local")
-                sparse_linear, sparse_angular = _solve_projected_joint_split_residual(
-                    joint_kind, "block_sparse_joints"
-                )
+                sparse_linear, sparse_angular = _solve_projected_joint_split_residual(joint_kind, "block_sparse_joints")
                 self.assertLess(sparse_linear, 0.9 * local_linear)
                 self.assertLess(sparse_angular, 0.9 * local_angular)
 

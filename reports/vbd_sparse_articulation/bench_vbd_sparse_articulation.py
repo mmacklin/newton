@@ -27,8 +27,8 @@ import newton
 
 @wp.kernel
 def perturb_body_transforms(
-    body_q: wp.array(dtype=wp.transform),
-    body_inv_mass: wp.array(dtype=float),
+    body_q: wp.array[wp.transform],
+    body_inv_mass: wp.array[float],
     amplitude: float,
 ):
     body_id = wp.tid()
@@ -426,6 +426,7 @@ def make_solver(model: newton.Model, mode: str, iterations: int):
 def run_case(args: argparse.Namespace, scenario: str, body_count: int, mode: str) -> CaseResult:
     wp_device = wp.get_device(args.device)
     with wp.ScopedDevice(wp_device):
+
         def create_runtime():
             model = build_model(scenario, body_count, args.device)
             state_0 = model.state()

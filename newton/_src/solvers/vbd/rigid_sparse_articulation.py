@@ -45,7 +45,9 @@ def _symbolic_cholesky_pattern(body_count: int, edges: set[tuple[int, int]]) -> 
     return [sorted(row) for row in rows]
 
 
-def build_rigid_articulation_sparse_layout(model, device: wp.context.Devicelike) -> RigidArticulationSparseLayout | None:
+def build_rigid_articulation_sparse_layout(
+    model, device: wp.context.Devicelike
+) -> RigidArticulationSparseLayout | None:
     """Build the static articulation sparse layout from Newton articulation ranges."""
 
     if model.body_count == 0:

@@ -92,7 +92,7 @@ def _resolve_drive_limit_mode(
 @wp.func
 def _joint_projectors(
     jt: int,
-    joint_axis: wp.array(dtype=wp.vec3),
+    joint_axis: wp.array[wp.vec3],
     qd_start: int,
     lin_count: int,
     ang_count: int,
@@ -134,8 +134,8 @@ def _joint_projectors(
 
 @wp.func
 def _find_block_slot(
-    articulation_block_row_offsets: wp.array(dtype=wp.int32),
-    articulation_block_cols: wp.array(dtype=wp.int32),
+    articulation_block_row_offsets: wp.array[wp.int32],
+    articulation_block_cols: wp.array[wp.int32],
     body_start: int,
     row_local: int,
     col_local: int,
@@ -151,13 +151,13 @@ def _find_block_slot(
 
 
 @wp.func
-def _add_mat66(values: wp.array(dtype=mat66f), slot: int, block: mat66f):
+def _add_mat66(values: wp.array[mat66f], slot: int, block: mat66f):
     if slot >= 0:
         values[slot] = values[slot] + block
 
 
 @wp.func
-def _add_rhs(rhs: wp.array(dtype=vec6f), index: int, value: vec6f):
+def _add_rhs(rhs: wp.array[vec6f], index: int, value: vec6f):
     rhs[index] = rhs[index] + value
 
 
@@ -277,10 +277,10 @@ def _joint_angular_jacobian_value(P: wp.mat33, is_parent: bool, constraint_row: 
 
 @wp.func
 def _assemble_constraint_pair(
-    values: wp.array(dtype=mat66f),
-    rhs: wp.array(dtype=vec6f),
-    articulation_block_row_offsets: wp.array(dtype=wp.int32),
-    articulation_block_cols: wp.array(dtype=wp.int32),
+    values: wp.array[mat66f],
+    rhs: wp.array[vec6f],
+    articulation_block_row_offsets: wp.array[wp.int32],
+    articulation_block_cols: wp.array[wp.int32],
     body_start: int,
     local_a: int,
     local_b: int,
@@ -350,10 +350,10 @@ def _assemble_constraint_pair(
 
 @wp.func
 def _assemble_constraint_single(
-    values: wp.array(dtype=mat66f),
-    rhs: wp.array(dtype=vec6f),
-    articulation_block_row_offsets: wp.array(dtype=wp.int32),
-    articulation_block_cols: wp.array(dtype=wp.int32),
+    values: wp.array[mat66f],
+    rhs: wp.array[vec6f],
+    articulation_block_row_offsets: wp.array[wp.int32],
+    articulation_block_cols: wp.array[wp.int32],
     body_start: int,
     local_body: int,
     residual: wp.vec3,
@@ -392,10 +392,10 @@ def _assemble_constraint_single(
 
 @wp.func
 def _assemble_angular_direct_pair(
-    values: wp.array(dtype=mat66f),
-    rhs: wp.array(dtype=vec6f),
-    articulation_block_row_offsets: wp.array(dtype=wp.int32),
-    articulation_block_cols: wp.array(dtype=wp.int32),
+    values: wp.array[mat66f],
+    rhs: wp.array[vec6f],
+    articulation_block_row_offsets: wp.array[wp.int32],
+    articulation_block_cols: wp.array[wp.int32],
     body_start: int,
     parent_local: int,
     child_local: int,
@@ -487,10 +487,10 @@ def _angular_constraint_force_hessian(
 
 @wp.func
 def _assemble_linear_joint(
-    values: wp.array(dtype=mat66f),
-    rhs: wp.array(dtype=vec6f),
-    articulation_block_row_offsets: wp.array(dtype=wp.int32),
-    articulation_block_cols: wp.array(dtype=wp.int32),
+    values: wp.array[mat66f],
+    rhs: wp.array[vec6f],
+    articulation_block_row_offsets: wp.array[wp.int32],
+    articulation_block_cols: wp.array[wp.int32],
     body_start: int,
     parent_local: int,
     child_local: int,
@@ -500,8 +500,8 @@ def _assemble_linear_joint(
     child_anchor: wp.vec3,
     parent_anchor_prev: wp.vec3,
     child_anchor_prev: wp.vec3,
-    body_q: wp.array(dtype=wp.transform),
-    body_com: wp.array(dtype=wp.vec3),
+    body_q: wp.array[wp.transform],
+    body_com: wp.array[wp.vec3],
     stiffness: float,
     damping: float,
     dt: float,
@@ -564,10 +564,10 @@ def _assemble_linear_joint(
 
 @wp.func
 def _assemble_angular_joint(
-    values: wp.array(dtype=mat66f),
-    rhs: wp.array(dtype=vec6f),
-    articulation_block_row_offsets: wp.array(dtype=wp.int32),
-    articulation_block_cols: wp.array(dtype=wp.int32),
+    values: wp.array[mat66f],
+    rhs: wp.array[vec6f],
+    articulation_block_row_offsets: wp.array[wp.int32],
+    articulation_block_cols: wp.array[wp.int32],
     body_start: int,
     parent_local: int,
     child_local: int,
@@ -623,10 +623,10 @@ def _assemble_angular_joint(
 
 @wp.func
 def _assemble_linear_axis_row(
-    values: wp.array(dtype=mat66f),
-    rhs: wp.array(dtype=vec6f),
-    articulation_block_row_offsets: wp.array(dtype=wp.int32),
-    articulation_block_cols: wp.array(dtype=wp.int32),
+    values: wp.array[mat66f],
+    rhs: wp.array[vec6f],
+    articulation_block_row_offsets: wp.array[wp.int32],
+    articulation_block_cols: wp.array[wp.int32],
     body_start: int,
     parent_local: int,
     child_local: int,
@@ -634,8 +634,8 @@ def _assemble_linear_axis_row(
     child_body: int,
     parent_anchor: wp.vec3,
     child_anchor: wp.vec3,
-    body_q: wp.array(dtype=wp.transform),
-    body_com: wp.array(dtype=wp.vec3),
+    body_q: wp.array[wp.transform],
+    body_com: wp.array[wp.vec3],
     axis_world: wp.vec3,
     force_scalar: float,
     hessian_scalar: float,
@@ -686,10 +686,10 @@ def _assemble_linear_axis_row(
 
 @wp.func
 def _assemble_angular_axis_row(
-    values: wp.array(dtype=mat66f),
-    rhs: wp.array(dtype=vec6f),
-    articulation_block_row_offsets: wp.array(dtype=wp.int32),
-    articulation_block_cols: wp.array(dtype=wp.int32),
+    values: wp.array[mat66f],
+    rhs: wp.array[vec6f],
+    articulation_block_row_offsets: wp.array[wp.int32],
+    articulation_block_cols: wp.array[wp.int32],
     body_start: int,
     parent_local: int,
     child_local: int,
@@ -717,62 +717,62 @@ def _assemble_angular_axis_row(
 @wp.kernel
 def solve_articulation_sparse_cpu(
     dt: float,
-    articulation_body_offsets: wp.array(dtype=wp.int32),
-    articulation_joint_offsets: wp.array(dtype=wp.int32),
-    articulation_bodies: wp.array(dtype=wp.int32),
-    articulation_joints: wp.array(dtype=wp.int32),
-    articulation_block_row_offsets: wp.array(dtype=wp.int32),
-    articulation_block_cols: wp.array(dtype=wp.int32),
-    articulation_diag_slots: wp.array(dtype=wp.int32),
-    body_articulation_local: wp.array(dtype=wp.int32),
-    body_q: wp.array(dtype=wp.transform),
-    body_q_prev: wp.array(dtype=wp.transform),
-    body_q_rest: wp.array(dtype=wp.transform),
-    body_mass: wp.array(dtype=float),
-    body_inv_mass: wp.array(dtype=float),
-    body_com: wp.array(dtype=wp.vec3),
-    body_inertia: wp.array(dtype=wp.mat33),
-    body_inertia_q: wp.array(dtype=wp.transform),
-    body_forces: wp.array(dtype=wp.vec3),
-    body_torques: wp.array(dtype=wp.vec3),
-    body_hessian_ll: wp.array(dtype=wp.mat33),
-    body_hessian_al: wp.array(dtype=wp.mat33),
-    body_hessian_aa: wp.array(dtype=wp.mat33),
-    joint_type: wp.array(dtype=int),
-    joint_enabled: wp.array(dtype=bool),
-    joint_parent: wp.array(dtype=int),
-    joint_child: wp.array(dtype=int),
-    joint_X_p: wp.array(dtype=wp.transform),
-    joint_X_c: wp.array(dtype=wp.transform),
-    joint_axis: wp.array(dtype=wp.vec3),
-    joint_qd_start: wp.array(dtype=int),
-    joint_target_q_start: wp.array(dtype=int),
-    joint_constraint_start: wp.array(dtype=int),
-    joint_penalty_k: wp.array(dtype=float),
-    joint_penalty_kd: wp.array(dtype=float),
-    joint_sigma_start: wp.array(dtype=wp.vec3),
-    joint_C_fric: wp.array(dtype=wp.vec3),
-    joint_dof_dim: wp.array(dtype=int, ndim=2),
-    joint_rest_angle: wp.array(dtype=float),
-    joint_target_ke: wp.array(dtype=float),
-    joint_target_kd: wp.array(dtype=float),
-    joint_target_q: wp.array(dtype=float),
-    joint_target_vel: wp.array(dtype=float),
-    joint_limit_lower: wp.array(dtype=float),
-    joint_limit_upper: wp.array(dtype=float),
-    joint_limit_ke: wp.array(dtype=float),
-    joint_limit_kd: wp.array(dtype=float),
-    joint_lambda_lin: wp.array(dtype=wp.vec3),
-    joint_lambda_ang: wp.array(dtype=wp.vec3),
-    joint_C0_lin: wp.array(dtype=wp.vec3),
-    joint_C0_ang: wp.array(dtype=wp.vec3),
-    joint_is_hard: wp.array(dtype=wp.int32),
+    articulation_body_offsets: wp.array[wp.int32],
+    articulation_joint_offsets: wp.array[wp.int32],
+    articulation_bodies: wp.array[wp.int32],
+    articulation_joints: wp.array[wp.int32],
+    articulation_block_row_offsets: wp.array[wp.int32],
+    articulation_block_cols: wp.array[wp.int32],
+    articulation_diag_slots: wp.array[wp.int32],
+    body_articulation_local: wp.array[wp.int32],
+    body_q: wp.array[wp.transform],
+    body_q_prev: wp.array[wp.transform],
+    body_q_rest: wp.array[wp.transform],
+    body_mass: wp.array[float],
+    body_inv_mass: wp.array[float],
+    body_com: wp.array[wp.vec3],
+    body_inertia: wp.array[wp.mat33],
+    body_inertia_q: wp.array[wp.transform],
+    body_forces: wp.array[wp.vec3],
+    body_torques: wp.array[wp.vec3],
+    body_hessian_ll: wp.array[wp.mat33],
+    body_hessian_al: wp.array[wp.mat33],
+    body_hessian_aa: wp.array[wp.mat33],
+    joint_type: wp.array[int],
+    joint_enabled: wp.array[bool],
+    joint_parent: wp.array[int],
+    joint_child: wp.array[int],
+    joint_X_p: wp.array[wp.transform],
+    joint_X_c: wp.array[wp.transform],
+    joint_axis: wp.array[wp.vec3],
+    joint_qd_start: wp.array[int],
+    joint_target_q_start: wp.array[int],
+    joint_constraint_start: wp.array[int],
+    joint_penalty_k: wp.array[float],
+    joint_penalty_kd: wp.array[float],
+    joint_sigma_start: wp.array[wp.vec3],
+    joint_C_fric: wp.array[wp.vec3],
+    joint_dof_dim: wp.array2d[int],
+    joint_rest_angle: wp.array[float],
+    joint_target_ke: wp.array[float],
+    joint_target_kd: wp.array[float],
+    joint_target_q: wp.array[float],
+    joint_target_vel: wp.array[float],
+    joint_limit_lower: wp.array[float],
+    joint_limit_upper: wp.array[float],
+    joint_limit_ke: wp.array[float],
+    joint_limit_kd: wp.array[float],
+    joint_lambda_lin: wp.array[wp.vec3],
+    joint_lambda_ang: wp.array[wp.vec3],
+    joint_C0_lin: wp.array[wp.vec3],
+    joint_C0_ang: wp.array[wp.vec3],
+    joint_is_hard: wp.array[wp.int32],
     avbd_alpha: float,
     update_relaxation: float,
-    values: wp.array(dtype=mat66f),
-    rhs: wp.array(dtype=vec6f),
-    delta: wp.array(dtype=vec6f),
-    body_q_new: wp.array(dtype=wp.transform),
+    values: wp.array[mat66f],
+    rhs: wp.array[vec6f],
+    delta: wp.array[vec6f],
+    body_q_new: wp.array[wp.transform],
 ):
     articulation_id = wp.tid()
     body_start = articulation_body_offsets[articulation_id]
