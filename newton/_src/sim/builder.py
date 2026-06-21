@@ -1125,6 +1125,8 @@ class ModelBuilder:
         """ModalBasis-local sample index for each internal reduced elastic endpoint."""
         self.elastic_endpoint_phi: list[wp.vec3] = []
         """Flattened translational mode samples for internal reduced elastic endpoints."""
+        self.elastic_endpoint_psi: list[wp.vec3] = []
+        """Flattened angular mode samples for internal reduced elastic endpoints."""
         self.elastic_render_point_start: list[int] = []
         """Start point for each reduced elastic body's render polyline samples."""
         self.elastic_render_point_count: list[int] = []
@@ -9559,30 +9561,35 @@ class ModelBuilder:
 
         return all_ordered
 
-    def _sample_elastic_mode_shape(self, elastic_index: int, local_pos: np.ndarray) -> np.ndarray:
-        phi, _ = self._add_elastic_modal_sample(elastic_index, local_pos)
-        return phi
+    def _add_elastic_modal_sample(
+        self, elastic_index: int, local_pos: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, int]:
+        """Return the translational and angular mode samples and basis sample index at a body-local point.
 
-    def _add_elastic_modal_sample(self, elastic_index: int, local_pos: np.ndarray) -> tuple[np.ndarray, int]:
+        Angular samples are only available from a :class:`ModalBasis`; bodies driven by a
+        ``mode_shape_fn`` and unsampled bodies report zero angular coupling.
+        """
         mode_count = self.elastic_mode_count[elastic_index]
         if mode_count == 0:
-            return np.zeros((0, 3), dtype=np.float32), -1
+            return np.zeros((0, 3), dtype=np.float32), np.zeros((0, 3), dtype=np.float32), -1
 
+        zero_psi = np.zeros((mode_count, 3), dtype=np.float32)
         basis_index = self.elastic_basis[elastic_index] if elastic_index < len(self.elastic_basis) else -1
         if basis_index >= 0:
             basis = self.modal_bases[basis_index]
             sample_index = basis.add_sample(local_pos)
-            values = basis.sample_value(sample_index)
-            if values.shape != (mode_count, 3):
+            phi = basis.sample_phi[sample_index]
+            psi = basis.sample_psi[sample_index]
+            if phi.shape != (mode_count, 3):
                 raise ValueError(
                     f"modal_basis for elastic body {self.elastic_body[elastic_index]} must provide "
-                    f"shape ({mode_count}, 3), got {values.shape}"
+                    f"shape ({mode_count}, 3), got {phi.shape}"
                 )
-            return values, sample_index
+            return phi, psi, sample_index
 
         shape_fn = self.elastic_mode_shape_fn[elastic_index]
         if shape_fn is None:
-            return np.zeros((mode_count, 3), dtype=np.float32), -1
+            return np.zeros((mode_count, 3), dtype=np.float32), zero_psi, -1
 
         values = np.asarray(shape_fn(local_pos), dtype=np.float32)
         if values.shape != (mode_count, 3):
@@ -9590,7 +9597,7 @@ class ModelBuilder:
                 f"mode_shape_fn for elastic body {self.elastic_body[elastic_index]} must return "
                 f"shape ({mode_count}, 3), got {values.shape}"
             )
-        return values, -1
+        return values, zero_psi, -1
 
     def _build_elastic_endpoint_cache(self) -> None:
         """Sample reduced elastic mode shapes at ordinary joint endpoint transforms."""
@@ -9599,6 +9606,7 @@ class ModelBuilder:
         self.elastic_endpoint_body.clear()
         self.elastic_endpoint_sample.clear()
         self.elastic_endpoint_phi.clear()
+        self.elastic_endpoint_psi.clear()
 
         if len(self.joint_parent_elastic_endpoint) != self.joint_count:
             self.joint_parent_elastic_endpoint = [-1] * self.joint_count
@@ -9619,7 +9627,7 @@ class ModelBuilder:
                 return
 
             local_pos = np.array(wp.transform_get_translation(xform), dtype=np.float32)
-            phi, sample_index = self._add_elastic_modal_sample(elastic_index, local_pos)
+            phi, psi, sample_index = self._add_elastic_modal_sample(elastic_index, local_pos)
             endpoint_index = len(self.elastic_endpoint_joint)
             self.elastic_endpoint_joint.append(joint_index)
             self.elastic_endpoint_side.append(side)
@@ -9630,6 +9638,10 @@ class ModelBuilder:
                     self.elastic_endpoint_phi.append(wp.vec3(float(phi[i, 0]), float(phi[i, 1]), float(phi[i, 2])))
                 else:
                     self.elastic_endpoint_phi.append(wp.vec3(0.0))
+                if i < psi.shape[0]:
+                    self.elastic_endpoint_psi.append(wp.vec3(float(psi[i, 0]), float(psi[i, 1]), float(psi[i, 2])))
+                else:
+                    self.elastic_endpoint_psi.append(wp.vec3(0.0))
 
             if side == 0:
                 self.joint_parent_elastic_endpoint[joint_index] = endpoint_index
@@ -9703,7 +9715,7 @@ class ModelBuilder:
                 self.elastic_render_point_local.append(
                     wp.vec3(float(local_pos[0]), float(local_pos[1]), float(local_pos[2]))
                 )
-                phi, sample_index = self._add_elastic_modal_sample(elastic_index, local_pos)
+                phi, _psi, sample_index = self._add_elastic_modal_sample(elastic_index, local_pos)
                 self.elastic_render_point_sample.append(sample_index)
                 for mode in range(self.elastic_max_mode_count):
                     if mode < phi.shape[0]:
@@ -9867,7 +9879,7 @@ class ModelBuilder:
                 self.elastic_shape_vertex_local.append(
                     wp.vec3(float(local_pos[0]), float(local_pos[1]), float(local_pos[2]))
                 )
-                phi, sample_index = self._add_elastic_modal_sample(elastic_index, local_pos)
+                phi, _psi, sample_index = self._add_elastic_modal_sample(elastic_index, local_pos)
                 self.elastic_shape_vertex_sample.append(sample_index)
                 for mode in range(self.elastic_max_mode_count):
                     if mode < phi.shape[0]:
@@ -10950,6 +10962,7 @@ class ModelBuilder:
             m.elastic_endpoint_body = wp.array(self.elastic_endpoint_body, dtype=wp.int32)
             m.elastic_endpoint_sample = wp.array(self.elastic_endpoint_sample, dtype=wp.int32)
             m.elastic_endpoint_phi = wp.array(self.elastic_endpoint_phi, dtype=wp.vec3, requires_grad=requires_grad)
+            m.elastic_endpoint_psi = wp.array(self.elastic_endpoint_psi, dtype=wp.vec3, requires_grad=requires_grad)
             m.elastic_render_point_total_count = len(self.elastic_render_point_local)
             m.elastic_render_point_start = wp.array(self.elastic_render_point_start, dtype=wp.int32)
             m.elastic_render_point_count = wp.array(self.elastic_render_point_count, dtype=wp.int32)

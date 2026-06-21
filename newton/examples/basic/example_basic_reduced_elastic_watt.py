@@ -214,8 +214,9 @@ class Example:
         ).reshape(-1)
         initial_bend_q = np.linalg.lstsq(projection_matrix, target_displacement, rcond=None)[0].astype(np.float32)
 
+        coupler_midpoint_phi, _ = coupler_basis.evaluate((0.0, 0.0, 0.0))
         midpoint_def_local = np.asarray(
-            np.einsum("mc,m->c", coupler_basis.evaluate((0.0, 0.0, 0.0))[1:], initial_bend_q),
+            np.einsum("mc,m->c", coupler_midpoint_phi[1:], initial_bend_q),
             dtype=float,
         )
         midpoint_def_world = _rotate_local_xz(theta3, midpoint_def_local)

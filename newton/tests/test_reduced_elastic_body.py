@@ -27,6 +27,7 @@ from newton.examples.basic.example_basic_reduced_elastic_base_excitation import 
 from newton.examples.basic.example_basic_reduced_elastic_base_rotation import Example as BaseRotationExample
 from newton.examples.basic.example_basic_reduced_elastic_centrifugal import Example as CentrifugalExample
 from newton.examples.basic.example_basic_reduced_elastic_chair_stick_slip import Example as ChairStickSlipExample
+from newton.examples.basic.example_basic_reduced_elastic_clamp_moment import Example as ClampMomentExample
 from newton.examples.basic.example_basic_reduced_elastic_coriolis import Example as CoriolisExample
 from newton.examples.basic.example_basic_reduced_elastic_dipper import Example as DipperExample
 from newton.examples.basic.example_basic_reduced_elastic_frame_coupling import Example as FrameCouplingExample
@@ -243,7 +244,7 @@ def test_modal_basis_add_sample(test, device):
     test.assertEqual(basis.add_sample([0.0, 0.0, 0.0]), 0)
     sample = basis.add_sample([1.0, 0.0, 0.0], phi=[[0.5, 0.0, 0.0], [0.0, 0.0, 0.25]])
     test.assertEqual(sample, 1)
-    np.testing.assert_allclose(basis.sample_value(sample), [[0.5, 0.0, 0.0], [0.0, 0.0, 0.25]], atol=1.0e-7)
+    np.testing.assert_allclose(basis.sample_phi[sample], [[0.5, 0.0, 0.0], [0.0, 0.0, 0.25]], atol=1.0e-7)
 
 
 def test_modal_generator_beam_samples(test, device):
@@ -267,7 +268,7 @@ def test_modal_generator_beam_samples(test, device):
     ).build()
 
     sample = basis.add_sample([0.0, 0.1, 0.05])
-    phi = basis.sample_value(sample)
+    phi = basis.sample_phi[sample]
     np.testing.assert_allclose(phi[0], [0.0, 0.0, 0.0], atol=1.0e-7)
     np.testing.assert_allclose(phi[1], [0.0, 1.0, 0.0], atol=1.0e-7)
     np.testing.assert_allclose(phi[2], [0.0, -0.025, 0.05], atol=1.0e-7)
@@ -287,7 +288,7 @@ def test_modal_generator_pod_rank_one(test, device):
     ).build()
 
     test.assertEqual(basis.mode_count, 1)
-    np.testing.assert_allclose(np.abs(basis.sample_value(1)[0]), [0.0, 1.0, 0.0], atol=1.0e-7)
+    np.testing.assert_allclose(np.abs(basis.sample_phi[1][0]), [0.0, 1.0, 0.0], atol=1.0e-7)
     np.testing.assert_allclose(basis.mode_mass, [1.0], atol=1.0e-7)
     np.testing.assert_allclose(basis.mode_stiffness, [3.0], atol=1.0e-7)
 
@@ -324,8 +325,8 @@ def test_modal_generator_fem_matrix_rom(test, device):
     np.testing.assert_allclose(
         generator.frequencies, [1.0 / math.pi, 3.0 / (2.0 * math.pi), 2.0 / math.pi], atol=1.0e-6
     )
-    np.testing.assert_allclose(np.abs(basis.sample_value(0)), np.eye(3) / math.sqrt(2.0), atol=1.0e-6)
-    np.testing.assert_allclose(basis.sample_value(1), np.zeros((3, 3)), atol=1.0e-7)
+    np.testing.assert_allclose(np.abs(basis.sample_phi[0]), np.eye(3) / math.sqrt(2.0), atol=1.0e-6)
+    np.testing.assert_allclose(basis.sample_phi[1], np.zeros((3, 3)), atol=1.0e-7)
 
 
 def test_modal_basis_lumped_inertia_coupling(test, device):
@@ -391,7 +392,7 @@ def test_modal_generator_fem_inertia_coupling(test, device):
     ).build()
 
     node_mass = np.array([1.0, 2.0])
-    phi_nodes = np.stack([basis.sample_value(0), basis.sample_value(1)]).astype(np.float64)
+    phi_nodes = np.stack([basis.sample_phi[0], basis.sample_phi[1]]).astype(np.float64)
     expected_linear = np.einsum("j,jmc->mc", node_mass, phi_nodes)
     expected_angular = np.einsum("j,jmc->mc", node_mass, np.cross(phi_nodes, nodes[:, None, :].astype(np.float64)))
     np.testing.assert_allclose(basis.mode_coupling_linear, expected_linear, atol=1.0e-5)
@@ -747,6 +748,215 @@ def test_elastic_endpoint_modal_basis_sampling(test, device):
     np.testing.assert_allclose(phi[endpoint], [1.0, 0.25, 0.5], atol=1.0e-7)
 
 
+def test_elastic_endpoint_angular_sampling(test, device):
+    length = 2.0
+    attach_local = (-0.5 * length, 0.0, 0.0)
+    gen = newton.ModalGeneratorBeam(
+        length=length,
+        half_width_y=0.1,
+        half_width_z=0.1,
+        mode_specs=[{"type": "bending_z", "boundary": "pinned-pinned"}],
+        sample_count=9,
+    )
+    basis = gen.build()
+    _phi, expected = basis.evaluate(np.array(attach_local, dtype=np.float32))
+    test.assertGreater(float(np.linalg.norm(expected)), 1.0e-3)
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    parent = builder.add_body(mass=1.0, inertia=_identity_inertia())
+    child = builder.add_body_elastic(mass=1.0, inertia=_identity_inertia(), modal_basis=basis)
+    joint = builder.add_joint_fixed(
+        parent=parent,
+        child=child,
+        parent_xform=wp.transform(wp.vec3(0.0, 0.0, 0.0), wp.quat_identity()),
+        child_xform=wp.transform(wp.vec3(*attach_local), wp.quat_identity()),
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+
+    endpoint = int(model.joint_child_elastic_endpoint.numpy()[joint])
+    test.assertGreaterEqual(endpoint, 0)
+    max_modes = int(model.elastic_max_mode_count)
+    psi = model.elastic_endpoint_psi.numpy().reshape((-1, max_modes, 3))
+    np.testing.assert_allclose(psi[endpoint, 0], expected[0], atol=1.0e-6)
+
+
+def test_elastic_endpoint_angular_zero_without_beam(test, device):
+    basis = newton.ModalBasis(
+        sample_points=[[0.5, -0.25, 0.0]],
+        sample_phi=[[[1.0, 0.25, 0.5]]],
+        mode_mass=[1.0],
+    )
+    np.testing.assert_allclose(basis.sample_psi, np.zeros((1, 1, 3)), atol=0)
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    parent = builder.add_body(mass=1.0, inertia=_identity_inertia())
+    child = builder.add_body_elastic(mass=1.0, inertia=_identity_inertia(), modal_basis=basis)
+    joint = builder.add_joint_fixed(
+        parent=parent,
+        child=child,
+        parent_xform=wp.transform(wp.vec3(0.25, 0.0, 0.0), wp.quat_identity()),
+        child_xform=wp.transform(wp.vec3(0.5, -0.25, 0.0), wp.quat_identity()),
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+
+    endpoint = int(model.joint_child_elastic_endpoint.numpy()[joint])
+    test.assertGreaterEqual(endpoint, 0)
+    max_modes = int(model.elastic_max_mode_count)
+    psi = model.elastic_endpoint_psi.numpy().reshape((-1, max_modes, 3))
+    np.testing.assert_allclose(psi[endpoint, 0], np.zeros(3), atol=0)
+
+
+def _pure_twist_basis(
+    clamp_local, has_psi: bool, mode_mass: float = 0.05, mode_stiffness: float = 2.0, mode_damping: float = 0.0
+) -> "newton.ModalBasis":
+    psi = [1.0, 0.0, 0.0] if has_psi else [0.0, 0.0, 0.0]
+    return newton.ModalBasis(
+        sample_points=[list(clamp_local)],
+        sample_phi=[[[0.0, 0.0, 0.0]]],
+        sample_psi=[[psi]],
+        mode_mass=[mode_mass],
+        mode_stiffness=[mode_stiffness],
+        mode_damping=[mode_damping],
+    )
+
+
+def test_elastic_clamp_moment_reaction(test, device):
+    clamp_local = (0.5, 0.0, 0.0)
+    initial_twist = 0.3
+
+    shape_cfg = newton.ModelBuilder.ShapeConfig()
+    shape_cfg.density = 0.0
+    shape_cfg.has_shape_collision = False
+    shape_cfg.has_particle_collision = False
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    rigid_bodies = {}
+    for name, has_psi, y in (("twist", True, 0.0), ("control", False, 2.0)):
+        beam = builder.add_body_elastic(
+            xform=wp.transform(wp.vec3(0.0, y, 0.0), wp.quat_identity()),
+            mass=1.0,
+            inertia=_identity_inertia(),
+            mode_q=[initial_twist],
+            modal_basis=_pure_twist_basis(clamp_local, has_psi),
+            label=f"twist_beam_{name}",
+        )
+        builder.add_shape_box(beam, hx=0.5, hy=0.05, hz=0.05, cfg=shape_cfg)
+        rigid = builder.add_body(
+            xform=wp.transform(wp.vec3(0.5, y, 0.0), wp.quat_identity()),
+            mass=1.0,
+            inertia=wp.mat33(0.01, 0.0, 0.0, 0.0, 0.01, 0.0, 0.0, 0.0, 0.01),
+            label=f"twist_rigid_{name}",
+        )
+        builder.add_joint_fixed(
+            parent=rigid,
+            child=beam,
+            parent_xform=wp.transform_identity(),
+            child_xform=wp.transform(wp.vec3(*clamp_local), wp.quat_identity()),
+        )
+        rigid_bodies[name] = rigid
+
+    builder.color()
+    model = builder.finalize(device=device)
+    state_0 = model.state()
+    state_1 = model.state()
+    control = model.control()
+    solver = newton.solvers.SolverVBD(model, iterations=24)
+
+    identity_quat = np.array([0.0, 0.0, 0.0, 1.0], dtype=float)
+    max_angle = dict.fromkeys(rigid_bodies, 0.0)
+    dt = 1.0 / (60.0 * 8.0)
+    for _ in range(120):
+        state_0.clear_forces()
+        solver.step(state_0, state_1, control, None, dt)
+        state_0, state_1 = state_1, state_0
+        body_q = state_0.body_q.numpy()
+        if not np.isfinite(body_q).all():
+            raise AssertionError("body transforms contain non-finite values")
+        for name, body in rigid_bodies.items():
+            max_angle[name] = max(max_angle[name], _quat_angle_error(body_q[body][3:7], identity_quat))
+
+    test.assertGreater(
+        max_angle["twist"],
+        1.0e-2,
+        f"clamp moment did not rotate the rigid body: max angle = {max_angle['twist']:.3e}",
+    )
+    test.assertLess(
+        max_angle["control"],
+        1.0e-3,
+        f"rigid body rotated without angular mode shapes: max angle = {max_angle['control']:.3e}",
+    )
+
+
+def test_elastic_clamp_moment_conserves_angular_momentum(test, device):
+    clamp_local = (0.5, 0.0, 0.0)
+    initial_twist = 0.3
+    inertia = wp.mat33(0.02, 0.0, 0.0, 0.0, 0.05, 0.0, 0.0, 0.0, 0.05)
+
+    shape_cfg = newton.ModelBuilder.ShapeConfig()
+    shape_cfg.density = 0.0
+    shape_cfg.has_shape_collision = False
+    shape_cfg.has_particle_collision = False
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    beam = builder.add_body_elastic(
+        xform=wp.transform(wp.vec3(0.0, 0.0, 0.0), wp.quat_identity()),
+        mass=1.0,
+        inertia=inertia,
+        com=wp.vec3(0.0, 0.0, 0.0),
+        mode_q=[initial_twist],
+        modal_basis=_pure_twist_basis(clamp_local, True, mode_mass=1.0e6, mode_stiffness=0.0, mode_damping=0.0),
+        label="momentum_beam",
+    )
+    builder.add_shape_box(beam, hx=0.5, hy=0.05, hz=0.05, cfg=shape_cfg)
+    rigid = builder.add_body(
+        xform=wp.transform(wp.vec3(0.5, 0.0, 0.0), wp.quat_identity()),
+        mass=1.0,
+        inertia=inertia,
+        label="momentum_rigid",
+    )
+    builder.add_joint_fixed(
+        parent=rigid,
+        child=beam,
+        parent_xform=wp.transform_identity(),
+        child_xform=wp.transform(wp.vec3(*clamp_local), wp.quat_identity()),
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+    state_0 = model.state()
+    state_1 = model.state()
+    control = model.control()
+    solver = newton.solvers.SolverVBD(model, iterations=128)
+
+    max_spin = 0.0
+    max_imbalance = 0.0
+    max_off_axis = 0.0
+    dt = 1.0 / (60.0 * 8.0)
+    for _ in range(120):
+        state_0.clear_forces()
+        solver.step(state_0, state_1, control, None, dt)
+        state_0, state_1 = state_1, state_0
+        body_q = state_0.body_q.numpy()
+        if not np.isfinite(body_q).all():
+            raise AssertionError("body transforms contain non-finite values")
+        spin_beam = float(body_q[beam][3])
+        spin_rigid = float(body_q[rigid][3])
+        max_spin = max(max_spin, abs(spin_beam), abs(spin_rigid))
+        max_imbalance = max(max_imbalance, abs(spin_beam + spin_rigid))
+        for body in (beam, rigid):
+            max_off_axis = max(max_off_axis, abs(float(body_q[body][4])), abs(float(body_q[body][5])))
+
+    test.assertGreater(max_spin, 1.0e-2, f"system did not rotate about the twist axis: max |qx| = {max_spin:.3e}")
+    test.assertLess(max_off_axis, 1.0e-2, f"rotation left the twist axis: max off-axis |q| = {max_off_axis:.3e}")
+    test.assertLess(
+        max_imbalance,
+        0.1 * max_spin,
+        f"angular momentum not conserved at the joint: max |qx_beam + qx_rigid| = {max_imbalance:.3e} "
+        f"vs max |qx| = {max_spin:.3e}",
+    )
+
+
 def test_modal_basis_shared_by_elastic_bodies(test, device):
     basis = newton.ModalGeneratorBeam(
         length=1.0,
@@ -907,7 +1117,7 @@ def test_elastic_shape_box_exact_modal_samples(test, device):
     np.testing.assert_allclose(model.elastic_shape_vertex_local.numpy(), surface_points, atol=1.0e-7)
 
     phi = model.elastic_shape_vertex_phi.numpy().reshape((-1, model.elastic_max_mode_count, 3))[:, 0]
-    expected_phi = np.asarray([basis.sample_value(i)[0] for i in range(surface_points.shape[0])], dtype=np.float32)
+    expected_phi = np.asarray([basis.sample_phi[i][0] for i in range(surface_points.shape[0])], dtype=np.float32)
     np.testing.assert_allclose(phi, expected_phi, atol=1.0e-7)
 
 
@@ -2286,6 +2496,16 @@ def test_base_rotation_example(test, device):
         example.test_final()
 
 
+def test_clamp_moment_example(test, device):
+    with wp.ScopedDevice(device):
+        viewer = newton.viewer.ViewerNull()
+        example = ClampMomentExample(viewer, None)
+        for _ in range(150):
+            example.step()
+            example.render()
+        example.test_final()
+
+
 def test_centrifugal_example(test, device):
     with wp.ScopedDevice(device):
         viewer = newton.viewer.ViewerNull()
@@ -2520,6 +2740,30 @@ for device in devices:
     )
     add_function_test(
         TestReducedElasticBody,
+        "test_elastic_endpoint_angular_sampling",
+        test_elastic_endpoint_angular_sampling,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_endpoint_angular_zero_without_beam",
+        test_elastic_endpoint_angular_zero_without_beam,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_clamp_moment_reaction",
+        test_elastic_clamp_moment_reaction,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_clamp_moment_conserves_angular_momentum",
+        test_elastic_clamp_moment_conserves_angular_momentum,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
         "test_modal_basis_shared_by_elastic_bodies",
         test_modal_basis_shared_by_elastic_bodies,
         devices=[device],
@@ -2696,6 +2940,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_base_rotation_example",
         test_base_rotation_example,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_clamp_moment_example",
+        test_clamp_moment_example,
         devices=[device],
     )
     add_function_test(
