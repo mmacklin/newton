@@ -37,6 +37,11 @@ class ModalBasis:
         sample_points: Body-local sample points [m], shape ``[sample_count, 3]``.
         sample_phi: Translational mode values [m per modal coordinate], shape
             ``[sample_count, mode_count, 3]``.
+        sample_psi: Optional angular mode values [rad per modal coordinate], shape
+            ``[sample_count, mode_count, 3]``. Each entry is the body-local
+            infinitesimal rotation vector of the material frame at the sample for
+            a unit modal coordinate. Defaults to zeros, which disables rotational
+            joint coupling.
         sample_mass: Optional per-sample lumped mass [kg], shape ``[sample_count]``.
             When supplied, ``mode_mass`` and any unspecified inertia coupling
             integrals (``mode_coupling_linear``, ``_angular``, ``_centrifugal``,
@@ -73,6 +78,7 @@ class ModalBasis:
         self,
         sample_points: Sequence[Sequence[float]] | np.ndarray | None = None,
         sample_phi: Sequence[Sequence[Sequence[float]]] | np.ndarray | None = None,
+        sample_psi: Sequence[Sequence[Sequence[float]]] | np.ndarray | None = None,
         sample_mass: Sequence[float] | np.ndarray | None = None,
         mode_mass: Sequence[float] | np.ndarray | None = None,
         mode_stiffness: Sequence[float] | np.ndarray | None = None,
@@ -110,8 +116,21 @@ class ModalBasis:
                 )
             mode_count = int(phi.shape[1])
 
+        if sample_psi is None:
+            psi = np.zeros((points.shape[0], mode_count, 3), dtype=np.float32)
+        else:
+            psi = np.asarray(sample_psi, dtype=np.float32)
+            if psi.ndim == 2 and points.shape[0] == 1:
+                psi = psi.reshape((1, psi.shape[0], 3))
+            if psi.ndim != 3 or psi.shape != (points.shape[0], mode_count, 3):
+                raise ValueError(
+                    "sample_psi must have shape [sample_count, mode_count, 3], "
+                    f"got {psi.shape} for {points.shape[0]} sample points and {mode_count} modes"
+                )
+
         self.sample_points = np.array(points, dtype=np.float32, copy=True)
         self.sample_phi = np.array(phi, dtype=np.float32, copy=True)
+        self.sample_psi = np.array(psi, dtype=np.float32, copy=True)
         self.sample_mass = self._coerce_sample_mass(sample_mass, points.shape[0])
 
         lumped_mass = lumped_linear = lumped_angular = lumped_centrifugal = lumped_coriolis = None
@@ -272,6 +291,7 @@ class ModalBasis:
         return ModalBasis(
             sample_points=self.sample_points,
             sample_phi=self.sample_phi,
+            sample_psi=self.sample_psi,
             sample_mass=self.sample_mass,
             mode_mass=self.mode_mass,
             mode_stiffness=self.mode_stiffness,
@@ -305,16 +325,20 @@ class ModalBasis:
         self,
         point: Sequence[float] | np.ndarray,
         phi: Sequence[Sequence[float]] | np.ndarray | None = None,
+        psi: Sequence[Sequence[float]] | np.ndarray | None = None,
         tolerance: float = 1.0e-7,
     ) -> int:
         """Add a body-local sample and return its local index.
 
         If ``point`` already exists, its existing index is returned. When ``phi``
-        is not provided, values are interpolated from the current samples.
+        or ``psi`` is not provided, that value is interpolated from the current
+        samples.
 
         Args:
             point: Body-local point [m], shape ``[3]``.
             phi: Translational mode values [m per modal coordinate], shape
+                ``[mode_count, 3]``.
+            psi: Angular mode values [rad per modal coordinate], shape
                 ``[mode_count, 3]``.
             tolerance: Duplicate-point tolerance [m].
 
@@ -326,34 +350,45 @@ class ModalBasis:
         if existing >= 0:
             return existing
 
+        phi_interp, psi_interp = self.evaluate(query)
+
         if phi is None:
-            values = self.evaluate(query)
+            phi_values = phi_interp
         else:
-            values = np.asarray(phi, dtype=np.float32)
-            if values.shape != (self.mode_count, 3):
-                raise ValueError(f"phi must have shape ({self.mode_count}, 3), got {values.shape}")
+            phi_values = np.asarray(phi, dtype=np.float32)
+            if phi_values.shape != (self.mode_count, 3):
+                raise ValueError(f"phi must have shape ({self.mode_count}, 3), got {phi_values.shape}")
+
+        if psi is None:
+            psi_values = psi_interp
+        else:
+            psi_values = np.asarray(psi, dtype=np.float32)
+            if psi_values.shape != (self.mode_count, 3):
+                raise ValueError(f"psi must have shape ({self.mode_count}, 3), got {psi_values.shape}")
 
         self.sample_points = np.vstack((self.sample_points, query.reshape((1, 3)))).astype(np.float32, copy=False)
-        self.sample_phi = np.concatenate((self.sample_phi, values.reshape((1, self.mode_count, 3))), axis=0).astype(
-            np.float32,
-            copy=False,
+        self.sample_phi = np.concatenate((self.sample_phi, phi_values.reshape((1, self.mode_count, 3))), axis=0).astype(
+            np.float32, copy=False
+        )
+        self.sample_psi = np.concatenate((self.sample_psi, psi_values.reshape((1, self.mode_count, 3))), axis=0).astype(
+            np.float32, copy=False
         )
         return self.sample_count - 1
 
-    def evaluate(self, point: Sequence[float] | np.ndarray) -> np.ndarray:
-        """Evaluate modal displacement samples at a body-local point.
+    def evaluate(self, point: Sequence[float] | np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Inverse-distance interpolate the modal samples at a body-local point.
 
         Args:
             point: Body-local point [m], shape ``[3]``.
 
         Returns:
-            Translational mode values [m per modal coordinate], shape
-            ``[mode_count, 3]``.
+            The translational and angular mode values ``(phi, psi)`` at ``point``,
+            each shape ``[mode_count, 3]``, in [m] and [rad] per modal coordinate.
         """
         if self.mode_count == 0:
-            return np.zeros((0, 3), dtype=np.float32)
+            return np.zeros((0, 3), dtype=np.float32), np.zeros((0, 3), dtype=np.float32)
         if self.sample_count == 0:
-            return np.zeros((self.mode_count, 3), dtype=np.float32)
+            return np.zeros((self.mode_count, 3), dtype=np.float32), np.zeros((self.mode_count, 3), dtype=np.float32)
 
         query = np.asarray(point, dtype=np.float32).reshape((3,))
         delta = self.sample_points - query.reshape((1, 3))
@@ -361,26 +396,18 @@ class ModalBasis:
         nearest = int(np.argmin(dist2))
         exact_tol2 = max(self.interpolation_epsilon * self.interpolation_epsilon, 1.0e-14)
         if float(dist2[nearest]) <= exact_tol2:
-            return np.array(self.sample_phi[nearest], dtype=np.float32, copy=True)
+            return (
+                np.array(self.sample_phi[nearest], dtype=np.float32, copy=True),
+                np.array(self.sample_psi[nearest], dtype=np.float32, copy=True),
+            )
 
         eps2 = self.interpolation_epsilon * self.interpolation_epsilon
-        weights = 1.0 / (dist2 + eps2)
+        weights = (1.0 / (dist2 + eps2)).astype(np.float32)
         weights /= np.sum(weights)
-        return np.einsum("s,smc->mc", weights.astype(np.float32), self.sample_phi).astype(np.float32)
-
-    def sample_value(self, sample_index: int) -> np.ndarray:
-        """Return modal values for a stored sample index.
-
-        Args:
-            sample_index: Local sample index.
-
-        Returns:
-            Translational mode values [m per modal coordinate], shape
-            ``[mode_count, 3]``.
-        """
-        if sample_index < 0 or sample_index >= self.sample_count:
-            raise IndexError(f"sample_index {sample_index} is out of range for {self.sample_count} samples")
-        return np.array(self.sample_phi[sample_index], dtype=np.float32, copy=True)
+        return (
+            np.einsum("s,smc->mc", weights, self.sample_phi).astype(np.float32),
+            np.einsum("s,smc->mc", weights, self.sample_psi).astype(np.float32),
+        )
 
 
 class ModalGeneratorSampled:
@@ -735,7 +762,10 @@ class ModalGeneratorFEM:
                 mode_damping=mode_damping,
                 label=self.label,
             )
-            sample_phi = np.asarray([nodal_basis.evaluate(point) for point in self.sample_points], dtype=np.float32)
+            sample_phi = np.asarray(
+                [nodal_basis.evaluate(point)[0] for point in self.sample_points],
+                dtype=np.float32,
+            )
         else:
             sample_phi = nodal_phi[self.sample_node_indices]
 
@@ -884,9 +914,12 @@ class ModalGeneratorBeam:
             raise ValueError(f"sample_points must have shape [sample_count, 3], got {points.shape}")
 
         sample_phi = np.zeros((points.shape[0], len(self.mode_specs), 3), dtype=np.float32)
+        sample_psi = np.zeros((points.shape[0], len(self.mode_specs), 3), dtype=np.float32)
         for sample_index, point in enumerate(points):
             for mode_index, spec in enumerate(self.mode_specs):
-                sample_phi[sample_index, mode_index] = self._evaluate_mode(spec, point)
+                phi, psi = self._evaluate_mode(spec, point)
+                sample_phi[sample_index, mode_index] = phi
+                sample_psi[sample_index, mode_index] = psi
 
         mode_mass = np.zeros(len(self.mode_specs), dtype=np.float32)
         mode_stiffness = np.zeros(len(self.mode_specs), dtype=np.float32)
@@ -903,6 +936,7 @@ class ModalGeneratorBeam:
         return ModalBasis(
             sample_points=points,
             sample_phi=sample_phi,
+            sample_psi=sample_psi,
             mode_mass=mode_mass,
             mode_stiffness=mode_stiffness,
             mode_damping=mode_damping,
@@ -932,7 +966,7 @@ class ModalGeneratorBeam:
                 points.append((float(x), y, z))
         return np.asarray(points, dtype=np.float32)
 
-    def _evaluate_mode(self, spec: dict[str, Any], point: np.ndarray) -> np.ndarray:
+    def _evaluate_mode(self, spec: dict[str, Any], point: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         mode_type = str(spec["type"])
         order = int(spec.get("order", 1))
         boundary = str(spec.get("boundary", self._default_boundary(mode_type)))
@@ -942,19 +976,22 @@ class ModalGeneratorBeam:
         s = min(max(x + 0.5 * self.length, 0.0), self.length)
 
         if mode_type == self.Mode.AXIAL:
-            return np.array([x / self.length, 0.0, 0.0], dtype=np.float32)
+            phi = np.array([x / self.length, 0.0, 0.0], dtype=np.float32)
+            return phi, np.zeros(3, dtype=np.float32)
 
         if mode_type == self.Mode.BENDING_Y:
             phi, slope = self._bending_shape(s, order, boundary)
-            return np.array([-y * slope, phi, 0.0], dtype=np.float32)
+            return np.array([-y * slope, phi, 0.0], dtype=np.float32), np.array([0.0, 0.0, slope], dtype=np.float32)
 
         if mode_type == self.Mode.BENDING_Z:
             phi, slope = self._bending_shape(s, order, boundary)
-            return np.array([-z * slope, 0.0, phi], dtype=np.float32)
+            return np.array([-z * slope, 0.0, phi], dtype=np.float32), np.array([0.0, -slope, 0.0], dtype=np.float32)
 
         if mode_type == self.Mode.TORSION:
             theta, _ = self._torsion_shape(s, order, boundary)
-            return np.array([0.0, -z * theta, y * theta], dtype=np.float32)
+            return np.array([0.0, -z * theta, y * theta], dtype=np.float32), np.array(
+                [theta, 0.0, 0.0], dtype=np.float32
+            )
 
         raise ValueError(f"Unsupported beam mode type '{mode_type}'")
 
