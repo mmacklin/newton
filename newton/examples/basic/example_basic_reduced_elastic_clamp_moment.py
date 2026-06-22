@@ -244,10 +244,10 @@ class Example:
             raise AssertionError("joint coordinates contain non-finite values")
         if self.max_abs_q["coupled"] < 5.0e-2:
             raise AssertionError(
-                f"coupled blade was not twisted by the clamp moment: max |q| = {self.max_abs_q['coupled']:.3e}"
+                f"coupled beam was not twisted by the clamp moment: max |q| = {self.max_abs_q['coupled']:.3e}"
             )
         if self.max_abs_q["uncoupled"] > 5.0e-3:
-            raise AssertionError(f"uncoupled blade unexpectedly twisted: max |q| = {self.max_abs_q['uncoupled']:.3e}")
+            raise AssertionError(f"uncoupled beam unexpectedly twisted: max |q| = {self.max_abs_q['uncoupled']:.3e}")
 
 
 if __name__ == "__main__":

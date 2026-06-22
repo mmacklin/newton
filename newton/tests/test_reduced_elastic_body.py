@@ -8,6 +8,7 @@ import numpy as np
 import warp as wp
 
 import newton
+from newton._src.sim.modal import _estimate_sample_psi
 from newton.examples.basic._reduced_elastic import (
     beam_render_sample_points,
     beam_torsion_linear_modal_properties,
@@ -444,6 +445,100 @@ def test_modal_generator_pod_coupling_matches_lumped(test, device):
     np.testing.assert_allclose(basis.mode_coupling_angular, expected_angular, atol=1.0e-6)
     np.testing.assert_allclose(basis.mode_coupling_centrifugal, expected_centrifugal, atol=1.0e-6)
     np.testing.assert_allclose(basis.mode_coupling_coriolis, expected_coriolis, atol=1.0e-6)
+
+
+def test_estimate_sample_psi_rotation_and_translation(test, device):
+    rng = np.random.default_rng(0)
+    points = rng.normal(size=(40, 3)).astype(np.float32)
+
+    omega = np.array([0.3, -0.5, 0.2], dtype=np.float64)
+    rotation = np.cross(np.tile(omega, (points.shape[0], 1)), points.astype(np.float64))
+    psi = _estimate_sample_psi(points, rotation[:, None, :].astype(np.float32))
+    np.testing.assert_allclose(psi[:, 0, :], np.tile(omega, (points.shape[0], 1)), atol=1.0e-5)
+
+    translation = np.tile(np.array([1.0, -2.0, 3.0], dtype=np.float32), (points.shape[0], 1))
+    psi_t = _estimate_sample_psi(points, translation[:, None, :])
+    np.testing.assert_allclose(psi_t, 0.0, atol=1.0e-6)
+
+
+def test_estimate_sample_psi_degenerate_warns(test, device):
+    xs = np.linspace(-1.0, 1.0, 6, dtype=np.float32)
+    points = np.array([[x, y, 0.0] for x in xs for y in xs], dtype=np.float32)
+    phi = np.cross(np.tile([0.0, 0.0, 1.0], (points.shape[0], 1)), points)[:, None, :].astype(np.float32)
+    with test.assertWarns(UserWarning):
+        psi = _estimate_sample_psi(points, phi)
+    test.assertTrue(np.isfinite(psi).all())
+    np.testing.assert_allclose(psi[:, 0, 2], 1.0, atol=1.0e-4)
+
+
+def test_modal_generator_sampled_psi(test, device):
+    n = 5
+    xs = np.linspace(-0.5, 0.5, n, dtype=np.float32)
+    points = np.column_stack([xs, np.zeros(n), np.zeros(n)]).astype(np.float32)
+    phi = np.zeros((n, 1, 3), dtype=np.float32)
+    phi[:, 0, 1] = xs + 0.5
+    explicit_psi = np.tile(np.array([0.7, 0.0, 0.0], dtype=np.float32), (n, 1))[:, None, :]
+
+    passthrough = newton.ModalGeneratorSampled(points, phi, sample_psi=explicit_psi).build()
+    np.testing.assert_allclose(passthrough.sample_psi, explicit_psi, atol=1.0e-7)
+
+    default = newton.ModalGeneratorSampled(points, phi).build()
+    np.testing.assert_allclose(default.sample_psi, 0.0, atol=1.0e-7)
+
+
+def test_modal_generator_pod_derives_psi(test, device):
+    rng = np.random.default_rng(1)
+    points = rng.normal(size=(48, 3)).astype(np.float32)
+    omega = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    snapshot = np.cross(np.tile(omega, (points.shape[0], 1)), points.astype(np.float64))
+
+    basis = newton.ModalGeneratorPOD(
+        sample_points=points,
+        displacements=snapshot[None].astype(np.float32),
+        mode_count=1,
+        derive_psi=True,
+    ).build()
+    psi = basis.sample_psi[:, 0, :].astype(np.float64)
+    test.assertGreater(float(np.linalg.norm(psi, axis=1).min()), 1.0e-3)
+    directions = psi / np.linalg.norm(psi, axis=1, keepdims=True)
+    np.testing.assert_allclose(np.abs(directions @ omega), 1.0, atol=1.0e-3)
+
+    uncoupled = newton.ModalGeneratorPOD(
+        sample_points=points,
+        displacements=snapshot[None].astype(np.float32),
+        mode_count=1,
+        derive_psi=False,
+    ).build()
+    np.testing.assert_allclose(uncoupled.sample_psi, 0.0, atol=1.0e-7)
+
+
+def test_modal_generator_fem_derives_psi(test, device):
+    nodes = np.array([[x, y, z] for x in (0.0, 1.0) for y in (0.0, 1.0) for z in (0.0, 1.0)], dtype=np.float32)
+    dof = 3 * nodes.shape[0]
+    mass = np.eye(dof)
+    stiffness = np.diag(np.linspace(1.0, 5.0, dof))
+
+    basis = newton.ModalGeneratorFEM(
+        node_positions=nodes,
+        mass_matrix=mass,
+        stiffness_matrix=stiffness,
+        fixed_node_indices=[0],
+        mode_count=3,
+        derive_psi=True,
+    ).build()
+    test.assertEqual(basis.sample_psi.shape, (nodes.shape[0], 3, 3))
+    test.assertTrue(np.isfinite(basis.sample_psi).all())
+    test.assertGreater(float(np.max(np.abs(basis.sample_psi))), 0.0)
+
+    uncoupled = newton.ModalGeneratorFEM(
+        node_positions=nodes,
+        mass_matrix=mass,
+        stiffness_matrix=stiffness,
+        fixed_node_indices=[0],
+        mode_count=3,
+        derive_psi=False,
+    ).build()
+    np.testing.assert_allclose(uncoupled.sample_psi, 0.0, atol=1.0e-7)
 
 
 def test_modal_basis_copy_preserves_coupling(test, device):
@@ -2760,6 +2855,36 @@ for device in devices:
         TestReducedElasticBody,
         "test_elastic_clamp_moment_conserves_angular_momentum",
         test_elastic_clamp_moment_conserves_angular_momentum,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_estimate_sample_psi_rotation_and_translation",
+        test_estimate_sample_psi_rotation_and_translation,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_estimate_sample_psi_degenerate_warns",
+        test_estimate_sample_psi_degenerate_warns,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_modal_generator_sampled_psi",
+        test_modal_generator_sampled_psi,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_modal_generator_pod_derives_psi",
+        test_modal_generator_pod_derives_psi,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_modal_generator_fem_derives_psi",
+        test_modal_generator_fem_derives_psi,
         devices=[device],
     )
     add_function_test(
