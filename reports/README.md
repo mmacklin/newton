@@ -24,6 +24,21 @@ uv run --extra examples python reports/render_reduced_elastic_videos.py \
     --report reports/reduced_elastic_links_implementation.html
 ```
 
+Render the reduced elastic coupling videos (floating-frame inertial coupling and
+joint rotational clamp moment) and refresh each report's cache-busting query
+strings. With no `--report`, every known report present in `reports/` is updated:
+
+```bash
+uv run --extra examples python reports/render_reduced_elastic_coupling_videos.py
+```
+
+Pass `--report` (repeatable) to target specific reports:
+
+```bash
+uv run --extra examples python reports/render_reduced_elastic_coupling_videos.py \
+    --report reports/reduced_elastic_rotational_coupling.html
+```
+
 Run the reduced elastic iteration sweep:
 
 ```bash
