@@ -1,11 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 The Newton Developers
 # SPDX-License-Identifier: Apache-2.0
 
-"""Render the reduced-elastic floating-frame inertial coupling example videos.
+"""Render the reduced-elastic coupling example videos.
 
-Captures each coupling example headlessly through ViewerGL, writes an MP4 plus a
-mid-run screenshot into reports/assets, and (given --report) refreshes the
-report's video cache-busting query strings and the mode-count table.
+Covers the floating-frame inertial coupling examples and the joint rotational
+(clamp moment) coupling example. Captures each one headlessly through ViewerGL,
+writes an MP4 plus a mid-run screenshot into reports/assets, and (given --report)
+refreshes each report's video cache-busting query strings and mode-count table.
+Each report only references its own videos, so passing both report paths updates
+each from the single render pass.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ from newton.examples.basic.example_basic_reduced_elastic_angular_frame_coupling 
 from newton.examples.basic.example_basic_reduced_elastic_base_excitation import Example as BaseExcitation
 from newton.examples.basic.example_basic_reduced_elastic_base_rotation import Example as BaseRotation
 from newton.examples.basic.example_basic_reduced_elastic_centrifugal import Example as Centrifugal
+from newton.examples.basic.example_basic_reduced_elastic_clamp_moment import Example as ClampMoment
 from newton.examples.basic.example_basic_reduced_elastic_coriolis import Example as Coriolis
 from newton.examples.basic.example_basic_reduced_elastic_frame_coupling import Example as FrameCoupling
 from newton.examples.basic.example_basic_reduced_elastic_gravity_coupling import Example as GravityCoupling
@@ -44,6 +48,12 @@ EXAMPLES = (
     ("Coriolis", Coriolis, "reduced_elastic_coriolis", 300, 200),
     ("Frame Coupling (linear recoil)", FrameCoupling, "reduced_elastic_frame_coupling", 180, 60),
     ("Angular Frame Coupling", AngularFrameCoupling, "reduced_elastic_angular_frame_coupling", 240, 120),
+    ("Clamp Moment", ClampMoment, "reduced_elastic_clamp_moment", 300, 50),
+)
+
+DEFAULT_REPORTS = (
+    "reduced_elastic_inertial_coupling.html",
+    "reduced_elastic_rotational_coupling.html",
 )
 
 
@@ -103,10 +113,16 @@ def _update_mode_counts(report_path: Path, rows):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Render reduced elastic inertial coupling example videos.")
+    parser = argparse.ArgumentParser(description="Render reduced elastic coupling example videos.")
     parser.add_argument("--assets", type=Path, default=None)
     parser.add_argument("--screenshots", type=Path, default=None)
-    parser.add_argument("--report", type=Path, default=None)
+    parser.add_argument(
+        "--report",
+        type=Path,
+        action="append",
+        default=None,
+        help="Report HTML to refresh; repeatable. Defaults to every known report present in reports/.",
+    )
     return parser.parse_args()
 
 
@@ -136,13 +152,15 @@ def main():
         print(f"Wrote {assets / f'{video_name}.mp4'}  ({sum(counts)} modes)")
     viewer.close()
 
-    report_path = args.report if args.report is not None else root / "reduced_elastic_inertial_coupling.html"
-    if report_path.exists():
-        _update_mode_counts(report_path, mode_rows)
-        _update_cache_busters(report_path, [name for _, _, name, _, _ in EXAMPLES], cache_key)
-        print(f"Updated report cache key: {cache_key}")
-    else:
-        print(f"Skipped report update because {report_path} does not exist")
+    report_paths = args.report if args.report is not None else [root / name for name in DEFAULT_REPORTS]
+    video_names = [name for _, _, name, _, _ in EXAMPLES]
+    for report_path in report_paths:
+        if report_path.exists():
+            _update_mode_counts(report_path, mode_rows)
+            _update_cache_busters(report_path, video_names, cache_key)
+            print(f"Updated {report_path.name} cache key: {cache_key}")
+        else:
+            print(f"Skipped report update because {report_path} does not exist")
 
 
 if __name__ == "__main__":
