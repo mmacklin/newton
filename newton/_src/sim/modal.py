@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import math
+import warnings
 from collections.abc import Sequence
 from typing import Any
 
@@ -410,30 +411,128 @@ class ModalBasis:
         )
 
 
+def _estimate_sample_psi(
+    sample_points: Sequence[Sequence[float]] | np.ndarray,
+    sample_phi: Sequence[Sequence[Sequence[float]]] | np.ndarray,
+    neighbor_count: int = 12,
+    regularization: float = 1.0e-9,
+) -> np.ndarray:
+    """Estimate angular mode samples from a translational displacement point cloud.
+
+    The body-local rotation of the material frame is the skew part of the
+    displacement gradient, i.e. the half-curl of the mode shape:
+    ``psi_i = 0.5 * curl(phi_i)``. For generators that only carry sampled (or
+    nodal) displacement values, with no analytic shape or mesh connectivity, this
+    fits a local affine displacement gradient over each sample's nearest
+    neighbors by least squares and returns the axial vector of its skew part.
+
+    Args:
+        sample_points: Body-local sample points [m], shape ``[sample_count, 3]``.
+        sample_phi: Translational mode samples [m per modal coordinate], shape
+            ``[sample_count, mode_count, 3]``.
+        neighbor_count: Number of nearest neighbors used for each local fit.
+        regularization: Relative Tikhonov term added to the normal equations so
+            that degenerate (collinear or coplanar) neighborhoods stay stable;
+            directions the geometry cannot resolve fall back toward zero.
+
+    Returns:
+        Angular mode samples [rad per modal coordinate], shape
+        ``[sample_count, mode_count, 3]``.
+    """
+    points = np.asarray(sample_points, dtype=np.float64)
+    phi = np.asarray(sample_phi, dtype=np.float64)
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError(f"sample_points must have shape [sample_count, 3], got {points.shape}")
+    sample_count = points.shape[0]
+    if phi.ndim != 3 or phi.shape[0] != sample_count or phi.shape[2] != 3:
+        raise ValueError(
+            "sample_phi must have shape [sample_count, mode_count, 3], "
+            f"got {phi.shape} for {sample_count} sample points"
+        )
+
+    mode_count = phi.shape[1]
+    psi = np.zeros((sample_count, mode_count, 3), dtype=np.float32)
+    if sample_count < 4 or mode_count == 0:
+        # An affine 3D gradient needs at least four non-degenerate samples.
+        return psi
+
+    k = min(int(neighbor_count), sample_count - 1)
+    degenerate = 0
+    for s in range(sample_count):
+        delta = points - points[s]
+        order = np.argsort(np.sum(delta * delta, axis=1))[1 : k + 1]
+        dx = delta[order]  # [k, 3]
+        gram = dx.T @ dx  # [3, 3]
+        scale = np.trace(gram) / 3.0
+        if scale <= 0.0:
+            continue
+        if np.linalg.svd(dx, compute_uv=False)[-1] <= 1.0e-6 * math.sqrt(scale):
+            degenerate += 1
+        gram_inv = np.linalg.inv(gram + regularization * scale * np.eye(3))
+        du = phi[order] - phi[s]  # [k, mode, 3]
+        # grad[m] = (du_mᵀ dx)(dxᵀ dx)⁻¹  ->  grad[m, i, j] = d(phi_m)_i / dx_j
+        grad = np.einsum("kmi,kj->mij", du, dx) @ gram_inv
+        psi[s, :, 0] = 0.5 * (grad[:, 2, 1] - grad[:, 1, 2])
+        psi[s, :, 1] = 0.5 * (grad[:, 0, 2] - grad[:, 2, 0])
+        psi[s, :, 2] = 0.5 * (grad[:, 1, 0] - grad[:, 0, 1])
+
+    if degenerate:
+        warnings.warn(
+            f"derive_psi: {degenerate}/{sample_count} sample neighborhoods are rank-deficient "
+            "(collinear or coplanar); the unresolved rotation directions are damped toward zero. "
+            "Provide a fuller 3D sample distribution for accurate angular coupling.",
+            stacklevel=2,
+        )
+    return psi
+
+
 class ModalGeneratorSampled:
-    """Build a :class:`ModalBasis` from externally supplied sampled modes."""
+    """Build a :class:`ModalBasis` from externally supplied sampled modes.
+
+    Args:
+        sample_points: Body-local sample points [m], shape ``[sample_count, 3]``.
+        sample_phi: Translational mode samples [m per modal coordinate], shape
+            ``[sample_count, mode_count, 3]``.
+        sample_psi: Optional angular mode samples [rad per modal coordinate],
+            shape ``[sample_count, mode_count, 3]``. Pass these when known;
+            otherwise set ``derive_psi`` to estimate them from ``sample_phi``.
+        mode_mass: Optional per-mode modal mass [kg].
+        mode_stiffness: Optional per-mode modal stiffness [N/m].
+        mode_damping: Optional per-mode modal damping [N·s/m].
+        derive_psi: When ``True`` and ``sample_psi`` is not given, estimate the
+            angular samples from the displacement gradient of ``sample_phi``.
+        label: Optional basis label.
+    """
 
     def __init__(
         self,
         sample_points: Sequence[Sequence[float]] | np.ndarray,
         sample_phi: Sequence[Sequence[Sequence[float]]] | np.ndarray,
+        sample_psi: Sequence[Sequence[Sequence[float]]] | np.ndarray | None = None,
         mode_mass: Sequence[float] | np.ndarray | None = None,
         mode_stiffness: Sequence[float] | np.ndarray | None = None,
         mode_damping: Sequence[float] | np.ndarray | None = None,
+        derive_psi: bool = False,
         label: str | None = None,
     ):
         self.sample_points = np.asarray(sample_points, dtype=np.float32)
         self.sample_phi = np.asarray(sample_phi, dtype=np.float32)
+        self.sample_psi = None if sample_psi is None else np.asarray(sample_psi, dtype=np.float32)
         self.mode_mass = None if mode_mass is None else np.asarray(mode_mass, dtype=np.float32)
         self.mode_stiffness = None if mode_stiffness is None else np.asarray(mode_stiffness, dtype=np.float32)
         self.mode_damping = None if mode_damping is None else np.asarray(mode_damping, dtype=np.float32)
+        self.derive_psi = bool(derive_psi)
         self.label = label
 
     def build(self) -> ModalBasis:
         """Build the sampled modal basis."""
+        sample_psi = self.sample_psi
+        if sample_psi is None and self.derive_psi:
+            sample_psi = _estimate_sample_psi(self.sample_points, self.sample_phi)
         return ModalBasis(
             sample_points=self.sample_points,
             sample_phi=self.sample_phi,
+            sample_psi=sample_psi,
             mode_mass=self.mode_mass,
             mode_stiffness=self.mode_stiffness,
             mode_damping=self.mode_damping,
@@ -458,6 +557,9 @@ class ModalGeneratorPOD:
         damping_ratio: Modal damping ratio.
         subtract_mean: Whether to remove the mean exemplar displacement before
             computing POD modes.
+        derive_psi: Whether to estimate angular mode samples from the
+            displacement gradient of the POD modes, enabling joint rotational
+            coupling.
         label: Optional basis label.
     """
 
@@ -471,6 +573,7 @@ class ModalGeneratorPOD:
         stiffness_scale: float = 1.0,
         damping_ratio: float = 0.0,
         subtract_mean: bool = False,
+        derive_psi: bool = False,
         label: str | None = None,
     ):
         self.sample_points = np.asarray(sample_points, dtype=np.float32)
@@ -494,6 +597,7 @@ class ModalGeneratorPOD:
         self.stiffness_scale = float(stiffness_scale)
         self.damping_ratio = float(damping_ratio)
         self.subtract_mean = bool(subtract_mean)
+        self.derive_psi = bool(derive_psi)
         self.label = label
 
     def build(self) -> ModalBasis:
@@ -519,6 +623,7 @@ class ModalGeneratorPOD:
                 modes[i] /= scale
 
         sample_phi = np.transpose(modes, (1, 0, 2))
+        sample_psi = _estimate_sample_psi(self.sample_points, sample_phi) if self.derive_psi else None
         mode_mass = self._estimate_mode_mass(sample_phi)
         mode_stiffness = self._estimate_mode_stiffness(mode_count, singular_values)
         mode_damping = np.zeros(mode_count, dtype=np.float32)
@@ -543,6 +648,7 @@ class ModalGeneratorPOD:
         return ModalBasis(
             sample_points=self.sample_points,
             sample_phi=sample_phi,
+            sample_psi=sample_psi,
             sample_mass=sample_mass,
             mode_mass=mode_mass,
             mode_stiffness=mode_stiffness,
@@ -610,6 +716,9 @@ class ModalGeneratorFEM:
             DOFs and discarded modes are removed.
         damping_ratio: Modal damping ratio used when ``damping_matrix`` is not
             provided.
+        derive_psi: Whether to estimate angular mode samples from the
+            displacement gradient of the nodal modes, enabling joint rotational
+            coupling.
         label: Optional basis label.
     """
 
@@ -627,6 +736,7 @@ class ModalGeneratorFEM:
         discard_mode_count: int = 0,
         eigenvalue_tolerance: float = 1.0e-8,
         damping_ratio: float = 0.0,
+        derive_psi: bool = False,
         label: str | None = None,
     ):
         self.node_positions = np.asarray(node_positions, dtype=np.float32)
@@ -685,6 +795,7 @@ class ModalGeneratorFEM:
             raise ValueError(f"discard_mode_count must be non-negative, got {self.discard_mode_count}")
         self.eigenvalue_tolerance = float(eigenvalue_tolerance)
         self.damping_ratio = float(damping_ratio)
+        self.derive_psi = bool(derive_psi)
         self.label = label
 
         self.eigenvalues = np.zeros(0, dtype=np.float64)
@@ -753,21 +864,23 @@ class ModalGeneratorFEM:
                 mode_damping[i] = 2.0 * self.damping_ratio * math.sqrt(mode_mass[i] * mode_stiffness[i])
 
         nodal_phi = np.transpose(full_modes.reshape((self.node_count, 3, -1)), (0, 2, 1))
+        nodal_psi = _estimate_sample_psi(self.node_positions, nodal_phi) if self.derive_psi else None
         if self.sample_node_indices is None:
             nodal_basis = ModalBasis(
                 sample_points=self.node_positions,
                 sample_phi=nodal_phi,
+                sample_psi=nodal_psi,
                 mode_mass=mode_mass,
                 mode_stiffness=mode_stiffness,
                 mode_damping=mode_damping,
                 label=self.label,
             )
-            sample_phi = np.asarray(
-                [nodal_basis.evaluate(point)[0] for point in self.sample_points],
-                dtype=np.float32,
-            )
+            evaluated = [nodal_basis.evaluate(point) for point in self.sample_points]
+            sample_phi = np.asarray([phi for phi, _ in evaluated], dtype=np.float32)
+            sample_psi = np.asarray([psi for _, psi in evaluated], dtype=np.float32) if self.derive_psi else None
         else:
             sample_phi = nodal_phi[self.sample_node_indices]
+            sample_psi = None if nodal_psi is None else nodal_psi[self.sample_node_indices]
 
         self.eigenvalues = mode_stiffness / np.maximum(mode_mass, 1.0e-12)
         self.frequencies = np.sqrt(np.maximum(self.eigenvalues, 0.0)) / (2.0 * math.pi)
@@ -795,6 +908,7 @@ class ModalGeneratorFEM:
         return ModalBasis(
             sample_points=self.sample_points,
             sample_phi=sample_phi,
+            sample_psi=sample_psi,
             mode_mass=mode_mass,
             mode_stiffness=mode_stiffness,
             mode_damping=mode_damping,
