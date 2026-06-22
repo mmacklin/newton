@@ -984,6 +984,79 @@ def test_elastic_clamp_moment_reaction(test, device):
     )
 
 
+def test_elastic_clamp_moment_reaction_parent_side(test, device):
+    clamp_local = (0.5, 0.0, 0.0)
+    initial_twist = 0.3
+
+    shape_cfg = newton.ModelBuilder.ShapeConfig()
+    shape_cfg.density = 0.0
+    shape_cfg.has_shape_collision = False
+    shape_cfg.has_particle_collision = False
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    rigid_bodies = {}
+    twist_joint = -1
+    for name, has_psi, y in (("twist", True, 0.0), ("control", False, 2.0)):
+        beam = builder.add_body_elastic(
+            xform=wp.transform(wp.vec3(0.0, y, 0.0), wp.quat_identity()),
+            mass=1.0,
+            inertia=_identity_inertia(),
+            mode_q=[initial_twist],
+            modal_basis=_pure_twist_basis(clamp_local, has_psi),
+            label=f"twist_beam_{name}",
+        )
+        builder.add_shape_box(beam, hx=0.5, hy=0.05, hz=0.05, cfg=shape_cfg)
+        rigid = builder.add_body(
+            xform=wp.transform(wp.vec3(0.5, y, 0.0), wp.quat_identity()),
+            mass=1.0,
+            inertia=wp.mat33(0.01, 0.0, 0.0, 0.0, 0.01, 0.0, 0.0, 0.0, 0.01),
+            label=f"twist_rigid_{name}",
+        )
+        joint = builder.add_joint_fixed(
+            parent=beam,
+            child=rigid,
+            parent_xform=wp.transform(wp.vec3(*clamp_local), wp.quat_identity()),
+            child_xform=wp.transform_identity(),
+        )
+        if name == "twist":
+            twist_joint = joint
+        rigid_bodies[name] = rigid
+
+    builder.color()
+    model = builder.finalize(device=device)
+
+    test.assertGreaterEqual(int(model.joint_parent_elastic_endpoint.numpy()[twist_joint]), 0)
+
+    state_0 = model.state()
+    state_1 = model.state()
+    control = model.control()
+    solver = newton.solvers.SolverVBD(model, iterations=24)
+
+    identity_quat = np.array([0.0, 0.0, 0.0, 1.0], dtype=float)
+    max_angle = dict.fromkeys(rigid_bodies, 0.0)
+    dt = 1.0 / (60.0 * 8.0)
+    for _ in range(120):
+        state_0.clear_forces()
+        solver.step(state_0, state_1, control, None, dt)
+        state_0, state_1 = state_1, state_0
+        body_q = state_0.body_q.numpy()
+        if not np.isfinite(body_q).all():
+            raise AssertionError("body transforms contain non-finite values")
+        for name, body in rigid_bodies.items():
+            max_angle[name] = max(max_angle[name], _quat_angle_error(body_q[body][3:7], identity_quat))
+
+    test.assertGreater(
+        max_angle["twist"],
+        1.0e-2,
+        f"clamp moment did not rotate the rigid body: max angle = {max_angle['twist']:.3e}",
+    )
+    test.assertLess(
+        max_angle["control"],
+        1.0e-3,
+        f"rigid body rotated without angular mode shapes: max angle = {max_angle['control']:.3e}",
+    )
+
+
 def test_elastic_clamp_moment_conserves_angular_momentum(test, device):
     clamp_local = (0.5, 0.0, 0.0)
     initial_twist = 0.3
@@ -2849,6 +2922,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_elastic_clamp_moment_reaction",
         test_elastic_clamp_moment_reaction,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_clamp_moment_reaction_parent_side",
+        test_elastic_clamp_moment_reaction_parent_side,
         devices=[device],
     )
     add_function_test(
