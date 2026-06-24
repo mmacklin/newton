@@ -41,6 +41,11 @@ sim = [
     "mujoco>=3.5.0; python_version < '3.14'",        # MuJoCo physics engine (no 3.14 wheels yet)
 ]
 
+# Incremental Potential Contact backend.
+ipc = [
+    "pyuipc==0.0.25; python_version < '3.14' and sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
 # Asset import and mesh processing dependencies
 importers = [
     # HTTP client for downloading meshes from URIs
