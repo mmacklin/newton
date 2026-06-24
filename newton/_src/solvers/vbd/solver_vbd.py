@@ -180,6 +180,7 @@ class SolverVBD(SolverBase):
         particle_self_contact_radius: float = 0.2,
         particle_self_contact_margin: float = 0.2,
         particle_conservative_bound_relaxation: float = 0.85,
+        particle_self_contact_max_displacement: float | None = None,
         particle_vertex_contact_buffer_size: int = 32,
         particle_edge_contact_buffer_size: int = 64,
         particle_collision_detection_interval: int = 0,
@@ -225,6 +226,11 @@ class SolverVBD(SolverBase):
             integrate_with_external_rigid_solver: Indicator for coupled rigid body-cloth simulation. When set to `True`,
                 the solver assumes rigid bodies are integrated by an external solver (one-way coupling).
             particle_conservative_bound_relaxation: Relaxation factor for conservative penetration-free projection.
+            particle_self_contact_max_displacement: Maximum particle displacement allowed during self-contact
+                penetration-free initialization. If ``None``, defaults to the legacy
+                ``particle_self_contact_margin * particle_conservative_bound_relaxation * 0.5`` value. Use
+                ``float("inf")`` to disable this isotropic displacement cap while keeping planar self-contact
+                truncation and self-contact forces enabled.
             particle_vertex_contact_buffer_size: Preallocation size for each vertex's vertex-triangle collision buffer.
             particle_edge_contact_buffer_size: Preallocation size for edge's edge-edge collision buffer.
             particle_collision_detection_interval: Controls how frequently particle self-contact detection is applied
@@ -304,6 +310,7 @@ class SolverVBD(SolverBase):
             particle_self_contact_radius,
             particle_self_contact_margin,
             particle_conservative_bound_relaxation,
+            particle_self_contact_max_displacement,
             particle_vertex_contact_buffer_size,
             particle_edge_contact_buffer_size,
             particle_collision_detection_interval,
@@ -351,6 +358,7 @@ class SolverVBD(SolverBase):
         particle_self_contact_radius: float,
         particle_self_contact_margin: float,
         particle_conservative_bound_relaxation: float,
+        particle_self_contact_max_displacement: float | None,
         particle_vertex_contact_buffer_size: int,
         particle_edge_contact_buffer_size: int,
         particle_collision_detection_interval: int,
@@ -399,6 +407,11 @@ class SolverVBD(SolverBase):
                 )
 
             self.particle_conservative_bound_relaxation = particle_conservative_bound_relaxation
+            if particle_self_contact_max_displacement is None:
+                particle_self_contact_max_displacement = (
+                    particle_self_contact_margin * particle_conservative_bound_relaxation * 0.5
+                )
+            self.particle_self_contact_max_displacement = float(particle_self_contact_max_displacement)
             self.particle_conservative_bounds = wp.zeros((model.particle_count,), dtype=float, device=self.device)
 
             self.trimesh_collision_detector = TriMeshCollisionDetector(
@@ -1443,9 +1456,7 @@ class SolverVBD(SolverBase):
                     self.pos_prev_collision_detection,
                     self.particle_displacements,
                     self.truncation_ts,
-                    self.particle_self_contact_margin
-                    * self.particle_conservative_bound_relaxation
-                    * 0.5,  # max_displacement: degenerate to isotropic truncation
+                    self.particle_self_contact_max_displacement,
                 ],
                 outputs=[
                     self.particle_displacements,

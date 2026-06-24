@@ -78,21 +78,22 @@ class _PinnedShirtPickup:
         self.x_splay = 0.08
 
         # libuipc's shell/contact Python bindings do not expose Newton-style kd
-        # parameters, so keep VBD damping disabled for this solver comparison.
+        # parameters. Keep contact damping disabled, but use light VBD bending
+        # damping to control high-frequency cloth jitter.
         self.cloth_tri_kd = 0.0
-        self.cloth_edge_kd = 0.0
+        self.cloth_edge_kd = 2.0e-3
         self.cloth_contact_kd = 0.0
         self.shape_contact_kd = 0.0
 
         self.cloth_particle_radius = 0.008
         self.cloth_body_contact_margin = 0.008
-        self.particle_enable_self_contact = False
+        self.particle_enable_self_contact = True
         self.particle_self_contact_radius = 0.002
-        # VBD's self-contact initialization also caps each particle's
-        # per-substep displacement by margin * relaxation * 0.5. A margin equal
-        # to the contact radius looks overly viscous in this meter-scale scene.
         self.particle_self_contact_margin = 0.00205
         self.particle_conservative_bound_relaxation = 0.85
+        # Keep self-contact force/truncation active without the legacy isotropic
+        # displacement cap that made the pickup look viscously damped.
+        self.particle_self_contact_max_displacement = float("inf")
 
         scene = newton.ModelBuilder(gravity=-9.81)
         scene.add_shape_box(
@@ -174,6 +175,7 @@ class _PinnedShirtPickup:
                 particle_self_contact_radius=self.particle_self_contact_radius,
                 particle_self_contact_margin=self.particle_self_contact_margin,
                 particle_conservative_bound_relaxation=self.particle_conservative_bound_relaxation,
+                particle_self_contact_max_displacement=self.particle_self_contact_max_displacement,
                 particle_topological_contact_filter_threshold=1,
                 particle_rest_shape_contact_exclusion_radius=0.005,
                 particle_enable_self_contact=self.particle_enable_self_contact,
