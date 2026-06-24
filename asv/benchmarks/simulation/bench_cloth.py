@@ -86,6 +86,7 @@ class _PinnedShirtPickup:
 
         self.cloth_particle_radius = 0.008
         self.cloth_body_contact_margin = 0.008
+        self.particle_enable_self_contact = False
         self.particle_self_contact_radius = 0.002
         # VBD's self-contact initialization also caps each particle's
         # per-substep displacement by margin * relaxation * 0.5. A margin equal
@@ -175,7 +176,7 @@ class _PinnedShirtPickup:
                 particle_conservative_bound_relaxation=self.particle_conservative_bound_relaxation,
                 particle_topological_contact_filter_threshold=1,
                 particle_rest_shape_contact_exclusion_radius=0.005,
-                particle_enable_self_contact=True,
+                particle_enable_self_contact=self.particle_enable_self_contact,
                 particle_vertex_contact_buffer_size=16,
                 particle_edge_contact_buffer_size=20,
                 particle_collision_detection_interval=-1,
