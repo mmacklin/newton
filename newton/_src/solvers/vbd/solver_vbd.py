@@ -2375,6 +2375,8 @@ class SolverVBD(TendonStateMixin, SolverBase):
             outputs=[
                 state_out.body_q,
                 state_out.body_qd,
+                None,
+                None,
             ],
             device=self.device,
         )

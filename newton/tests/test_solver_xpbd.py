@@ -1251,6 +1251,173 @@ def test_xpbd_joint_reaction_f_balances_centered_tendon_load(test, device):
     )
 
 
+def test_xpbd_joint_reaction_f_stable_after_convergence(test, device):
+    """Extra XPBD iterations should not change a converged joint reaction."""
+    half_width = 0.025
+    rod_length = 1.0
+    rod_volume = rod_length * (2.0 * half_width) ** 2
+
+    builder = newton.ModelBuilder(gravity=-9.81, up_axis=newton.Axis.Z)
+    body = builder.add_link(xform=wp.transform_identity())
+    builder.add_shape_box(
+        body,
+        xform=wp.transform(wp.vec3(0.5 * rod_length, 0.0, 0.0), wp.quat_identity()),
+        hx=0.5 * rod_length,
+        hy=half_width,
+        hz=half_width,
+        cfg=newton.ModelBuilder.ShapeConfig(density=1.0 / rod_volume),
+    )
+    joint = builder.add_joint_revolute(
+        -1,
+        body,
+        parent_xform=wp.transform_identity(),
+        child_xform=wp.transform_identity(),
+        axis=wp.vec3(0.0, 1.0, 0.0),
+    )
+    builder.add_articulation([joint])
+    model = builder.finalize(device=device)
+
+    joint_q = model.joint_q.numpy()
+    joint_qd = model.joint_qd.numpy()
+    joint_q[0] = 0.66
+    joint_qd[0] = 4.23
+    model.joint_q.assign(joint_q)
+    model.joint_qd.assign(joint_qd)
+
+    initial_state = model.state()
+    newton.eval_fk(model, model.joint_q, model.joint_qd, initial_state)
+    initial_body_q = initial_state.body_q.numpy().copy()
+    initial_body_qd = initial_state.body_qd.numpy().copy()
+
+    solver = newton.solvers.SolverXPBD(
+        model,
+        iterations=16,
+        joint_linear_relaxation=1.0,
+        joint_angular_relaxation=1.0,
+    )
+    control = model.control()
+    contacts = model.contacts()
+
+    def run(iterations):
+        state_in = model.state()
+        state_out = model.state()
+        state_in.body_q.assign(initial_body_q)
+        state_in.body_qd.assign(initial_body_qd)
+        state_in.clear_forces()
+        solver.iterations = iterations
+        solver.step(state_in, state_out, control, contacts, 1.0e-3)
+        return solver.joint_reaction_f.numpy()[joint]
+
+    converged_reaction = run(16)
+    extra_iteration_reaction = run(128)
+
+    test.assertGreater(np.linalg.norm(converged_reaction[:3]), 1.0)
+    np.testing.assert_allclose(
+        extra_iteration_reaction,
+        converged_reaction,
+        rtol=0.0,
+        atol=1.0e-6,
+        err_msg="Joint reaction should not accumulate sub-resolution corrections after convergence",
+    )
+
+
+def test_xpbd_dynamic_pair_reaction_stable_after_convergence(test, device):
+    """A converged reaction between moving dynamic bodies should remain stable."""
+    # Unequal masses and a generic world transform expose asymmetric float32 roundoff that an
+    # equal-mass, axis-aligned pair resolves exactly.
+    builder = newton.ModelBuilder(gravity=0.0, up_axis=newton.Axis.Z)
+    parent = builder.add_link()
+    builder.add_shape_box(
+        parent,
+        hx=0.2,
+        hy=0.1,
+        hz=0.1,
+        cfg=newton.ModelBuilder.ShapeConfig(density=100000.0),
+    )
+    child = builder.add_link()
+    builder.add_shape_box(
+        child,
+        hx=0.2,
+        hy=0.1,
+        hz=0.1,
+        cfg=newton.ModelBuilder.ShapeConfig(density=1000.0),
+    )
+
+    free_joint = builder.add_joint_free(child=parent)
+    fixed_joint = builder.add_joint_fixed(
+        parent,
+        child,
+        parent_xform=wp.transform(wp.vec3(0.5, 0.0, 0.0), wp.quat_identity()),
+        child_xform=wp.transform(wp.vec3(-0.5, 0.0, 0.0), wp.quat_identity()),
+    )
+    builder.add_articulation([free_joint, fixed_joint])
+    model = builder.finalize(device=device)
+
+    axis = np.array([1.0, 2.0, 3.0])
+    axis /= np.linalg.norm(axis)
+    half_angle = 0.5
+    joint_q = model.joint_q.numpy()
+    joint_q[:7] = (
+        10.0,
+        10.0,
+        10.0,
+        axis[0] * np.sin(half_angle),
+        axis[1] * np.sin(half_angle),
+        axis[2] * np.sin(half_angle),
+        np.cos(half_angle),
+    )
+    model.joint_q.assign(joint_q)
+
+    initial_state = model.state()
+    newton.eval_fk(model, model.joint_q, model.joint_qd, initial_state)
+    # Exercise both linear and angular constraint corrections with nonzero relative motion.
+    initial_body_qd = initial_state.body_qd.numpy()
+    initial_body_qd[parent, :3] = (1.0, 2.0, 3.0)
+    initial_body_qd[child, :3] = (-1.0, -2.0, -3.0)
+    initial_body_qd[parent, 3:] = (4.0, 7.0, 10.0)
+    initial_body_qd[child, 3:] = (-4.0, -7.0, -10.0)
+    initial_state.body_qd.assign(initial_body_qd)
+
+    test.assertGreater(np.linalg.norm(initial_body_qd[parent, :3] - initial_body_qd[child, :3]), 1.0)
+    test.assertGreater(np.linalg.norm(initial_body_qd[parent, 3:] - initial_body_qd[child, 3:]), 1.0)
+
+    initial_body_q = initial_state.body_q.numpy().copy()
+    initial_body_qd = initial_state.body_qd.numpy().copy()
+    body_mass = model.body_mass.numpy()
+    initial_momentum = np.sum(body_mass[:, None] * initial_body_qd[:, :3], axis=0)
+
+    solver = newton.solvers.SolverXPBD(
+        model,
+        iterations=256,
+        joint_linear_relaxation=1.0,
+        joint_angular_relaxation=1.0,
+        angular_damping=0.0,
+    )
+    control = model.control()
+    contacts = model.contacts()
+
+    def run(iterations):
+        state_in = model.state()
+        state_out = model.state()
+        state_in.body_q.assign(initial_body_q)
+        state_in.body_qd.assign(initial_body_qd)
+        state_in.clear_forces()
+        solver.iterations = iterations
+        solver.step(state_in, state_out, control, contacts, 1.0e-3)
+        reaction = solver.joint_reaction_f.numpy()[fixed_joint]
+        final_body_qd = state_out.body_qd.numpy()
+        final_momentum = np.sum(body_mass[:, None] * final_body_qd[:, :3], axis=0)
+        return reaction, final_momentum
+
+    converged_reaction, converged_momentum = run(256)
+    extra_iteration_reaction, extra_iteration_momentum = run(512)
+
+    relative_change = np.linalg.norm(extra_iteration_reaction - converged_reaction) / np.linalg.norm(converged_reaction)
+    test.assertLess(relative_change, 1.0e-6)
+    np.testing.assert_allclose(converged_momentum, initial_momentum, rtol=1.0e-6, atol=1.0e-3)
+    np.testing.assert_allclose(extra_iteration_momentum, initial_momentum, rtol=1.0e-6, atol=1.0e-3)
+
+
 def test_xpbd_joint_reaction_f_includes_offset_tendon_torque(test, device):
     """Per-joint reaction should include the torque needed to balance an offset cable."""
     compliance = 1.0e-3
@@ -1838,6 +2005,22 @@ add_function_test(
     TestSolverXPBD,
     "test_xpbd_joint_reaction_f_balances_centered_tendon_load",
     test_xpbd_joint_reaction_f_balances_centered_tendon_load,
+    devices=devices,
+    check_output=False,
+)
+
+add_function_test(
+    TestSolverXPBD,
+    "test_xpbd_joint_reaction_f_stable_after_convergence",
+    test_xpbd_joint_reaction_f_stable_after_convergence,
+    devices=devices,
+    check_output=False,
+)
+
+add_function_test(
+    TestSolverXPBD,
+    "test_xpbd_dynamic_pair_reaction_stable_after_convergence",
+    test_xpbd_dynamic_pair_reaction_stable_after_convergence,
     devices=devices,
     check_output=False,
 )

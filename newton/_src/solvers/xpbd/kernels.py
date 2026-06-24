@@ -820,12 +820,18 @@ def apply_body_deltas(
     # outputs
     q_out: wp.array[wp.transform],
     qd_out: wp.array[wp.spatial_vector],
+    position_delta_residual: wp.array[wp.vec3],
+    orientation_delta_residual: wp.array[wp.quat],
 ):
     tid = wp.tid()
     inv_m = body_inv_m[tid]
     if inv_m == 0.0:
         q_out[tid] = q_in[tid]
         qd_out[tid] = qd_in[tid]
+        if position_delta_residual:
+            position_delta_residual[tid] = wp.vec3(0.0)
+        if orientation_delta_residual:
+            orientation_delta_residual[tid] = wp.quat(0.0, 0.0, 0.0, 0.0)
         return
     inv_I = body_inv_I[tid]
 
@@ -853,14 +859,27 @@ def apply_body_deltas(
     tb = wp.cross(dwb, body_I[tid] * (wb + dwb)) + wp.cross(wb, body_I[tid] * dwb)
     dw1 = wp.quat_rotate(q0, dwb - dt * inv_I * tb)
 
-    # update orientation
-    q1 = q0 + 0.5 * wp.quat(dw1 * dt, 0.0) * q0
-    q1 = wp.normalize(q1)
+    linear_residual = wp.vec3(0.0)
+    if position_delta_residual:
+        linear_residual = position_delta_residual[tid]
 
-    # update position
+    angular_residual = wp.quat(0.0, 0.0, 0.0, 0.0)
+    if orientation_delta_residual:
+        angular_residual = orientation_delta_residual[tid]
+
+    # Compensate the additive quaternion update before applying the established normalization.
+    q_step = 0.5 * wp.quat(dw1 * dt, 0.0) * q0 + angular_residual
+    q1_pre = q0 + q_step
+    angular_residual = q_step - (q1_pre - q0)
+    q1 = wp.normalize(q1_pre)
+
+    # Compensated COM update keeps the float32 remainder separate from the absolute position.
     com = body_com[tid]
     x_com = p0 + wp.quat_rotate(q0, com)
-    p1 = x_com + dp * dt
+    linear_step = dp * dt + linear_residual
+    x_com_new = x_com + linear_step
+    linear_residual = linear_step - (x_com_new - x_com)
+    p1 = x_com_new
     p1 -= wp.quat_rotate(q1, com)
 
     q_out[tid] = wp.transform(p1, q1)
@@ -876,6 +895,10 @@ def apply_body_deltas(
         w1 = wp.vec3(0.0)
 
     qd_out[tid] = wp.spatial_vector(v1, w1)
+    if position_delta_residual:
+        position_delta_residual[tid] = linear_residual
+    if orientation_delta_residual:
+        orientation_delta_residual[tid] = angular_residual
 
 
 @wp.kernel
