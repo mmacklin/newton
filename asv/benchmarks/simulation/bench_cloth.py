@@ -78,10 +78,9 @@ class _PinnedShirtPickup:
         self.x_splay = 0.08
 
         # libuipc's shell/contact Python bindings do not expose Newton-style kd
-        # parameters. Keep VBD-only damping low and localized to bending so it
-        # suppresses visual jitter without dominating the trajectory.
+        # parameters, so keep VBD damping disabled for this solver comparison.
         self.cloth_tri_kd = 0.0
-        self.cloth_edge_kd = 2.0e-3
+        self.cloth_edge_kd = 0.0
         self.cloth_contact_kd = 0.0
         self.shape_contact_kd = 0.0
 
