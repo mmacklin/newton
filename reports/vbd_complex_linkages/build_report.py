@@ -420,6 +420,10 @@ apply_pose_updates(delta, relaxation)</code></pre>
 <h2>G1 closed-loop ankle</h2>
 <p><span class="pill">6 bodies</span><span class="pill">8 joints</span><span class="pill">2 closure joints</span><span class="pill">16 DOFs</span></p>
 <p>This model represents one G1 ankle with both internal loop closures explicit. A CPU settling test holds the two driven A/B joints at fixed targets and measures closure throughout 180 frames. It uses <code>dt=1/240 s</code>, 4 substeps per 60 Hz frame, and 8 iterations for both VBD modes.</p>
+<h3>Mechanism cutaway</h3>
+<div class="media-grid">
+{_video("g1_ankle_viewergl_cutaway.mp4", "Closed-loop ankle mechanism", "Diagnostic ViewerGL view retaining the foot mesh while rendering the outer leg shell as wireframe, exposing the moving internal rods. The visualization changes geometry visibility only, not dynamics.")}
+</div>
 <h3 class="analysis-heading">Error analysis</h3>
 <table><thead><tr><th>CPU solver</th><th>Aggregate closure RMS [µm]</th><th>Peak joint closure [µm]</th><th>Final aggregate closure [µm]</th><th>Motor A RMS error [deg]</th><th>Motor B RMS error [deg]</th></tr></thead><tbody>
 <tr><td>Kamino</td><td>{_fmt(g1_kamino["rms_closure_um"])}</td><td>{_fmt(g1_kamino["max_closure_um"])}</td><td>{_fmt(g1_kamino["final_closure"]["linear_norm_m"] * 1.0e6, 3)}</td><td>{_fmt(g1_kamino["rms_motor_a_tracking_deg"], 3)}</td><td>{_fmt(g1_kamino["rms_motor_b_tracking_deg"], 3)}</td></tr>
