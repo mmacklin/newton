@@ -27,190 +27,190 @@
       "dt": 0.01,
       "failure_substep": null,
       "final_all": {
-        "angular_max_rad": 0.0008520175934708909,
-        "angular_norm_rad": 0.0019325263668255803,
-        "linear_max_m": 6.661339524988285e-06,
-        "linear_norm_m": 1.6609015402371313e-05,
+        "angular_max_rad": 0.009135457046551037,
+        "angular_norm_rad": 0.018172787081420675,
+        "linear_max_m": 0.0006489019446212001,
+        "linear_norm_m": 0.0018287489832591885,
         "per_joint": {
           "/DR_Legs/Joints/j1_l_i": {
-            "angular_rad": 9.216526819522188e-06,
-            "linear_m": 3.4154292955103184e-07
+            "angular_rad": 3.898982042370899e-05,
+            "linear_m": 2.2213232706053858e-05
           },
           "/DR_Legs/Joints/j1_l_o": {
-            "angular_rad": 2.8630927249694127e-06,
-            "linear_m": 7.885221977261344e-08
+            "angular_rad": 0.0002724621496072236,
+            "linear_m": 3.47930468787354e-05
           },
           "/DR_Legs/Joints/j1_r_i": {
-            "angular_rad": 8.939879774288404e-06,
-            "linear_m": 3.079006363776615e-07
+            "angular_rad": 4.4619059591663615e-05,
+            "linear_m": 2.2234125205655445e-05
           },
           "/DR_Legs/Joints/j1_r_o": {
-            "angular_rad": 2.2539627633534665e-06,
-            "linear_m": 1.5795747945468716e-07
+            "angular_rad": 0.00023966177341997342,
+            "linear_m": 3.460251517113232e-05
           },
           "/DR_Legs/Joints/j2_l_i": {
-            "angular_rad": 2.7073229234200988e-05,
-            "linear_m": 1.1914058066840871e-06
+            "angular_rad": 0.0024676075457750416,
+            "linear_m": 0.00010341083534915662
           },
           "/DR_Legs/Joints/j2_l_o": {
-            "angular_rad": 6.926308452615791e-06,
-            "linear_m": 5.638975821616215e-07
+            "angular_rad": 0.0008998015621857183,
+            "linear_m": 5.228903043374449e-05
           },
           "/DR_Legs/Joints/j2_r_i": {
-            "angular_rad": 2.7647460839307658e-05,
-            "linear_m": 1.2640153824002633e-06
+            "angular_rad": 0.002415377629181879,
+            "linear_m": 0.00010429681423859257
           },
           "/DR_Legs/Joints/j2_r_o": {
-            "angular_rad": 7.57304527665832e-06,
-            "linear_m": 4.464626248338818e-07
+            "angular_rad": 0.0009308550175930906,
+            "linear_m": 5.276094884225255e-05
           },
           "/DR_Legs/Joints/j3_l_i": {
-            "angular_rad": 2.4416226912039988e-05,
-            "linear_m": 1.3252678965336554e-06
+            "angular_rad": 0.0007375105929082568,
+            "linear_m": 9.94720817536801e-05
           },
           "/DR_Legs/Joints/j3_l_o": {
-            "angular_rad": 1.1899757107878728e-05,
-            "linear_m": 5.839562437279883e-07
+            "angular_rad": 5.249267770230953e-05,
+            "linear_m": 5.694471771710672e-05
           },
           "/DR_Legs/Joints/j3_r_i": {
-            "angular_rad": 2.8676810233697624e-05,
-            "linear_m": 1.0559494213565866e-06
+            "angular_rad": 0.0006205940637276243,
+            "linear_m": 9.424391003893139e-05
           },
           "/DR_Legs/Joints/j3_r_o": {
-            "angular_rad": 8.826053595134327e-06,
-            "linear_m": 4.2460243788559103e-07
+            "angular_rad": 9.977256245083834e-05,
+            "linear_m": 4.7084102006660895e-05
           },
           "/DR_Legs/Joints/j4_l_i": {
-            "angular_rad": 2.6748701912698868e-05,
-            "linear_m": 1.0049604977191863e-06
+            "angular_rad": 0.002601178844360895,
+            "linear_m": 7.810466008055544e-05
           },
           "/DR_Legs/Joints/j4_l_o": {
-            "angular_rad": 4.346331102897006e-05,
-            "linear_m": 6.398582986069513e-07
+            "angular_rad": 0.0017881601448038235,
+            "linear_m": 0.0001021295659533077
           },
           "/DR_Legs/Joints/j4_r_i": {
-            "angular_rad": 2.981286211294158e-05,
-            "linear_m": 1.029017693640271e-06
+            "angular_rad": 0.0026377025288789597,
+            "linear_m": 7.861667092027709e-05
           },
           "/DR_Legs/Joints/j4_r_o": {
-            "angular_rad": 3.869754094730674e-05,
-            "linear_m": 5.523768624861843e-07
+            "angular_rad": 0.0018435442475359365,
+            "linear_m": 0.00010160605708204054
           },
           "/DR_Legs/Joints/j5_l_i": {
-            "angular_rad": 0.0008112445323338789,
-            "linear_m": 6.661339524988285e-06
+            "angular_rad": 0.0005480551564327572,
+            "linear_m": 0.00046630844073718136
           },
           "/DR_Legs/Joints/j5_l_o": {
-            "angular_rad": 0.0008456043549308575,
-            "linear_m": 2.7783311164983264e-06
+            "angular_rad": 0.0005542507426747512,
+            "linear_m": 0.0006489019446212001
           },
           "/DR_Legs/Joints/j5_r_i": {
-            "angular_rad": 0.0008520175934708909,
-            "linear_m": 6.408922291596937e-06
+            "angular_rad": 0.0005614631432891491,
+            "linear_m": 0.000470179228931716
           },
           "/DR_Legs/Joints/j5_r_o": {
-            "angular_rad": 0.0008409302050530837,
-            "linear_m": 2.6428717885161983e-06
+            "angular_rad": 0.0005541843550264778,
+            "linear_m": 0.0006451893826915188
           },
           "/DR_Legs/Joints/j6_l_i": {
-            "angular_rad": 0.0004014317115425562,
-            "linear_m": 5.723380358829334e-06
+            "angular_rad": 0.0004284765846451397,
+            "linear_m": 0.000403994668604124
           },
           "/DR_Legs/Joints/j6_l_o": {
-            "angular_rad": 0.0005231171452740091,
-            "linear_m": 2.4502043232530866e-06
+            "angular_rad": 0.0003712257444815489,
+            "linear_m": 0.0005933332328028639
           },
           "/DR_Legs/Joints/j6_r_i": {
-            "angular_rad": 0.00041986287998562274,
-            "linear_m": 5.420831575507779e-06
+            "angular_rad": 0.0004419856918869427,
+            "linear_m": 0.00040670087225517685
           },
           "/DR_Legs/Joints/j6_r_o": {
-            "angular_rad": 0.0005363376446044959,
-            "linear_m": 2.3417468525235215e-06
+            "angular_rad": 0.00036344020819725233,
+            "linear_m": 0.0005895690508542834
           },
           "/DR_Legs/Joints/j7_l_i": {
-            "angular_rad": 9.1311320777096e-05,
-            "linear_m": 4.204093713361664e-06
+            "angular_rad": 0.00796169811329028,
+            "linear_m": 0.000441019025256955
           },
           "/DR_Legs/Joints/j7_l_o": {
-            "angular_rad": 2.7070182387695906e-05,
-            "linear_m": 1.3819752753970393e-06
+            "angular_rad": 0.0007649403371084257,
+            "linear_m": 2.6813251304474025e-05
           },
           "/DR_Legs/Joints/j7_r_i": {
-            "angular_rad": 8.067625675906342e-05,
-            "linear_m": 4.360089878005002e-06
+            "angular_rad": 0.007841241834775777,
+            "linear_m": 0.0004480990371218482
           },
           "/DR_Legs/Joints/j7_r_o": {
-            "angular_rad": 2.4382573413171076e-05,
-            "linear_m": 1.460023221836791e-06
+            "angular_rad": 0.0009631533798624973,
+            "linear_m": 2.4155488438912558e-05
           },
           "/DR_Legs/Joints/j8_l_i": {
-            "angular_rad": 4.865709512330505e-05,
-            "linear_m": 4.585609018645988e-06
+            "angular_rad": 0.009135457046551037,
+            "linear_m": 0.0004928743461816626
           },
           "/DR_Legs/Joints/j8_l_o": {
-            "angular_rad": 2.1995657437080428e-05,
-            "linear_m": 1.411510018817039e-06
+            "angular_rad": 5.742121594953279e-05,
+            "linear_m": 4.796127020130293e-05
           },
           "/DR_Legs/Joints/j8_r_i": {
-            "angular_rad": 3.7052027913354534e-05,
-            "linear_m": 4.366531168262965e-06
+            "angular_rad": 0.009056274850086594,
+            "linear_m": 0.0004952287648745764
           },
           "/DR_Legs/Joints/j8_r_o": {
-            "angular_rad": 2.179432010836723e-05,
-            "linear_m": 1.4156097998113063e-06
+            "angular_rad": 0.00010920754023637525,
+            "linear_m": 4.157136925616683e-05
           },
           "/DR_Legs/Joints/j9_l_i": {
-            "angular_rad": 1.2491237937708828e-05,
-            "linear_m": 1.963673690484923e-06
+            "angular_rad": 0.0008279918889940966,
+            "linear_m": 0.00017494476790586364
           },
           "/DR_Legs/Joints/j9_l_o": {
-            "angular_rad": 2.840067977837556e-06,
-            "linear_m": 2.800408222053627e-07
+            "angular_rad": 0.00014798413299371883,
+            "linear_m": 2.6598288976465927e-05
           },
           "/DR_Legs/Joints/j9_r_i": {
-            "angular_rad": 1.4117579205783894e-05,
-            "linear_m": 1.8087265335989784e-06
+            "angular_rad": 0.0008787808901153548,
+            "linear_m": 0.0001780238052355359
           },
           "/DR_Legs/Joints/j9_r_o": {
-            "angular_rad": 2.8817841027997154e-06,
-            "linear_m": 3.1922103085219964e-07
+            "angular_rad": 0.00014588050795780275,
+            "linear_m": 2.5576980252696577e-05
           }
         }
       },
       "final_closure": {
-        "angular_max_rad": 0.0005363376446044959,
-        "angular_norm_rad": 0.0007494540175575212,
-        "linear_max_m": 2.4502043232530866e-06,
-        "linear_norm_m": 4.3353328028744675e-06,
+        "angular_max_rad": 0.0008787808901153548,
+        "angular_norm_rad": 0.001330753239933016,
+        "linear_max_m": 0.0005933332328028639,
+        "linear_norm_m": 0.0008736680083515804,
         "per_joint": {
           "/DR_Legs/Joints/j6_l_o": {
-            "angular_rad": 0.0005231171452740091,
-            "linear_m": 2.4502043232530866e-06
+            "angular_rad": 0.0003712257444815489,
+            "linear_m": 0.0005933332328028639
           },
           "/DR_Legs/Joints/j6_r_o": {
-            "angular_rad": 0.0005363376446044959,
-            "linear_m": 2.3417468525235215e-06
+            "angular_rad": 0.00036344020819725233,
+            "linear_m": 0.0005895690508542834
           },
           "/DR_Legs/Joints/j9_l_i": {
-            "angular_rad": 1.2491237937708828e-05,
-            "linear_m": 1.963673690484923e-06
+            "angular_rad": 0.0008279918889940966,
+            "linear_m": 0.00017494476790586364
           },
           "/DR_Legs/Joints/j9_l_o": {
-            "angular_rad": 2.840067977837556e-06,
-            "linear_m": 2.800408222053627e-07
+            "angular_rad": 0.00014798413299371883,
+            "linear_m": 2.6598288976465927e-05
           },
           "/DR_Legs/Joints/j9_r_i": {
-            "angular_rad": 1.4117579205783894e-05,
-            "linear_m": 1.8087265335989784e-06
+            "angular_rad": 0.0008787808901153548,
+            "linear_m": 0.0001780238052355359
           },
           "/DR_Legs/Joints/j9_r_o": {
-            "angular_rad": 2.8817841027997154e-06,
-            "linear_m": 3.1922103085219964e-07
+            "angular_rad": 0.00014588050795780275,
+            "linear_m": 2.5576980252696577e-05
           }
         }
       },
-      "final_pelvis_height_m": 0.04319518804550171,
+      "final_pelvis_height_m": 0.043958306312561035,
       "fps": 50,
       "frames": 180,
       "initial_closure": {
@@ -250,31 +250,40 @@
       "joint_dof_count": 36,
       "joint_kd": 0.0,
       "joint_ke": 200000.0,
+      "kamino_converged_fraction": 0.041666666666666664,
       "kamino_joint_armature": 0.011,
       "kamino_joint_damping": 0.044,
-      "max_body_speed_mps": 2.271987199783325,
-      "max_closure_um": 2871.1061954579995,
+      "kamino_p50_complementarity_residual": 2.4963426881186024e-09,
+      "kamino_p50_dual_residual": 0.19551297277212143,
+      "kamino_p50_iterations": 200.0,
+      "kamino_p50_primal_residual": 3.013192895195971e-08,
+      "kamino_p90_dual_residual": 0.33469270765781406,
+      "kamino_p90_iterations": 200.0,
+      "max_body_speed_mps": 2.257791757583618,
+      "max_closure_um": 2785.401457459157,
       "max_contacts": 12,
-      "max_pelvis_tilt_deg": 94.64263519674542,
-      "mean_collision_us": 565.2035952412656,
-      "mean_contacts": 10.811111111111112,
-      "mean_line_search_scale": null,
-      "mean_solver_us": 35266.72251838526,
-      "min_line_search_scale": null,
-      "min_pelvis_height_m": 0.0426471009850502,
+      "max_pelvis_tilt_deg": 89.9077968104462,
+      "mean_collision_us": null,
+      "mean_contacts": 10.877777777777778,
+      "mean_graph_step_us": 26479.41918860722,
+      "mean_solver_us": null,
+      "min_pelvis_height_m": 0.04346366971731186,
       "mode": "Kamino free ankle CUDA",
-      "p50_collision_us": 563.2799584418535,
-      "p50_solver_us": 35256.85204658657,
-      "p90_collision_us": 575.0679643824697,
-      "p90_solver_us": 35343.5319615528,
-      "rejected_line_search_fraction": null,
+      "p50_collision_us": null,
+      "p50_graph_step_us": 26479.298481717706,
+      "p50_solver_us": null,
+      "p90_collision_us": null,
+      "p90_graph_step_us": 26489.773974753916,
+      "p90_solver_us": null,
       "relaxation": 0.65,
-      "rms_all_linear_um": 1614.5493962322744,
-      "rms_closure_um": 944.9723401019265,
+      "rms_all_linear_um": 2597.4308347336946,
+      "rms_closure_per_joint_um": 614.7082237810124,
+      "rms_closure_um": 1505.7214889560564,
       "solver": "kamino",
       "status": "ok",
       "substeps_per_frame": 2,
       "tangential_stiffness_scale": 1.0,
+      "timing_method": "cuda_graph_end_to_end",
       "vbd_solve": null
     },
     {
@@ -304,190 +313,190 @@
       "dt": 0.01,
       "failure_substep": null,
       "final_all": {
-        "angular_max_rad": 4.946482601027273e-07,
-        "angular_norm_rad": 1.0797169981401768e-06,
-        "linear_max_m": 6.835096128900257e-07,
-        "linear_norm_m": 2.3240157510064436e-06,
+        "angular_max_rad": 2.612437106386086e-07,
+        "angular_norm_rad": 8.124075610838196e-07,
+        "linear_max_m": 6.791679348362161e-07,
+        "linear_norm_m": 2.3275977181516476e-06,
         "per_joint": {
           "/DR_Legs/Joints/j1_l_i": {
-            "angular_rad": 8.36614165330096e-08,
-            "linear_m": 4.417797612634909e-07
+            "angular_rad": 1.1924896238004087e-07,
+            "linear_m": 4.4646678751319084e-07
           },
           "/DR_Legs/Joints/j1_l_o": {
-            "angular_rad": 8.059159340460803e-08,
-            "linear_m": 6.680852280615608e-07
+            "angular_rad": 2.158907243476375e-07,
+            "linear_m": 6.790566071322388e-07
           },
           "/DR_Legs/Joints/j1_r_i": {
-            "angular_rad": 9.161189929688473e-08,
-            "linear_m": 4.4729723380020686e-07
+            "angular_rad": 1.998950093215575e-07,
+            "linear_m": 4.466812710721954e-07
           },
           "/DR_Legs/Joints/j1_r_o": {
-            "angular_rad": 1.4279410401474177e-07,
-            "linear_m": 6.835096128900257e-07
+            "angular_rad": 1.8028605552948748e-08,
+            "linear_m": 6.791679348362161e-07
           },
           "/DR_Legs/Joints/j2_l_i": {
-            "angular_rad": 1.344731603555563e-07,
-            "linear_m": 5.373773932316026e-07
+            "angular_rad": 1.5521833378500552e-07,
+            "linear_m": 5.831017935438431e-07
           },
           "/DR_Legs/Joints/j2_l_o": {
-            "angular_rad": 4.946482601027273e-07,
-            "linear_m": 2.626825855996091e-07
+            "angular_rad": 7.24876517097691e-08,
+            "linear_m": 2.5174893409369207e-07
           },
           "/DR_Legs/Joints/j2_r_i": {
-            "angular_rad": 1.819263914036567e-07,
-            "linear_m": 5.797580277068874e-07
+            "angular_rad": 3.8348032711052016e-08,
+            "linear_m": 5.464038270116377e-07
           },
           "/DR_Legs/Joints/j2_r_o": {
-            "angular_rad": 3.2443763483490995e-07,
-            "linear_m": 2.424884559896667e-07
+            "angular_rad": 2.612437106386086e-07,
+            "linear_m": 2.723199221971581e-07
           },
           "/DR_Legs/Joints/j3_l_i": {
-            "angular_rad": 1.1388475314087838e-07,
-            "linear_m": 5.942670301185051e-07
+            "angular_rad": 1.5208840783192971e-07,
+            "linear_m": 6.099509343581974e-07
           },
           "/DR_Legs/Joints/j3_l_o": {
-            "angular_rad": 2.355213890005452e-07,
-            "linear_m": 1.785648073898224e-07
+            "angular_rad": 1.307796423511695e-07,
+            "linear_m": 1.7774112671776144e-07
           },
           "/DR_Legs/Joints/j3_r_i": {
-            "angular_rad": 1.8007555382214428e-07,
-            "linear_m": 5.892635982950237e-07
+            "angular_rad": 8.175748396559425e-08,
+            "linear_m": 5.571248585462963e-07
           },
           "/DR_Legs/Joints/j3_r_o": {
-            "angular_rad": 2.179255187342907e-07,
-            "linear_m": 1.842997160174247e-07
+            "angular_rad": 1.010501852829242e-07,
+            "linear_m": 1.661816501765997e-07
           },
           "/DR_Legs/Joints/j4_l_i": {
-            "angular_rad": 1.364938461949939e-07,
-            "linear_m": 2.2381040556819405e-07
+            "angular_rad": 5.501168752247025e-08,
+            "linear_m": 2.1601648085771789e-07
           },
           "/DR_Legs/Joints/j4_l_o": {
-            "angular_rad": 2.1161396244784614e-07,
-            "linear_m": 4.1705890306045254e-08
+            "angular_rad": 8.947594513346477e-08,
+            "linear_m": 4.589236642990163e-08
           },
           "/DR_Legs/Joints/j4_r_i": {
-            "angular_rad": 1.1049676826294341e-07,
-            "linear_m": 2.1505895022175476e-07
+            "angular_rad": 2.7466970136599012e-08,
+            "linear_m": 2.1113550859114179e-07
           },
           "/DR_Legs/Joints/j4_r_o": {
-            "angular_rad": 1.5442948997591318e-08,
-            "linear_m": 5.478095569921307e-08
+            "angular_rad": 2.2047716970763422e-07,
+            "linear_m": 5.589270169420463e-08
           },
           "/DR_Legs/Joints/j5_l_i": {
-            "angular_rad": 3.568440806091025e-08,
-            "linear_m": 2.532267646851062e-07
+            "angular_rad": 1.405585522405761e-07,
+            "linear_m": 2.537399303272834e-07
           },
           "/DR_Legs/Joints/j5_l_o": {
-            "angular_rad": 2.445369607871818e-07,
-            "linear_m": 4.768229043938148e-08
+            "angular_rad": 7.49118281186362e-08,
+            "linear_m": 4.121086839050477e-08
           },
           "/DR_Legs/Joints/j5_r_i": {
-            "angular_rad": 1.2077188202761212e-07,
-            "linear_m": 2.459975841058775e-07
+            "angular_rad": 2.564819402946878e-07,
+            "linear_m": 2.45243008023209e-07
           },
           "/DR_Legs/Joints/j5_r_o": {
-            "angular_rad": 5.192285557598044e-08,
-            "linear_m": 5.044002278443376e-08
+            "angular_rad": 5.50374755943466e-08,
+            "linear_m": 5.476487132019067e-08
           },
           "/DR_Legs/Joints/j6_l_i": {
-            "angular_rad": 5.486093201657699e-08,
-            "linear_m": 2.561092872316886e-07
+            "angular_rad": 1.2329816196335855e-07,
+            "linear_m": 2.5217641975572105e-07
           },
           "/DR_Legs/Joints/j6_l_o": {
-            "angular_rad": 3.8147076745188096e-08,
-            "linear_m": 4.21665814615353e-08
+            "angular_rad": 4.1252104426397184e-08,
+            "linear_m": 4.681644991260351e-08
           },
           "/DR_Legs/Joints/j6_r_i": {
-            "angular_rad": 2.9698969232168073e-07,
-            "linear_m": 2.5232107088666873e-07
+            "angular_rad": 7.061583091729286e-08,
+            "linear_m": 2.5596875307820577e-07
           },
           "/DR_Legs/Joints/j6_r_o": {
-            "angular_rad": 2.600191397606325e-07,
-            "linear_m": 4.670857779440466e-08
+            "angular_rad": 1.966781988861277e-07,
+            "linear_m": 4.047635625203479e-08
           },
           "/DR_Legs/Joints/j7_l_i": {
-            "angular_rad": 4.3765836992409963e-08,
-            "linear_m": 5.929101651994968e-07
+            "angular_rad": 6.878551440919302e-08,
+            "linear_m": 5.859158295906817e-07
           },
           "/DR_Legs/Joints/j7_l_o": {
-            "angular_rad": 1.7181139090985663e-07,
-            "linear_m": 9.46345844416083e-08
+            "angular_rad": 1.2353962006015292e-07,
+            "linear_m": 1.1815841402066333e-07
           },
           "/DR_Legs/Joints/j7_r_i": {
-            "angular_rad": 1.3694247135420554e-07,
-            "linear_m": 5.954765572620445e-07
+            "angular_rad": 1.798171095318113e-08,
+            "linear_m": 5.800906082056265e-07
           },
           "/DR_Legs/Joints/j7_r_o": {
-            "angular_rad": 1.057163047753307e-08,
-            "linear_m": 1.1924792122928066e-07
+            "angular_rad": 1.200591230433987e-07,
+            "linear_m": 1.0662476320101868e-07
           },
           "/DR_Legs/Joints/j8_l_i": {
-            "angular_rad": 9.475257304475395e-08,
-            "linear_m": 6.190534060841855e-07
+            "angular_rad": 1.7385767437636027e-07,
+            "linear_m": 6.032035821182332e-07
           },
           "/DR_Legs/Joints/j8_l_o": {
-            "angular_rad": 1.6672647180247927e-07,
-            "linear_m": 1.2055589143842027e-07
+            "angular_rad": 1.00454209731929e-07,
+            "linear_m": 7.633506067046109e-08
           },
           "/DR_Legs/Joints/j8_r_i": {
-            "angular_rad": 1.19437616102684e-08,
-            "linear_m": 5.613086232845182e-07
+            "angular_rad": 1.2464884011420018e-07,
+            "linear_m": 6.013228771045362e-07
           },
           "/DR_Legs/Joints/j8_r_o": {
-            "angular_rad": 1.1311815739163417e-07,
-            "linear_m": 1.5026996974370448e-07
+            "angular_rad": 4.2290561789062205e-08,
+            "linear_m": 1.2126203722735573e-07
           },
           "/DR_Legs/Joints/j9_l_i": {
-            "angular_rad": 5.782419256874925e-08,
-            "linear_m": 5.805954236025838e-07
+            "angular_rad": 1.7262470023367074e-07,
+            "linear_m": 6.046343148183912e-07
           },
           "/DR_Legs/Joints/j9_l_o": {
-            "angular_rad": 1.616941617029802e-07,
-            "linear_m": 1.0264926691652056e-07
+            "angular_rad": 2.0337877341386282e-07,
+            "linear_m": 9.110155831384117e-08
           },
           "/DR_Legs/Joints/j9_r_i": {
-            "angular_rad": 2.0134655565430384e-07,
-            "linear_m": 6.229710112481155e-07
+            "angular_rad": 8.646425122641566e-08,
+            "linear_m": 6.178563570169451e-07
           },
           "/DR_Legs/Joints/j9_r_o": {
-            "angular_rad": 2.991701565071367e-07,
-            "linear_m": 9.566636377194294e-08
+            "angular_rad": 1.2858859062391045e-07,
+            "linear_m": 1.1555811595896629e-07
           }
         }
       },
       "final_closure": {
-        "angular_max_rad": 2.991701565071367e-07,
-        "angular_norm_rad": 4.781181963693457e-07,
-        "linear_max_m": 6.229710112481155e-07,
-        "linear_norm_m": 8.653511216560227e-07,
+        "angular_max_rad": 2.0337877341386282e-07,
+        "angular_norm_rad": 3.68181144304781e-07,
+        "linear_max_m": 6.178563570169451e-07,
+        "linear_norm_m": 8.790975031537816e-07,
         "per_joint": {
           "/DR_Legs/Joints/j6_l_o": {
-            "angular_rad": 3.8147076745188096e-08,
-            "linear_m": 4.21665814615353e-08
+            "angular_rad": 4.1252104426397184e-08,
+            "linear_m": 4.681644991260351e-08
           },
           "/DR_Legs/Joints/j6_r_o": {
-            "angular_rad": 2.600191397606325e-07,
-            "linear_m": 4.670857779440466e-08
+            "angular_rad": 1.966781988861277e-07,
+            "linear_m": 4.047635625203479e-08
           },
           "/DR_Legs/Joints/j9_l_i": {
-            "angular_rad": 5.782419256874925e-08,
-            "linear_m": 5.805954236025838e-07
+            "angular_rad": 1.7262470023367074e-07,
+            "linear_m": 6.046343148183912e-07
           },
           "/DR_Legs/Joints/j9_l_o": {
-            "angular_rad": 1.616941617029802e-07,
-            "linear_m": 1.0264926691652056e-07
+            "angular_rad": 2.0337877341386282e-07,
+            "linear_m": 9.110155831384117e-08
           },
           "/DR_Legs/Joints/j9_r_i": {
-            "angular_rad": 2.0134655565430384e-07,
-            "linear_m": 6.229710112481155e-07
+            "angular_rad": 8.646425122641566e-08,
+            "linear_m": 6.178563570169451e-07
           },
           "/DR_Legs/Joints/j9_r_o": {
-            "angular_rad": 2.991701565071367e-07,
-            "linear_m": 9.566636377194294e-08
+            "angular_rad": 1.2858859062391045e-07,
+            "linear_m": 1.1555811595896629e-07
           }
         }
       },
-      "final_pelvis_height_m": 0.042564500123262405,
+      "final_pelvis_height_m": 0.04256470873951912,
       "fps": 50,
       "frames": 180,
       "initial_closure": {
@@ -527,34 +536,43 @@
       "joint_dof_count": 36,
       "joint_kd": 0.0,
       "joint_ke": 200000.0,
+      "kamino_converged_fraction": null,
       "kamino_joint_armature": null,
       "kamino_joint_damping": null,
-      "max_body_speed_mps": 2.2394089698791504,
-      "max_closure_um": 28.79287702309902,
+      "kamino_p50_complementarity_residual": null,
+      "kamino_p50_dual_residual": null,
+      "kamino_p50_iterations": null,
+      "kamino_p50_primal_residual": null,
+      "kamino_p90_dual_residual": null,
+      "kamino_p90_iterations": null,
+      "max_body_speed_mps": 2.2393815517425537,
+      "max_closure_um": 28.800167543977253,
       "max_contacts": 12,
-      "max_pelvis_tilt_deg": 91.2398611676732,
-      "mean_collision_us": 553.968090597274,
+      "max_pelvis_tilt_deg": 91.23995881934508,
+      "mean_collision_us": null,
       "mean_contacts": 10.866666666666667,
-      "mean_line_search_scale": null,
-      "mean_solver_us": 10953.146010537499,
-      "min_line_search_scale": null,
-      "min_pelvis_height_m": 0.042515795677900314,
+      "mean_graph_step_us": 1968.4906683063932,
+      "mean_solver_us": null,
+      "min_pelvis_height_m": 0.04251554235816002,
       "mode": "VBD sparse direct free ankle CUDA",
-      "p50_collision_us": 553.4050287678838,
-      "p50_solver_us": 10949.932970106602,
-      "p90_collision_us": 563.0609346553683,
-      "p90_solver_us": 10963.801178149879,
-      "rejected_line_search_fraction": null,
+      "p50_collision_us": null,
+      "p50_graph_step_us": 1967.9550314322114,
+      "p50_solver_us": null,
+      "p90_collision_us": null,
+      "p90_graph_step_us": 1970.1360259205103,
+      "p90_solver_us": null,
       "relaxation": 0.65,
-      "rms_all_linear_um": 8.42168111923476,
-      "rms_closure_um": 2.7243128811439847,
+      "rms_all_linear_um": 8.425817975103255,
+      "rms_closure_per_joint_um": 1.1126909075887808,
+      "rms_closure_um": 2.725524965026824,
       "solver": "vbd",
       "status": "ok",
       "substeps_per_frame": 2,
       "tangential_stiffness_scale": 1.0,
+      "timing_method": "cuda_graph_end_to_end",
       "vbd_solve": "block_sparse_joints"
     }
   ],
-  "scenario": "dr-legs-free-ankle-cuda",
-  "timing_skip_frames": 40
+  "scenario": "dr-legs",
+  "source": "newton_assets_disney_research_dr_legs"
 }

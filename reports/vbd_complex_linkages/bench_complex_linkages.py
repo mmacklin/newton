@@ -13,7 +13,7 @@ import math
 import statistics
 import time
 import traceback
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -58,6 +58,7 @@ class ModeSpec:
     target_frequency_scale: float = 1.0
     robot_foot_geometry: str = "source"
     kamino_joint_stabilization: float = 0.01
+    cuda_graph: bool = False
 
 
 ROBOT_FOOT_MODES = {
@@ -126,6 +127,22 @@ DR_LEGS_MODES = {
         disabled_drive_suffixes=("j6_l_i", "j6_r_i"),
     ),
 }
+DR_LEGS_MODES.update(
+    {
+        "kamino_free_ankle_cuda": replace(
+            DR_LEGS_MODES["kamino_free_ankle_cpu"],
+            label="Kamino free ankle CUDA",
+            device="cuda:0",
+            cuda_graph=True,
+        ),
+        "vbd_sparse_free_ankle_cuda": replace(
+            DR_LEGS_MODES["vbd_sparse_free_ankle_cpu"],
+            label="VBD sparse direct free ankle CUDA",
+            device="cuda:0",
+            cuda_graph=True,
+        ),
+    }
+)
 
 
 def _load_attached_robot_foot() -> ModuleType:
@@ -735,6 +752,7 @@ def run_dr_legs_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) -> di
         "disabled_drive_suffixes": list(spec.disabled_drive_suffixes),
         "kamino_joint_armature": 0.011 if spec.solver == "kamino" else None,
         "kamino_joint_damping": spec.joint_viscous_damping if spec.solver == "kamino" else None,
+        "timing_method": "cuda_graph_end_to_end" if spec.cuda_graph else "synchronized_dispatch",
     }
     try:
         model = build_dr_legs_model(
@@ -753,7 +771,40 @@ def run_dr_legs_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) -> di
         solver = _make_dr_legs_solver(model, spec)
         closure_labels = _cycle_joint_labels(model)
         pelvis = _body_index(model, "pelvis")
+
+        graphs = None
+        if spec.cuda_graph:
+            if not model.device.is_cuda:
+                raise ValueError("CUDA graph timing requires a CUDA device")
+
+            # Compile every collision and solver kernel before stream capture, then
+            # recreate mutable runtime state so the measured trajectory starts clean.
+            state_0.clear_forces()
+            pipeline.collide(state_0, contacts)
+            solver.step(state_0, state_1, control, contacts, dt)
+            wp.synchronize_device(model.device)
+
+            state_0 = model.state()
+            state_1 = model.state()
+            state_1.assign(state_0)
+            control = model.control()
+            pipeline = newton.CollisionPipeline(model)
+            contacts = model.contacts(collision_pipeline=pipeline)
+            solver = _make_dr_legs_solver(model, spec)
+
         initial_closure = _joint_anchor_residuals(model, state_0, closure_labels)
+
+        if spec.cuda_graph:
+            with wp.ScopedCapture(device=model.device) as capture_0:
+                state_0.clear_forces()
+                pipeline.collide(state_0, contacts)
+                solver.step(state_0, state_1, control, contacts, dt)
+            with wp.ScopedCapture(device=model.device) as capture_1:
+                state_1.clear_forces()
+                pipeline.collide(state_1, contacts)
+                solver.step(state_1, state_0, control, contacts, dt)
+            graphs = (capture_0.graph, capture_1.graph)
+            wp.synchronize_device(model.device)
 
         closure_norms = []
         closure_maxes = []
@@ -764,6 +815,7 @@ def run_dr_legs_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) -> di
         max_body_speeds = []
         collision_times_us = []
         solver_times_us = []
+        graph_step_times_us = []
         kamino_converged = []
         kamino_iterations = []
         kamino_primal_residuals = []
@@ -771,18 +823,31 @@ def run_dr_legs_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) -> di
         kamino_complementarity_residuals = []
         failure_substep = None
         completed_substeps = 0
+        current_state = state_0
 
         for frame in range(frames):
             for _ in range(substeps_per_frame):
-                state_0.clear_forces()
-                collision_start = time.perf_counter()
-                pipeline.collide(state_0, contacts)
-                wp.synchronize_device(model.device)
-                collision_us = (time.perf_counter() - collision_start) * 1.0e6
-                solver_start = time.perf_counter()
-                solver.step(state_0, state_1, control, contacts, dt)
-                wp.synchronize_device(model.device)
-                solver_us = (time.perf_counter() - solver_start) * 1.0e6
+                if graphs is not None:
+                    graph_index = completed_substeps % 2
+                    graph_start = time.perf_counter()
+                    wp.capture_launch(graphs[graph_index])
+                    wp.synchronize_device(model.device)
+                    graph_step_us = (time.perf_counter() - graph_start) * 1.0e6
+                    collision_us = None
+                    solver_us = None
+                    current_state = state_1 if graph_index == 0 else state_0
+                else:
+                    state_0.clear_forces()
+                    collision_start = time.perf_counter()
+                    pipeline.collide(state_0, contacts)
+                    wp.synchronize_device(model.device)
+                    collision_us = (time.perf_counter() - collision_start) * 1.0e6
+                    solver_start = time.perf_counter()
+                    solver.step(state_0, state_1, control, contacts, dt)
+                    wp.synchronize_device(model.device)
+                    solver_us = (time.perf_counter() - solver_start) * 1.0e6
+                    state_0, state_1 = state_1, state_0
+                    current_state = state_0
                 if spec.solver == "kamino":
                     status = solver._solver_kamino.solver_fd.data.status.numpy()[0]
                     kamino_converged.append(bool(status["converged"]))
@@ -790,19 +855,21 @@ def run_dr_legs_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) -> di
                     kamino_primal_residuals.append(float(status["r_p"]))
                     kamino_dual_residuals.append(float(status["r_d"]))
                     kamino_complementarity_residuals.append(float(status["r_c"]))
-                state_0, state_1 = state_1, state_0
                 completed_substeps += 1
                 if frame >= timing_skip_frames:
-                    collision_times_us.append(collision_us)
-                    solver_times_us.append(solver_us)
+                    if graphs is not None:
+                        graph_step_times_us.append(graph_step_us)
+                    else:
+                        collision_times_us.append(collision_us)
+                        solver_times_us.append(solver_us)
 
-                poses = state_0.body_q.numpy()
-                velocities = state_0.body_qd.numpy()
+                poses = current_state.body_q.numpy()
+                velocities = current_state.body_qd.numpy()
                 if not np.all(np.isfinite(poses)) or not np.all(np.isfinite(velocities)):
                     failure_substep = completed_substeps
                     break
-                closure = _joint_anchor_residuals(model, state_0, closure_labels)
-                all_residual = _joint_anchor_residuals(model, state_0)
+                closure = _joint_anchor_residuals(model, current_state, closure_labels)
+                all_residual = _joint_anchor_residuals(model, current_state)
                 closure_norms.append(closure["linear_norm_m"])
                 closure_maxes.append(closure["linear_max_m"])
                 all_linear_norms.append(all_residual["linear_norm_m"])
@@ -813,7 +880,7 @@ def run_dr_legs_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) -> di
             if failure_substep is not None:
                 break
 
-        final_body_q = state_0.body_q.numpy()
+        final_body_q = current_state.body_q.numpy()
         finite = bool(np.all(np.isfinite(final_body_q)))
         row.update(
             status="ok" if finite else "nonfinite",
@@ -826,8 +893,8 @@ def run_dr_legs_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) -> di
             closure_joint_count=len(closure_labels),
             closure_joint_labels=sorted(closure_labels),
             initial_closure=initial_closure,
-            final_closure=_joint_anchor_residuals(model, state_0, closure_labels) if finite else None,
-            final_all=_joint_anchor_residuals(model, state_0) if finite else None,
+            final_closure=_joint_anchor_residuals(model, current_state, closure_labels) if finite else None,
+            final_all=_joint_anchor_residuals(model, current_state) if finite else None,
             rms_closure_um=float(np.sqrt(np.mean(np.square(closure_norms))) * 1.0e6),
             rms_closure_per_joint_um=float(np.sqrt(np.mean(np.square(closure_norms)) / len(closure_labels)) * 1.0e6),
             max_closure_um=float(np.max(closure_maxes) * 1.0e6),
@@ -844,6 +911,9 @@ def run_dr_legs_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) -> di
             mean_solver_us=float(statistics.fmean(solver_times_us)) if solver_times_us else None,
             p50_solver_us=float(np.percentile(solver_times_us, 50.0)) if solver_times_us else None,
             p90_solver_us=float(np.percentile(solver_times_us, 90.0)) if solver_times_us else None,
+            mean_graph_step_us=float(statistics.fmean(graph_step_times_us)) if graph_step_times_us else None,
+            p50_graph_step_us=float(np.percentile(graph_step_times_us, 50.0)) if graph_step_times_us else None,
+            p90_graph_step_us=float(np.percentile(graph_step_times_us, 90.0)) if graph_step_times_us else None,
             kamino_converged_fraction=(float(np.mean(kamino_converged)) if kamino_converged else None),
             kamino_p50_iterations=(float(np.percentile(kamino_iterations, 50.0)) if kamino_iterations else None),
             kamino_p90_iterations=(float(np.percentile(kamino_iterations, 90.0)) if kamino_iterations else None),
