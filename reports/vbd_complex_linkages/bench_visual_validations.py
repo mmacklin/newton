@@ -9,7 +9,11 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import statistics
+import subprocess
+import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -301,20 +305,49 @@ def render_comparisons(output_dir: Path, frames: int, scenarios: list[str]) -> l
     output_dir.mkdir(parents=True, exist_ok=True)
     rows = []
     for scenario in scenarios:
-        local_frames, local_metrics = _render_mode(scenario, "local", frames)
-        sparse_frames, sparse_metrics = _render_mode(scenario, "block_sparse_joints", frames)
-        combined = [np.concatenate((_as_rgb(a), _as_rgb(b)), axis=1) for a, b in zip(local_frames, sparse_frames)]
-        video = output_dir / f"{scenario}_local_vs_sparse.mp4"
-        poster = output_dir / f"{scenario}_local_vs_sparse.jpg"
-        _write_video(video, combined, 60)
-        imageio.imwrite(poster, combined[len(combined) // 2])
+        with tempfile.TemporaryDirectory(prefix=f"vbd-{scenario}-") as temp_dir:
+            temp_path = Path(temp_dir)
+            captures = {}
+            metrics = {}
+            for mode in ("local", "block_sparse_joints"):
+                frame_path = temp_path / f"{mode}.npy"
+                metric_path = temp_path / f"{mode}.json"
+                command = [
+                    sys.executable,
+                    str(Path(__file__).resolve()),
+                    "--render-worker",
+                    scenario,
+                    mode,
+                    "--frames",
+                    str(frames),
+                    "--worker-frames",
+                    str(frame_path),
+                    "--worker-metrics",
+                    str(metric_path),
+                ]
+                environment = dict(os.environ)
+                environment.setdefault("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
+                subprocess.run(command, check=True, env=environment)
+                captures[mode] = np.load(frame_path, mmap_mode="r")
+                metrics[mode] = json.loads(metric_path.read_text())
+
+            local_frames = captures["local"]
+            sparse_frames = captures["block_sparse_joints"]
+            combined = [
+                np.concatenate((_as_rgb(a), _as_rgb(b)), axis=1)
+                for a, b in zip(local_frames, sparse_frames, strict=True)
+            ]
+            video = output_dir / f"{scenario}_local_vs_sparse.mp4"
+            poster = output_dir / f"{scenario}_local_vs_sparse.jpg"
+            _write_video(video, combined, 60)
+            imageio.imwrite(poster, combined[len(combined) // 2])
         rows.append(
             {
                 "scenario": scenario,
                 "video": f"videos/{video.name}",
                 "poster": f"videos/{poster.name}",
-                "local": local_metrics,
-                "sparse": sparse_metrics,
+                "local": metrics["local"],
+                "sparse": metrics["block_sparse_joints"],
             }
         )
     return rows
@@ -327,17 +360,32 @@ def main() -> None:
     parser.add_argument("--skip-render", action="store_true")
     parser.add_argument("--skip-benchmark", action="store_true")
     parser.add_argument("--scenarios", nargs="+", choices=("four-bar", "cable"), default=["four-bar", "cable"])
-    parser.add_argument(
-        "--video-dir", type=Path, default=Path.home() / "reports" / "vbd-complex-linkages" / "videos"
-    )
+    parser.add_argument("--render-worker", nargs=2, metavar=("SCENARIO", "MODE"))
+    parser.add_argument("--worker-frames", type=Path)
+    parser.add_argument("--worker-metrics", type=Path)
+    parser.add_argument("--video-dir", type=Path, default=Path.home() / "reports" / "vbd-complex-linkages" / "videos")
     parser.add_argument(
         "--output", type=Path, default=Path("reports/vbd_complex_linkages/visual_validation_results.json")
     )
     args = parser.parse_args()
 
+    if args.render_worker:
+        if args.worker_frames is None or args.worker_metrics is None:
+            parser.error("--render-worker requires --worker-frames and --worker-metrics")
+        scenario, mode = args.render_worker
+        rendered, metrics = _render_mode(scenario, mode, args.frames)
+        np.save(args.worker_frames, np.asarray(rendered, dtype=np.uint8))
+        args.worker_metrics.write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n")
+        return
+
+    existing = json.loads(args.output.read_text()) if args.output.exists() else {}
     payload = {
-        "cable_convergence": [] if args.skip_benchmark else benchmark_cable(args.timing_repeats),
-        "visuals": [] if args.skip_render else render_comparisons(args.video_dir, args.frames, args.scenarios),
+        "cable_convergence": existing.get("cable_convergence", [])
+        if args.skip_benchmark
+        else benchmark_cable(args.timing_repeats),
+        "visuals": existing.get("visuals", [])
+        if args.skip_render
+        else render_comparisons(args.video_dir, args.frames, args.scenarios),
     }
     args.output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     print(json.dumps(payload, indent=2, sort_keys=True))

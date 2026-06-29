@@ -21,6 +21,7 @@ ASSET_SOURCE = SOURCE / "assets"
 FORMULATION_DATA_SOURCE = SOURCE / "formulation_data"
 GITHUB_BRANCH = "https://github.com/mmacklin/newton/tree/horde/vbd-sparse-articulation-main"
 GITHUB_BLOB = "https://github.com/mmacklin/newton/blob/horde/vbd-sparse-articulation-main"
+MEDIA_VERSION = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _load(name: str) -> dict:
@@ -56,7 +57,7 @@ def _video(name: str, title: str, text: str) -> str:
     <article class="media">
       <h3>{html.escape(title)}</h3>
       <video controls muted loop playsinline preload="metadata" poster="videos/{stem}.jpg">
-        <source src="videos/{name}?v=20260629" type="video/mp4">
+        <source src="videos/{name}?v={MEDIA_VERSION}" type="video/mp4">
       </video>
       <p>{html.escape(text)}</p>
     </article>"""
@@ -357,12 +358,12 @@ apply_pose_updates(delta, relaxation)</code></pre>
 <div class="validation-grid">
   <article>
     <h3>Driven closed four-bar</h3>
-    <video controls muted loop playsinline preload="metadata" poster="{four_bar_visual["poster"]}"><source src="{four_bar_visual["video"]}?v=20260629b" type="video/mp4"></video>
+    <video controls muted loop playsinline preload="metadata" poster="{four_bar_visual["poster"]}"><source src="{four_bar_visual["video"]}?v={MEDIA_VERSION}" type="video/mp4"></video>
     <p>Three moving links, four revolute joints, and one explicit world closure. At eight iterations, local VBD records {_fmt(four_bar_visual["local"]["rms_residual_um"], 3)} µm RMS joint error; sparse direct records {_fmt(four_bar_visual["sparse"]["rms_residual_um"], 3)} µm.</p>
   </article>
   <article>
     <h3>Hanging 32-segment cable</h3>
-    <video controls muted loop playsinline preload="metadata" poster="{cable_visual["poster"]}"><source src="{cable_visual["video"]}?v=20260629b" type="video/mp4"></video>
+    <video controls muted loop playsinline preload="metadata" poster="{cable_visual["poster"]}"><source src="{cable_visual["video"]}?v={MEDIA_VERSION}" type="video/mp4"></video>
     <p>A stiff cable chain swings under gravity from one fixed end. At four iterations, local VBD records {_fmt(cable_visual["local"]["rms_residual_um"], 1)} µm RMS connectivity error; sparse direct records {_fmt(cable_visual["sparse"]["rms_residual_um"], 1)} µm.</p>
   </article>
 </div>
