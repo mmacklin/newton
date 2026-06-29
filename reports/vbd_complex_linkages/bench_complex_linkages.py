@@ -58,6 +58,7 @@ class ModeSpec:
     target_frequency_scale: float = 1.0
     robot_foot_geometry: str = "source"
     kamino_joint_stabilization: float = 0.01
+    cpu_graph: bool = False
     cuda_graph: bool = False
 
 
@@ -93,6 +94,7 @@ ROBOT_FOOT_MODES = {
         robot_foot_geometry="compatible",
     ),
 }
+ROBOT_FOOT_MODES = {name: replace(spec, cpu_graph=spec.solver == "vbd") for name, spec in ROBOT_FOOT_MODES.items()}
 
 DR_LEGS_MODES = {
     "kamino_cpu": ModeSpec("Kamino CPU", "kamino", "cpu", relaxation=0.65),
@@ -127,18 +129,21 @@ DR_LEGS_MODES = {
         disabled_drive_suffixes=("j6_l_i", "j6_r_i"),
     ),
 }
+DR_LEGS_MODES = {name: replace(spec, cpu_graph=spec.solver == "vbd") for name, spec in DR_LEGS_MODES.items()}
 DR_LEGS_MODES.update(
     {
         "kamino_free_ankle_cuda": replace(
             DR_LEGS_MODES["kamino_free_ankle_cpu"],
             label="Kamino free ankle CUDA",
             device="cuda:0",
+            cpu_graph=False,
             cuda_graph=True,
         ),
         "vbd_sparse_free_ankle_cuda": replace(
             DR_LEGS_MODES["vbd_sparse_free_ankle_cpu"],
             label="VBD sparse direct free ankle CUDA",
             device="cuda:0",
+            cpu_graph=False,
             cuda_graph=True,
         ),
     }
@@ -575,6 +580,7 @@ def run_robot_foot_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) ->
         "substeps_per_frame": 5,
         "target_frequency_scale": spec.target_frequency_scale,
         "robot_foot_geometry": spec.robot_foot_geometry,
+        "timing_method": "cpu_graph_solver" if spec.cpu_graph else "synchronized_dispatch",
     }
     try:
         model, source, motor_labels = build_robot_foot_model(spec.device, spec.robot_foot_geometry)
@@ -600,6 +606,30 @@ def run_robot_foot_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) ->
         }
         foot_body = _body_index(model, "foot_platform")
         solver = _make_solver(model, spec)
+
+        graphs = None
+        if spec.cpu_graph:
+            if not model.device.is_cpu:
+                raise ValueError("CPU graph timing requires the CPU device")
+
+            state_0.clear_forces()
+            solver.step(state_0, state_1, control, None, row["dt"])
+            wp.synchronize_device(model.device)
+
+            state_0 = model.state()
+            state_1 = model.state()
+            state_1.assign(state_0)
+            control = model.control()
+            solver = _make_solver(model, spec)
+
+            with wp.ScopedCapture(device=model.device) as capture_0:
+                state_0.clear_forces()
+                solver.step(state_0, state_1, control, None, row["dt"])
+            with wp.ScopedCapture(device=model.device) as capture_1:
+                state_1.clear_forces()
+                solver.step(state_1, state_0, control, None, row["dt"])
+            graphs = (capture_0.graph, capture_1.graph)
+            wp.synchronize_device(model.device)
 
         _update_robot_foot_targets(
             source,
@@ -637,6 +667,8 @@ def run_robot_foot_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) ->
         kamino_iterations = []
         kamino_dual_residuals = []
         sim_time = 0.0
+        completed_substeps = 0
+        current_state = state_0
 
         for frame in range(frames):
             for substep in range(row["substeps_per_frame"]):
@@ -652,9 +684,14 @@ def run_robot_foot_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) ->
                     substep_time,
                     spec.target_frequency_scale,
                 )
-                state_0.clear_forces()
                 start = time.perf_counter()
-                solver.step(state_0, state_1, control, None, row["dt"])
+                if graphs is not None:
+                    graph_index = completed_substeps % 2
+                    wp.capture_launch(graphs[graph_index])
+                    current_state = state_1 if graph_index == 0 else state_0
+                else:
+                    state_0.clear_forces()
+                    solver.step(state_0, state_1, control, None, row["dt"])
                 wp.synchronize_device(model.device)
                 elapsed_us = (time.perf_counter() - start) * 1.0e6
                 if spec.solver == "kamino":
@@ -662,32 +699,35 @@ def run_robot_foot_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) ->
                     kamino_converged.append(bool(status["converged"]))
                     kamino_iterations.append(int(status["iterations"]))
                     kamino_dual_residuals.append(float(status["r_d"]))
-                state_0, state_1 = state_1, state_0
+                if graphs is None:
+                    state_0, state_1 = state_1, state_0
+                    current_state = state_0
+                completed_substeps += 1
                 if frame >= timing_skip_frames:
                     step_times_us.append(elapsed_us)
 
-                closure = _joint_anchor_residuals(model, state_0, closure_labels)
-                all_residual = _joint_anchor_residuals(model, state_0)
+                closure = _joint_anchor_residuals(model, current_state, closure_labels)
+                all_residual = _joint_anchor_residuals(model, current_state)
                 closure_norms.append(closure["linear_norm_m"])
                 closure_maxes.append(closure["linear_max_m"])
                 all_linear_norms.append(all_residual["linear_norm_m"])
                 all_angular_norms.append(all_residual["angular_norm_rad"])
-                pitch_motor = _revolute_coordinate(model, state_0, motor_joint_indices["pitch"])
-                roll_motor = _revolute_coordinate(model, state_0, motor_joint_indices["roll"])
+                pitch_motor = _revolute_coordinate(model, current_state, motor_joint_indices["pitch"])
+                roll_motor = _revolute_coordinate(model, current_state, motor_joint_indices["roll"])
                 pitch_targets.append(targets["pitch"])
                 roll_targets.append(targets["roll"])
                 pitch_motor_positions.append(pitch_motor)
                 roll_motor_positions.append(roll_motor)
-                output_pitch_positions.append(_revolute_coordinate(model, state_0, output_joint_indices["pitch"]))
-                output_roll_positions.append(_revolute_coordinate(model, state_0, output_joint_indices["roll"]))
+                output_pitch_positions.append(_revolute_coordinate(model, current_state, output_joint_indices["pitch"]))
+                output_roll_positions.append(_revolute_coordinate(model, current_state, output_joint_indices["roll"]))
                 pitch_errors.append(pitch_motor - targets["pitch"])
                 roll_errors.append(roll_motor - targets["roll"])
-                foot_angular_speeds.append(float(np.linalg.norm(state_0.body_qd.numpy()[foot_body, 3:6])))
+                foot_angular_speeds.append(float(np.linalg.norm(current_state.body_qd.numpy()[foot_body, 3:6])))
             sim_time += 1.0 / row["fps"]
 
-        body_q = state_0.body_q.numpy()
-        final_closure = _joint_anchor_residuals(model, state_0, closure_labels)
-        final_all = _joint_anchor_residuals(model, state_0)
+        body_q = current_state.body_q.numpy()
+        final_closure = _joint_anchor_residuals(model, current_state, closure_labels)
+        final_all = _joint_anchor_residuals(model, current_state)
         row.update(
             status="ok" if np.all(np.isfinite(body_q)) else "nonfinite",
             body_count=model.body_count,
@@ -752,7 +792,13 @@ def run_dr_legs_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) -> di
         "disabled_drive_suffixes": list(spec.disabled_drive_suffixes),
         "kamino_joint_armature": 0.011 if spec.solver == "kamino" else None,
         "kamino_joint_damping": spec.joint_viscous_damping if spec.solver == "kamino" else None,
-        "timing_method": "cuda_graph_end_to_end" if spec.cuda_graph else "synchronized_dispatch",
+        "timing_method": (
+            "cuda_graph_end_to_end"
+            if spec.cuda_graph
+            else "cpu_graph_solver_plus_dispatched_collision"
+            if spec.cpu_graph
+            else "synchronized_dispatch"
+        ),
     }
     try:
         model = build_dr_legs_model(
@@ -773,9 +819,11 @@ def run_dr_legs_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) -> di
         pelvis = _body_index(model, "pelvis")
 
         graphs = None
-        if spec.cuda_graph:
-            if not model.device.is_cuda:
+        if spec.cuda_graph or spec.cpu_graph:
+            if spec.cuda_graph and not model.device.is_cuda:
                 raise ValueError("CUDA graph timing requires a CUDA device")
+            if spec.cpu_graph and not model.device.is_cpu:
+                raise ValueError("CPU graph timing requires the CPU device")
 
             # Compile every collision and solver kernel before stream capture, then
             # recreate mutable runtime state so the measured trajectory starts clean.
@@ -794,14 +842,20 @@ def run_dr_legs_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) -> di
 
         initial_closure = _joint_anchor_residuals(model, state_0, closure_labels)
 
-        if spec.cuda_graph:
+        if spec.cuda_graph or spec.cpu_graph:
+            if spec.cpu_graph:
+                pipeline.collide(state_0, contacts)
             with wp.ScopedCapture(device=model.device) as capture_0:
                 state_0.clear_forces()
-                pipeline.collide(state_0, contacts)
+                if spec.cuda_graph:
+                    pipeline.collide(state_0, contacts)
                 solver.step(state_0, state_1, control, contacts, dt)
+            if spec.cpu_graph:
+                pipeline.collide(state_1, contacts)
             with wp.ScopedCapture(device=model.device) as capture_1:
                 state_1.clear_forces()
-                pipeline.collide(state_1, contacts)
+                if spec.cuda_graph:
+                    pipeline.collide(state_1, contacts)
                 solver.step(state_1, state_0, control, contacts, dt)
             graphs = (capture_0.graph, capture_1.graph)
             wp.synchronize_device(model.device)
@@ -829,12 +883,23 @@ def run_dr_legs_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) -> di
             for _ in range(substeps_per_frame):
                 if graphs is not None:
                     graph_index = completed_substeps % 2
+                    if spec.cpu_graph:
+                        collision_state = state_0 if graph_index == 0 else state_1
+                        collision_start = time.perf_counter()
+                        pipeline.collide(collision_state, contacts)
+                        wp.synchronize_device(model.device)
+                        collision_us = (time.perf_counter() - collision_start) * 1.0e6
                     graph_start = time.perf_counter()
                     wp.capture_launch(graphs[graph_index])
                     wp.synchronize_device(model.device)
-                    graph_step_us = (time.perf_counter() - graph_start) * 1.0e6
-                    collision_us = None
-                    solver_us = None
+                    replay_us = (time.perf_counter() - graph_start) * 1.0e6
+                    if spec.cuda_graph:
+                        graph_step_us = replay_us
+                        collision_us = None
+                        solver_us = None
+                    else:
+                        graph_step_us = None
+                        solver_us = replay_us
                     current_state = state_1 if graph_index == 0 else state_0
                 else:
                     state_0.clear_forces()
@@ -857,7 +922,7 @@ def run_dr_legs_mode(spec: ModeSpec, frames: int, timing_skip_frames: int) -> di
                     kamino_complementarity_residuals.append(float(status["r_c"]))
                 completed_substeps += 1
                 if frame >= timing_skip_frames:
-                    if graphs is not None:
+                    if spec.cuda_graph:
                         graph_step_times_us.append(graph_step_us)
                     else:
                         collision_times_us.append(collision_us)

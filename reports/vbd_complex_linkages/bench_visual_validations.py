@@ -215,16 +215,31 @@ def _time_cable_step(mode: str, iterations: int, repeats: int) -> float:
     state_1 = model.state()
     solver = _make_solver(model, mode, iterations)
     control = model.control()
-    times = []
-    for repeat in range(repeats + 5):
+    state_0.clear_forces()
+    solver.step(state_0, state_1, control, None, 1.0 / 120.0)
+    wp.synchronize_device(model.device)
+
+    state_0 = model.state()
+    state_1 = model.state()
+    state_1.assign(state_0)
+    control = model.control()
+    solver = _make_solver(model, mode, iterations)
+    with wp.ScopedCapture(device=model.device) as capture_0:
         state_0.clear_forces()
-        start = time.perf_counter()
         solver.step(state_0, state_1, control, None, 1.0 / 120.0)
+    with wp.ScopedCapture(device=model.device) as capture_1:
+        state_1.clear_forces()
+        solver.step(state_1, state_0, control, None, 1.0 / 120.0)
+    graphs = (capture_0.graph, capture_1.graph)
+    wp.synchronize_device(model.device)
+
+    times = []
+    for repeat in range(repeats):
+        start = time.perf_counter()
+        wp.capture_launch(graphs[repeat % 2])
         wp.synchronize_device(model.device)
         elapsed = 1.0e6 * (time.perf_counter() - start)
-        state_0, state_1 = state_1, state_0
-        if repeat >= 5:
-            times.append(elapsed)
+        times.append(elapsed)
     return float(statistics.median(times))
 
 
