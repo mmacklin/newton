@@ -812,6 +812,12 @@ def parse_urdf(
             )
         elif joint["type"] == "fixed":
             created_joint_idx = builder.add_joint_fixed(**joint_params)
+        elif joint["type"] in ("ball", "spherical"):
+            created_joint_idx = builder.add_joint_ball(
+                friction=joint_friction,
+                actuator_mode=JointTargetMode.NONE,
+                **joint_params,
+            )
         elif joint["type"] == "floating":
             created_joint_idx = builder.add_joint_free(**joint_params)
         elif joint["type"] == "planar":

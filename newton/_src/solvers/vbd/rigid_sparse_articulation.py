@@ -19,13 +19,22 @@ class RigidArticulationSparseLayout:
     articulation_joint_offsets: wp.array
     articulation_bodies: wp.array
     articulation_joints: wp.array
+    articulation_joint_body_start: wp.array
     articulation_block_row_offsets: wp.array
     articulation_block_cols: wp.array
+    articulation_block_col_offsets: wp.array
+    articulation_block_col_rows: wp.array
+    articulation_block_col_slots: wp.array
+    articulation_schur_offsets: wp.array
+    articulation_schur_dst_slots: wp.array
+    articulation_schur_left_slots: wp.array
+    articulation_schur_right_slots: wp.array
     articulation_diag_slots: wp.array
     body_articulation_sparse: wp.array
     body_articulation_local: wp.array
     articulation_count: int
     articulation_body_count: int
+    articulation_joint_count: int
     block_count: int
 
 
@@ -45,6 +54,27 @@ def _symbolic_cholesky_pattern(body_count: int, edges: set[tuple[int, int]]) -> 
     return [sorted(row) for row in rows]
 
 
+def _minimum_degree_order(body_count: int, edges: set[tuple[int, int]]) -> list[int]:
+    adjacency = [set() for _ in range(body_count)]
+    for a, b in edges:
+        adjacency[a].add(b)
+        adjacency[b].add(a)
+
+    remaining = set(range(body_count))
+    order: list[int] = []
+    for _ in range(body_count):
+        pivot = min(remaining, key=lambda i: (len(adjacency[i] & remaining), i))
+        neighbors = sorted((adjacency[pivot] & remaining) - {pivot})
+        for i, a in enumerate(neighbors):
+            for b in neighbors[:i]:
+                adjacency[a].add(b)
+                adjacency[b].add(a)
+        remaining.remove(pivot)
+        order.append(pivot)
+
+    return order
+
+
 def build_rigid_articulation_sparse_layout(
     model, device: wp.context.Devicelike
 ) -> RigidArticulationSparseLayout | None:
@@ -60,10 +90,18 @@ def build_rigid_articulation_sparse_layout(
 
     articulation_bodies_host: list[int] = []
     articulation_joints_host: list[int] = []
+    articulation_joint_body_start_host: list[int] = []
     articulation_body_offsets_host = [0]
     articulation_joint_offsets_host = [0]
     block_row_offsets_host = [0]
     block_cols_host: list[int] = []
+    block_col_rows_host: list[int] = []
+    block_col_slots_host: list[int] = []
+    block_col_offsets_host: list[int] = []
+    schur_dst_slots_host: list[int] = []
+    schur_left_slots_host: list[int] = []
+    schur_right_slots_host: list[int] = []
+    schur_offsets_host: list[int] = []
     diag_slots_host: list[int] = []
 
     body_articulation_sparse_host = np.full((model.body_count,), -1, dtype=np.int32)
@@ -103,14 +141,24 @@ def build_rigid_articulation_sparse_layout(
             if parent >= 0 and child >= 0 and parent in local_index and child in local_index:
                 edges.add((local_index[parent], local_index[child]))
 
-        pattern = _symbolic_cholesky_pattern(len(bodies), edges)
+        if len(bodies) > 1:
+            order = _minimum_degree_order(len(bodies), edges)
+            old_to_new = {old: new for new, old in enumerate(order)}
+            ordered_bodies = [bodies[old] for old in order]
+            edges = {(old_to_new[a], old_to_new[b]) for a, b in edges}
+        else:
+            ordered_bodies = bodies
 
-        articulation_bodies_host.extend(bodies)
+        pattern = _symbolic_cholesky_pattern(len(ordered_bodies), edges)
+
+        body_start = len(articulation_bodies_host)
+        articulation_bodies_host.extend(ordered_bodies)
         articulation_joints_host.extend(joints)
+        articulation_joint_body_start_host.extend([body_start] * len(joints))
         articulation_body_offsets_host.append(len(articulation_bodies_host))
         articulation_joint_offsets_host.append(len(articulation_joints_host))
 
-        for local_body, body in enumerate(bodies):
+        for local_body, body in enumerate(ordered_bodies):
             body_articulation_sparse_host[body] = articulation_sparse
             body_articulation_local_host[body] = local_body
 
@@ -120,12 +168,47 @@ def build_rigid_articulation_sparse_layout(
             diag_slots_host.append(row_start + row_cols.index(local_row))
             block_row_offsets_host.append(len(block_cols_host))
 
+        block_lookup: dict[tuple[int, int], int] = {}
+        local_row_offset_start = len(block_row_offsets_host) - len(pattern) - 1
+        for local_row, row_cols in enumerate(pattern):
+            row_start = block_row_offsets_host[local_row_offset_start + local_row]
+            for local_col_index, local_col in enumerate(row_cols):
+                block_lookup[(local_row, local_col)] = row_start + local_col_index
+
+        for local_col in range(len(ordered_bodies)):
+            block_col_offsets_host.append(len(block_col_rows_host))
+            later_rows: list[tuple[int, int]] = []
+            for local_row in range(local_col + 1, len(ordered_bodies)):
+                slot = block_lookup.get((local_row, local_col))
+                if slot is not None:
+                    later_rows.append((local_row, slot))
+                    block_col_rows_host.append(local_row)
+                    block_col_slots_host.append(slot)
+
+            schur_offsets_host.append(len(schur_dst_slots_host))
+            for left_index, (left_row, left_slot) in enumerate(later_rows):
+                for right_row, right_slot in later_rows[: left_index + 1]:
+                    dst_slot = block_lookup[(left_row, right_row)]
+                    schur_dst_slots_host.append(dst_slot)
+                    schur_left_slots_host.append(left_slot)
+                    schur_right_slots_host.append(right_slot)
+
     articulation_bodies_np = np.asarray(articulation_bodies_host, dtype=np.int32)
     articulation_joints_np = np.asarray(articulation_joints_host, dtype=np.int32)
+    articulation_joint_body_start_np = np.asarray(articulation_joint_body_start_host, dtype=np.int32)
     articulation_body_offsets_np = np.asarray(articulation_body_offsets_host, dtype=np.int32)
     articulation_joint_offsets_np = np.asarray(articulation_joint_offsets_host, dtype=np.int32)
     block_row_offsets_np = np.asarray(block_row_offsets_host, dtype=np.int32)
     block_cols_np = np.asarray(block_cols_host, dtype=np.int32)
+    block_col_offsets_host.append(len(block_col_rows_host))
+    schur_offsets_host.append(len(schur_dst_slots_host))
+    block_col_offsets_np = np.asarray(block_col_offsets_host, dtype=np.int32)
+    block_col_rows_np = np.asarray(block_col_rows_host, dtype=np.int32)
+    block_col_slots_np = np.asarray(block_col_slots_host, dtype=np.int32)
+    schur_offsets_np = np.asarray(schur_offsets_host, dtype=np.int32)
+    schur_dst_slots_np = np.asarray(schur_dst_slots_host, dtype=np.int32)
+    schur_left_slots_np = np.asarray(schur_left_slots_host, dtype=np.int32)
+    schur_right_slots_np = np.asarray(schur_right_slots_host, dtype=np.int32)
     diag_slots_np = np.asarray(diag_slots_host, dtype=np.int32)
 
     return RigidArticulationSparseLayout(
@@ -133,12 +216,21 @@ def build_rigid_articulation_sparse_layout(
         articulation_joint_offsets=wp.array(articulation_joint_offsets_np, dtype=wp.int32, device=device),
         articulation_bodies=wp.array(articulation_bodies_np, dtype=wp.int32, device=device),
         articulation_joints=wp.array(articulation_joints_np, dtype=wp.int32, device=device),
+        articulation_joint_body_start=wp.array(articulation_joint_body_start_np, dtype=wp.int32, device=device),
         articulation_block_row_offsets=wp.array(block_row_offsets_np, dtype=wp.int32, device=device),
         articulation_block_cols=wp.array(block_cols_np, dtype=wp.int32, device=device),
+        articulation_block_col_offsets=wp.array(block_col_offsets_np, dtype=wp.int32, device=device),
+        articulation_block_col_rows=wp.array(block_col_rows_np, dtype=wp.int32, device=device),
+        articulation_block_col_slots=wp.array(block_col_slots_np, dtype=wp.int32, device=device),
+        articulation_schur_offsets=wp.array(schur_offsets_np, dtype=wp.int32, device=device),
+        articulation_schur_dst_slots=wp.array(schur_dst_slots_np, dtype=wp.int32, device=device),
+        articulation_schur_left_slots=wp.array(schur_left_slots_np, dtype=wp.int32, device=device),
+        articulation_schur_right_slots=wp.array(schur_right_slots_np, dtype=wp.int32, device=device),
         articulation_diag_slots=wp.array(diag_slots_np, dtype=wp.int32, device=device),
         body_articulation_sparse=wp.array(body_articulation_sparse_host, dtype=wp.int32, device=device),
         body_articulation_local=wp.array(body_articulation_local_host, dtype=wp.int32, device=device),
         articulation_count=len(articulation_groups),
         articulation_body_count=len(articulation_bodies_host),
+        articulation_joint_count=len(articulation_joints_host),
         block_count=len(block_cols_host),
     )

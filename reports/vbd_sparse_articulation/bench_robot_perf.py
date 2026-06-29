@@ -32,7 +32,7 @@ import newton.utils
 from newton import JointTargetMode
 
 
-def build_robot(robot: str, *, add_ground: bool) -> newton.Model:
+def build_robot(robot: str, *, add_ground: bool, device: str) -> newton.Model:
     robot_builder = newton.ModelBuilder()
     newton.solvers.SolverMuJoCo.register_custom_attributes(robot_builder)
     robot_builder.default_joint_cfg = newton.ModelBuilder.JointDofConfig(
@@ -86,7 +86,7 @@ def build_robot(robot: str, *, add_ground: bool) -> newton.Model:
     if add_ground:
         builder.add_ground_plane()
     builder.color()
-    return builder.finalize(device="cpu")
+    return builder.finalize(device=device)
 
 
 def solver_stiffness_kwargs(joint_stiffness: str) -> dict:
@@ -104,7 +104,9 @@ def solver_stiffness_kwargs(joint_stiffness: str) -> dict:
 
 def make_runtime(args: argparse.Namespace, robot: str, mode: str) -> dict:
     use_contacts = args.contact_mode == "ground"
-    model = build_robot(robot, add_ground=use_contacts)
+    if args.device != "cpu" and mode.startswith("mujoco_"):
+        raise ValueError("MuJoCo CPU benchmark modes require --device cpu")
+    model = build_robot(robot, add_ground=use_contacts, device=args.device)
     state_0 = model.state()
     state_1 = model.state()
     control = model.control()
@@ -205,17 +207,18 @@ def _step_mujoco_cpu_raw(runtime: dict, dt: float) -> None:
 
 
 def _time_loop(fn, runtime: dict, steps: int, dt: float) -> list[float]:
+    device = runtime["model"].device
     times_us = []
     for _ in range(steps):
         start = time.perf_counter()
         fn(runtime, dt)
-        wp.synchronize_device("cpu")
+        wp.synchronize_device(device)
         times_us.append((time.perf_counter() - start) * 1.0e6)
     return times_us
 
 
 def _time_vbd_graph(runtime: dict, steps: int, dt: float) -> tuple[list[float], str | None]:
-    device = wp.get_device("cpu")
+    device = runtime["model"].device
     try:
         with wp.ScopedCapture(device=device) as capture:
             _step_vbd_fixed_buffers(runtime, dt)
@@ -259,7 +262,7 @@ def run_case(args: argparse.Namespace, robot: str, mode: str) -> dict:
 
     for _ in range(args.warmup):
         step_fn(runtime, args.dt)
-    wp.synchronize_device("cpu")
+    wp.synchronize_device(model.device)
 
     times_us = _time_loop(step_fn, runtime, args.steps, args.dt)
     result = {
@@ -279,17 +282,20 @@ def run_case(args: argparse.Namespace, robot: str, mode: str) -> dict:
         **summarize_times(times_us),
     }
 
-    if args.cpu_graph and mode.startswith("vbd_"):
+    if (args.graph or args.cpu_graph) and mode.startswith("vbd_"):
         graph_runtime = make_runtime(args, robot, mode)
         for _ in range(args.warmup):
             _step_vbd_fixed_buffers(graph_runtime, args.dt)
-        wp.synchronize_device("cpu")
+        wp.synchronize_device(graph_runtime["model"].device)
         graph_times, graph_error = _time_vbd_graph(graph_runtime, args.steps, args.dt)
-        result["cpu_graph_error"] = graph_error
+        graph_prefix = "cpu_graph" if graph_runtime["model"].device.is_cpu else "cuda_graph"
+        result[f"{graph_prefix}_error"] = graph_error
         if graph_times:
             for key, value in summarize_times(graph_times).items():
-                result[f"cpu_graph_{key}"] = value
-            result["cpu_graph_speedup_vs_python"] = result["mean_step_us"] / result["cpu_graph_mean_step_us"]
+                result[f"{graph_prefix}_{key}"] = value
+            result[f"{graph_prefix}_speedup_vs_python"] = (
+                result["mean_step_us"] / result[f"{graph_prefix}_mean_step_us"]
+            )
 
     return result
 
@@ -318,9 +324,15 @@ def parse_args() -> argparse.Namespace:
         "--modes",
         nargs="+",
         default=["vbd_local", "vbd_sparse", "mujoco_cpu", "mujoco_cpu_raw"],
-        choices=["vbd_local", "vbd_sparse", "mujoco_cpu", "mujoco_cpu_raw"],
+        choices=[
+            "vbd_local",
+            "vbd_sparse",
+            "mujoco_cpu",
+            "mujoco_cpu_raw",
+        ],
     )
     parser.add_argument("--contact-mode", choices=["none", "ground"], default="ground")
+    parser.add_argument("--device", default="cpu")
     parser.add_argument("--joint-stiffness", choices=["default", "fixed_high"], default="fixed_high")
     parser.add_argument("--steps", type=int, default=100)
     parser.add_argument("--warmup", type=int, default=10)
@@ -337,6 +349,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mujoco-cone", default="elliptic")
     parser.add_argument("--mujoco-impratio", type=float, default=100.0)
     parser.add_argument("--cpu-graph", action="store_true")
+    parser.add_argument("--graph", action="store_true")
     parser.add_argument("--json", type=Path, default=None)
     return parser.parse_args()
 

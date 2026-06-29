@@ -1,0 +1,485 @@
+{
+  "device": "cpu",
+  "rows": [
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 1,
+      "joint_residual_l2": 0.03495454213843108,
+      "joint_residual_max": 0.020458114258303375,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "chain_fixed"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 1,
+      "joint_residual_l2": 0.027422650764810763,
+      "joint_residual_max": 0.014918538418068103,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.2746594936506055,
+      "scenario": "chain_fixed"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 2,
+      "joint_residual_l2": 0.03303149336040654,
+      "joint_residual_max": 0.02054313874549388,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "chain_fixed"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 2,
+      "joint_residual_l2": 0.021315828271396987,
+      "joint_residual_max": 0.011192635407881794,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.5496227939089948,
+      "scenario": "chain_fixed"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 4,
+      "joint_residual_l2": 0.0314989430917298,
+      "joint_residual_max": 0.020105513540593086,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "chain_fixed"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 4,
+      "joint_residual_l2": 0.01815844203066687,
+      "joint_residual_max": 0.009990674725214465,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.73467211771433,
+      "scenario": "chain_fixed"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 8,
+      "joint_residual_l2": 0.03012647272179188,
+      "joint_residual_max": 0.019507758080862744,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "chain_fixed"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 8,
+      "joint_residual_l2": 0.015167116243315279,
+      "joint_residual_max": 0.008409730111598483,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.9863019600096858,
+      "scenario": "chain_fixed"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 1,
+      "joint_residual_l2": 0.10170062012693917,
+      "joint_residual_max": 0.02127670267678047,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "chain_fixed"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 1,
+      "joint_residual_l2": 0.07120443123277981,
+      "joint_residual_max": 0.01573771615967477,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.428290604477437,
+      "scenario": "chain_fixed"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 2,
+      "joint_residual_l2": 0.09302948586622695,
+      "joint_residual_max": 0.021534874960123917,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "chain_fixed"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 2,
+      "joint_residual_l2": 0.05584154260453072,
+      "joint_residual_max": 0.01196613391055871,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.665954798653413,
+      "scenario": "chain_fixed"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 4,
+      "joint_residual_l2": 0.0889270382149431,
+      "joint_residual_max": 0.021002332593277745,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "chain_fixed"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 4,
+      "joint_residual_l2": 0.048582871700028396,
+      "joint_residual_max": 0.010661826555941842,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.8304195512364314,
+      "scenario": "chain_fixed"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 8,
+      "joint_residual_l2": 0.08535816598302479,
+      "joint_residual_max": 0.020364822549928253,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "chain_fixed"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 8,
+      "joint_residual_l2": 0.040891033903315874,
+      "joint_residual_max": 0.00896872229683033,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 2.0874543349734926,
+      "scenario": "chain_fixed"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 1,
+      "joint_residual_l2": 0.03228269708221567,
+      "joint_residual_max": 0.020456398124920165,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "chain_revolute"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 1,
+      "joint_residual_l2": 0.021558316457632905,
+      "joint_residual_max": 0.011852788255765136,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.497459096384389,
+      "scenario": "chain_revolute"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 2,
+      "joint_residual_l2": 0.031845967880560176,
+      "joint_residual_max": 0.02042435521395134,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "chain_revolute"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 2,
+      "joint_residual_l2": 0.019073348142734196,
+      "joint_residual_max": 0.011048034724629903,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.6696579773117382,
+      "scenario": "chain_revolute"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 4,
+      "joint_residual_l2": 0.03083779598611124,
+      "joint_residual_max": 0.020015860950969643,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "chain_revolute"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 4,
+      "joint_residual_l2": 0.016808661879768975,
+      "joint_residual_max": 0.009834053907694002,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.8346371773488899,
+      "scenario": "chain_revolute"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 8,
+      "joint_residual_l2": 0.02975342218376275,
+      "joint_residual_max": 0.019451085658808796,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "chain_revolute"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 8,
+      "joint_residual_l2": 0.01424316430318325,
+      "joint_residual_max": 0.008263652239761974,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 2.088961522202834,
+      "scenario": "chain_revolute"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 1,
+      "joint_residual_l2": 0.09127452791779092,
+      "joint_residual_max": 0.021272954861291087,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "chain_revolute"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 1,
+      "joint_residual_l2": 0.05803963401411745,
+      "joint_residual_max": 0.01269520943944574,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.5726241122676528,
+      "scenario": "chain_revolute"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 2,
+      "joint_residual_l2": 0.09049302823672044,
+      "joint_residual_max": 0.021367826795475407,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "chain_revolute"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 2,
+      "joint_residual_l2": 0.05291152718632029,
+      "joint_residual_max": 0.011822763531726241,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.7102705789999657,
+      "scenario": "chain_revolute"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 4,
+      "joint_residual_l2": 0.08785778779319615,
+      "joint_residual_max": 0.02086810490592368,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "chain_revolute"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 4,
+      "joint_residual_l2": 0.046958272120745576,
+      "joint_residual_max": 0.010535068596724373,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.8709757370817246,
+      "scenario": "chain_revolute"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 8,
+      "joint_residual_l2": 0.08488153649793558,
+      "joint_residual_max": 0.02025983558806189,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "chain_revolute"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 8,
+      "joint_residual_l2": 0.03991733358865508,
+      "joint_residual_max": 0.008882139610832424,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 2.1264330271313456,
+      "scenario": "chain_revolute"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 1,
+      "joint_residual_l2": 0.04597130588327023,
+      "joint_residual_max": 0.023588695321284384,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "loop_fixed"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 1,
+      "joint_residual_l2": 0.02950136311105098,
+      "joint_residual_max": 0.016715353324171033,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.5582773484134278,
+      "scenario": "loop_fixed"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 2,
+      "joint_residual_l2": 0.03337145370184887,
+      "joint_residual_max": 0.021237447082126496,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "loop_fixed"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 2,
+      "joint_residual_l2": 0.019555176701268755,
+      "joint_residual_max": 0.01214636497261302,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.706527852529387,
+      "scenario": "loop_fixed"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 4,
+      "joint_residual_l2": 0.03197485805107656,
+      "joint_residual_max": 0.020762409000118047,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "loop_fixed"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 4,
+      "joint_residual_l2": 0.017199094401986085,
+      "joint_residual_max": 0.010768318355300694,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.859101258690936,
+      "scenario": "loop_fixed"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 8,
+      "joint_residual_l2": 0.030846536193463968,
+      "joint_residual_max": 0.02015608294184835,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "loop_fixed"
+    },
+    {
+      "body_count": 4,
+      "contact_penetration_max": 0.0,
+      "iterations": 8,
+      "joint_residual_l2": 0.014585145059737657,
+      "joint_residual_max": 0.009027218827117128,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 2.114928310080092,
+      "scenario": "loop_fixed"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 1,
+      "joint_residual_l2": 0.11957129355179662,
+      "joint_residual_max": 0.03037864705252045,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "loop_fixed"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 1,
+      "joint_residual_l2": 0.08893399305177059,
+      "joint_residual_max": 0.02932072353839412,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.3444948264292071,
+      "scenario": "loop_fixed"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 2,
+      "joint_residual_l2": 0.09483226926357476,
+      "joint_residual_max": 0.022366937800502282,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "loop_fixed"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 2,
+      "joint_residual_l2": 0.05578426147107847,
+      "joint_residual_max": 0.012062225285866925,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.6999825176988468,
+      "scenario": "loop_fixed"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 4,
+      "joint_residual_l2": 0.09106731056339062,
+      "joint_residual_max": 0.021888970202021366,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "loop_fixed"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 4,
+      "joint_residual_l2": 0.04851544447048115,
+      "joint_residual_max": 0.010722256508922038,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 1.8770787644499438,
+      "scenario": "loop_fixed"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 8,
+      "joint_residual_l2": 0.08775216961607324,
+      "joint_residual_max": 0.021386740562367248,
+      "mode": "local",
+      "residual_reduction_vs_local": 1.0,
+      "scenario": "loop_fixed"
+    },
+    {
+      "body_count": 32,
+      "contact_penetration_max": 0.0,
+      "iterations": 8,
+      "joint_residual_l2": 0.040829019559528563,
+      "joint_residual_max": 0.009021717362762994,
+      "mode": "block_sparse_joints",
+      "residual_reduction_vs_local": 2.149259780488505,
+      "scenario": "loop_fixed"
+    }
+  ]
+}

@@ -51,7 +51,16 @@ from .particle_vbd_kernels import (
     update_velocity,
 )
 from .rigid_sparse_articulation import build_rigid_articulation_sparse_layout
-from .rigid_sparse_articulation_kernels import mat66f, solve_articulation_sparse_cpu, vec6f
+from .rigid_sparse_articulation_kernels import (
+    apply_articulation_sparse_delta_scalar,
+    assemble_articulation_body_diagonal_scalar,
+    assemble_articulation_joints_scalar,
+    mat66f,
+    regularize_articulation_body_hessian,
+    solve_articulation_sparse_block32_scalar,
+    solve_articulation_sparse_serial,
+    vec6f,
+)
 from .rigid_vbd_kernels import (
     _NUM_CONTACT_THREADS_PER_BODY,
     RigidContactHistory,
@@ -233,6 +242,7 @@ class SolverVBD(SolverBase):
         rigid_contact_stick_motion_eps: float = 1.0e-4,  # Sticky contact residual threshold; 0 disables point replay
         rigid_contact_stick_freeze_translation_eps: float = 1.0e-4,  # Deadzone snap translation threshold; 0 disables snap
         rigid_contact_stick_freeze_angular_eps: float = 1.0e-4,  # Deadzone snap angular threshold; 0 disables snap
+        rigid_contact_tangential_stiffness_scale: float = 1.0,
         rigid_contact_k_start: float = 1.0e2,  # Body-body/body-particle penalty seed when ramping is enabled
         rigid_body_contact_buffer_size: int = 64,  # Per-body body-body contact list capacity
         rigid_body_particle_contact_buffer_size: int = 256,  # Per-body particle-contact list capacity
@@ -246,6 +256,7 @@ class SolverVBD(SolverBase):
         rigid_enable_dahl_friction: bool | None = None,  # Deprecated: controlled by model attributes
         rigid_articulation_solve: str = "local",
         rigid_articulation_relaxation: float = 0.65,
+        rigid_articulation_diagonal_regularization: float = 0.0,
     ):
         """
         Args:
@@ -356,9 +367,10 @@ class SolverVBD(SolverBase):
             rigid_enable_dahl_friction: Deprecated and ignored. Dahl friction is controlled
                 by ``model.vbd.dahl_eps_max`` / ``model.vbd.dahl_tau``.
             rigid_articulation_solve: Rigid articulation solve mode. ``"local"`` uses the existing
-                per-body diagonal VBD solve. ``"block_sparse_joints"`` enables the experimental
-                CPU block-sparse articulation solve for joint coupling while keeping contacts on
-                body-diagonal Hessian blocks.
+                per-body diagonal VBD solve. ``"block_sparse_joints"`` enables a block-sparse
+                articulation solve for joint coupling while keeping contacts on body-diagonal
+                Hessian blocks. The implementation uses a serial block solve on CPU and a
+                cooperative single-CTA solve on CUDA.
             rigid_articulation_relaxation: Under-relaxation factor for the experimental coupled
                 articulation position update. A value of ``1`` applies the full Newton update.
                 The default damps sparse articulation updates so they do not overstep stale
@@ -416,20 +428,28 @@ class SolverVBD(SolverBase):
         # Common parameters
         self.iterations = iterations
         self.friction_epsilon = friction_epsilon
+        if rigid_contact_tangential_stiffness_scale < 0.0:
+            raise ValueError(
+                "rigid_contact_tangential_stiffness_scale must be non-negative, "
+                f"got {rigid_contact_tangential_stiffness_scale}"
+            )
+        self.rigid_contact_tangential_stiffness_scale = rigid_contact_tangential_stiffness_scale
         if rigid_articulation_solve not in ("local", "block_sparse_joints"):
             raise ValueError(
                 f"rigid_articulation_solve must be 'local' or 'block_sparse_joints', got {rigid_articulation_solve!r}"
-            )
-        if rigid_articulation_solve == "block_sparse_joints" and self.device.is_cuda:
-            raise NotImplementedError(
-                f"SolverVBD rigid_articulation_solve={rigid_articulation_solve!r} is CPU-only for now."
             )
         if rigid_articulation_relaxation <= 0.0 or rigid_articulation_relaxation > 1.0:
             raise ValueError(
                 f"rigid_articulation_relaxation must be in the interval (0, 1], got {rigid_articulation_relaxation}"
             )
+        if rigid_articulation_diagonal_regularization < 0.0:
+            raise ValueError(
+                "rigid_articulation_diagonal_regularization must be non-negative, "
+                f"got {rigid_articulation_diagonal_regularization}"
+            )
         self.rigid_articulation_solve = rigid_articulation_solve
         self.rigid_articulation_relaxation = rigid_articulation_relaxation
+        self.rigid_articulation_diagonal_regularization = rigid_articulation_diagonal_regularization
 
         # Rigid integration mode: when True, rigid bodies are integrated by an external
         # solver (one-way coupling). SolverVBD will not move rigid bodies, but can still
@@ -483,6 +503,9 @@ class SolverVBD(SolverBase):
         self.rigid_articulation_sparse_values = None
         self.rigid_articulation_sparse_rhs = None
         self.rigid_articulation_sparse_delta = None
+        self.rigid_articulation_sparse_values_scalar = None
+        self.rigid_articulation_sparse_rhs_scalar = None
+        self.rigid_articulation_sparse_delta_scalar = None
         if self.rigid_articulation_solve == "block_sparse_joints":
             self.rigid_articulation_sparse_layout = build_rigid_articulation_sparse_layout(model, self.device)
             if self.rigid_articulation_sparse_layout is not None:
@@ -495,6 +518,20 @@ class SolverVBD(SolverBase):
                 self.rigid_articulation_sparse_delta = wp.zeros(
                     self.rigid_articulation_sparse_layout.articulation_body_count, dtype=vec6f, device=self.device
                 )
+                if self.device.is_cuda:
+                    self.rigid_articulation_sparse_values_scalar = wp.zeros(
+                        self.rigid_articulation_sparse_layout.block_count * 36, dtype=float, device=self.device
+                    )
+                    self.rigid_articulation_sparse_rhs_scalar = wp.zeros(
+                        self.rigid_articulation_sparse_layout.articulation_body_count * 6,
+                        dtype=float,
+                        device=self.device,
+                    )
+                    self.rigid_articulation_sparse_delta_scalar = wp.zeros(
+                        self.rigid_articulation_sparse_layout.articulation_body_count * 6,
+                        dtype=float,
+                        device=self.device,
+                    )
 
         # Controls whether the next step() refreshes contact state derived from
         # the Contacts buffer or reuses the current rigid/body-particle contact state.
@@ -2561,6 +2598,7 @@ class SolverVBD(SolverBase):
                         model.body_com,
                         self.body_inv_mass_effective,
                         self.friction_epsilon,
+                        self.rigid_contact_tangential_stiffness_scale,
                         self.body_body_contact_penalty_k,
                         self.body_body_contact_material_ke,
                         self.body_body_contact_material_kd,
@@ -2750,14 +2788,11 @@ class SolverVBD(SolverBase):
     def _solve_rigid_body_iteration_block_sparse_joints(
         self, state_in: State, state_out: State, control: Control, contacts: Contacts | None, dt: float
     ):
-        """Experimental CPU block-sparse articulation solve for rigid joint constraints."""
+        """Solve one rigid iteration with coupled sparse articulation updates."""
         model = self.model
         if self.integrate_with_external_rigid_solver or model.body_count == 0:
             self._solve_rigid_body_iteration_local(state_in, state_out, control, contacts, dt)
             return
-
-        if self.device.is_cuda:
-            raise NotImplementedError("block_sparse_joints is CPU-only for this prototype")
 
         layout = self.rigid_articulation_sparse_layout
         if layout is None or layout.articulation_count == 0:
@@ -2826,6 +2861,7 @@ class SolverVBD(SolverBase):
                     model.body_com,
                     self.body_inv_mass_effective,
                     self.friction_epsilon,
+                    self.rigid_contact_tangential_stiffness_scale,
                     self.body_body_contact_penalty_k,
                     self.body_body_contact_material_ke,
                     self.body_body_contact_material_kd,
@@ -2859,74 +2895,220 @@ class SolverVBD(SolverBase):
                 device=self.device,
             )
 
-        self.rigid_articulation_sparse_values.zero_()
-        self.rigid_articulation_sparse_rhs.zero_()
-        self.rigid_articulation_sparse_delta.zero_()
+        if self.rigid_articulation_diagonal_regularization > 0.0:
+            wp.launch(
+                kernel=regularize_articulation_body_hessian,
+                dim=layout.articulation_body_count,
+                inputs=[
+                    layout.articulation_bodies,
+                    self.rigid_articulation_diagonal_regularization,
+                ],
+                outputs=[self.body_hessian_ll, self.body_hessian_aa],
+                device=self.device,
+            )
 
-        wp.launch(
-            kernel=solve_articulation_sparse_cpu,
-            dim=layout.articulation_count,
-            inputs=[
-                dt,
-                layout.articulation_body_offsets,
-                layout.articulation_joint_offsets,
-                layout.articulation_bodies,
-                layout.articulation_joints,
-                layout.articulation_block_row_offsets,
-                layout.articulation_block_cols,
-                layout.articulation_diag_slots,
-                layout.body_articulation_local,
-                state_in.body_q,
-                self.body_q_prev,
-                model.body_q,
-                model.body_mass,
-                self.body_inv_mass_effective,
-                model.body_com,
-                model.body_inertia,
-                self.body_inertia_q,
-                self.body_forces,
-                self.body_torques,
-                self.body_hessian_ll,
-                self.body_hessian_al,
-                self.body_hessian_aa,
-                model.joint_type,
-                model.joint_enabled,
-                model.joint_parent,
-                model.joint_child,
-                model.joint_X_p,
-                model.joint_X_c,
-                model.joint_axis,
-                model.joint_qd_start,
-                model.joint_target_q_start,
-                self.joint_constraint_start,
-                self.joint_penalty_k,
-                self.joint_penalty_kd,
-                self.joint_sigma_start,
-                self.joint_C_fric,
-                model.joint_dof_dim,
-                self.joint_rest_angle,
-                model.joint_target_ke,
-                model.joint_target_kd,
-                control.joint_target_q,
-                control.joint_target_qd,
-                model.joint_limit_lower,
-                model.joint_limit_upper,
-                model.joint_limit_ke,
-                model.joint_limit_kd,
-                self.joint_lambda_lin,
-                self.joint_lambda_ang,
-                self.joint_C0_lin,
-                self.joint_C0_ang,
-                self.joint_is_hard,
-                self.rigid_joint_alpha,
-                self.rigid_articulation_relaxation,
+        use_block32 = self.device.is_cuda
+        if use_block32:
+            assert self.rigid_articulation_sparse_values_scalar is not None
+            assert self.rigid_articulation_sparse_rhs_scalar is not None
+            assert self.rigid_articulation_sparse_delta_scalar is not None
+            self.rigid_articulation_sparse_values_scalar.zero_()
+            self.rigid_articulation_sparse_rhs_scalar.zero_()
+            self.rigid_articulation_sparse_delta_scalar.zero_()
+        else:
+            self.rigid_articulation_sparse_values.zero_()
+            self.rigid_articulation_sparse_rhs.zero_()
+            self.rigid_articulation_sparse_delta.zero_()
+
+        solve_inputs = [
+            dt,
+            layout.articulation_body_offsets,
+            layout.articulation_joint_offsets,
+            layout.articulation_bodies,
+            layout.articulation_joints,
+            layout.articulation_block_row_offsets,
+            layout.articulation_block_cols,
+            layout.articulation_diag_slots,
+            layout.body_articulation_local,
+            state_in.body_q,
+            self.body_q_prev,
+            model.body_q,
+            model.body_mass,
+            self.body_inv_mass_effective,
+            model.body_com,
+            model.body_inertia,
+            self.body_inertia_q,
+            self.body_forces,
+            self.body_torques,
+            self.body_hessian_ll,
+            self.body_hessian_al,
+            self.body_hessian_aa,
+            model.joint_type,
+            model.joint_enabled,
+            model.joint_parent,
+            model.joint_child,
+            model.joint_X_p,
+            model.joint_X_c,
+            model.joint_axis,
+            model.joint_qd_start,
+            model.joint_target_q_start,
+            self.joint_constraint_start,
+            self.joint_penalty_k,
+            self.joint_penalty_kd,
+            self.joint_sigma_start,
+            self.joint_C_fric,
+            model.joint_dof_dim,
+            self.joint_rest_angle,
+            model.joint_target_ke,
+            model.joint_target_kd,
+            control.joint_target_q,
+            control.joint_target_qd,
+            model.joint_limit_lower,
+            model.joint_limit_upper,
+            model.joint_limit_ke,
+            model.joint_limit_kd,
+            self.joint_lambda_lin,
+            self.joint_lambda_ang,
+            self.joint_C0_lin,
+            self.joint_C0_ang,
+            self.joint_is_hard,
+            self.rigid_joint_alpha,
+            self.rigid_articulation_relaxation,
+        ]
+
+        if use_block32:
+            wp.launch(
+                kernel=assemble_articulation_body_diagonal_scalar,
+                dim=layout.articulation_body_count,
+                inputs=[
+                    dt,
+                    layout.articulation_bodies,
+                    layout.articulation_diag_slots,
+                    state_in.body_q,
+                    model.body_mass,
+                    self.body_inv_mass_effective,
+                    model.body_com,
+                    model.body_inertia,
+                    self.body_inertia_q,
+                    self.body_forces,
+                    self.body_torques,
+                    self.body_hessian_ll,
+                    self.body_hessian_al,
+                    self.body_hessian_aa,
+                ],
+                outputs=[self.rigid_articulation_sparse_values_scalar, self.rigid_articulation_sparse_rhs_scalar],
+                device=self.device,
+                block_dim=32,
+            )
+
+            wp.launch(
+                kernel=assemble_articulation_joints_scalar,
+                dim=layout.articulation_joint_count,
+                inputs=[
+                    dt,
+                    layout.articulation_joints,
+                    layout.articulation_joint_body_start,
+                    layout.articulation_block_row_offsets,
+                    layout.articulation_block_cols,
+                    layout.body_articulation_local,
+                    state_in.body_q,
+                    self.body_q_prev,
+                    model.body_q,
+                    model.body_com,
+                    model.joint_type,
+                    model.joint_enabled,
+                    model.joint_parent,
+                    model.joint_child,
+                    model.joint_X_p,
+                    model.joint_X_c,
+                    model.joint_axis,
+                    model.joint_qd_start,
+                    model.joint_target_q_start,
+                    self.joint_constraint_start,
+                    self.joint_penalty_k,
+                    self.joint_penalty_kd,
+                    self.joint_sigma_start,
+                    self.joint_C_fric,
+                    model.joint_dof_dim,
+                    self.joint_rest_angle,
+                    model.joint_target_ke,
+                    model.joint_target_kd,
+                    control.joint_target_q,
+                    control.joint_target_qd,
+                    model.joint_limit_lower,
+                    model.joint_limit_upper,
+                    model.joint_limit_ke,
+                    model.joint_limit_kd,
+                    self.joint_lambda_lin,
+                    self.joint_lambda_ang,
+                    self.joint_C0_lin,
+                    self.joint_C0_ang,
+                    self.joint_is_hard,
+                    self.rigid_joint_alpha,
+                ],
+                outputs=[self.rigid_articulation_sparse_values_scalar, self.rigid_articulation_sparse_rhs_scalar],
+                device=self.device,
+                block_dim=128,
+            )
+
+        if not use_block32:
+            solve_phase_inputs = [
+                *solve_inputs,
+                1,
+                False,
+                True,
+                True,
                 self.rigid_articulation_sparse_values,
                 self.rigid_articulation_sparse_rhs,
                 self.rigid_articulation_sparse_delta,
-            ],
-            outputs=[state_out.body_q],
-            device=self.device,
-        )
+            ]
+            wp.launch(
+                kernel=solve_articulation_sparse_serial,
+                dim=layout.articulation_count,
+                inputs=solve_phase_inputs,
+                outputs=[state_out.body_q],
+                device=self.device,
+            )
+
+        if use_block32:
+            wp.launch(
+                kernel=solve_articulation_sparse_block32_scalar,
+                dim=layout.articulation_count * 128,
+                inputs=[
+                    layout.articulation_body_offsets,
+                    layout.articulation_block_row_offsets,
+                    layout.articulation_block_cols,
+                    layout.articulation_block_col_offsets,
+                    layout.articulation_block_col_rows,
+                    layout.articulation_block_col_slots,
+                    layout.articulation_schur_offsets,
+                    layout.articulation_schur_dst_slots,
+                    layout.articulation_schur_left_slots,
+                    layout.articulation_schur_right_slots,
+                    layout.articulation_diag_slots,
+                    self.rigid_articulation_sparse_values_scalar,
+                    self.rigid_articulation_sparse_rhs_scalar,
+                ],
+                outputs=[self.rigid_articulation_sparse_delta_scalar],
+                device=self.device,
+                block_dim=128,
+            )
+
+            wp.launch(
+                kernel=apply_articulation_sparse_delta_scalar,
+                dim=layout.articulation_body_count,
+                inputs=[
+                    layout.articulation_bodies,
+                    state_in.body_q,
+                    self.body_inv_mass_effective,
+                    model.body_com,
+                    self.rigid_articulation_relaxation,
+                    self.rigid_articulation_sparse_delta_scalar,
+                ],
+                outputs=[state_out.body_q],
+                device=self.device,
+                block_dim=32,
+            )
 
         wp.copy(state_in.body_q, state_out.body_q)
 
@@ -3140,6 +3322,7 @@ class SolverVBD(SolverBase):
                 self.rigid_contact_alpha,
                 self.rigid_contact_hard,
                 float(self.friction_epsilon),
+                self.rigid_contact_tangential_stiffness_scale,
             ],
             outputs=[
                 self._rigid_contact_body0,

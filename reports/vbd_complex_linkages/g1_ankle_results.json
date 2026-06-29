@@ -1,0 +1,300 @@
+{
+  "rows": [
+    {
+      "articulation_count": 1,
+      "body_count": 6,
+      "closure_joint_count": 2,
+      "device": "cpu",
+      "dt": 0.004166666666666667,
+      "final_all": {
+        "angular_max_rad": 0.020389552533864288,
+        "angular_norm_rad": 0.02882604997705166,
+        "linear_max_m": 0.000912355670192029,
+        "linear_norm_m": 0.0011991981813992557,
+        "per_joint": {
+          "G1_L_ankle/left_ankle_A_joint": {
+            "angular_rad": 0.020389552533864288,
+            "linear_m": 0.00015629712387248135
+          },
+          "G1_L_ankle/left_ankle_A_rod_joint": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0003467400428411837
+          },
+          "G1_L_ankle/left_ankle_B_joint": {
+            "angular_rad": 0.02037553323363351,
+            "linear_m": 0.000495077101384396
+          },
+          "G1_L_ankle/left_ankle_B_rod_joint": {
+            "angular_rad": 0.0,
+            "linear_m": 0.000912355670192029
+          },
+          "G1_L_ankle/left_ankle_loop_A_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 0.00022409868473944068
+          },
+          "G1_L_ankle/left_ankle_loop_B_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 0.00039380212379695615
+          },
+          "G1_L_ankle/left_ankle_pitch_joint": {
+            "angular_rad": 1.6309661055940527e-06,
+            "linear_m": 2.352420808329542e-05
+          },
+          "G1_L_ankle/left_ankle_roll_joint": {
+            "angular_rad": 0.0002120083331247692,
+            "linear_m": 0.00010035388985663663
+          }
+        }
+      },
+      "final_closure": {
+        "angular_max_rad": 0.0,
+        "angular_norm_rad": 0.0,
+        "linear_max_m": 0.00039380212379695615,
+        "linear_norm_m": 0.00045310079806698685,
+        "per_joint": {
+          "G1_L_ankle/left_ankle_loop_A_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 0.00022409868473944068
+          },
+          "G1_L_ankle/left_ankle_loop_B_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 0.00039380212379695615
+          }
+        }
+      },
+      "fps": 60,
+      "frames": 180,
+      "initial_closure": {
+        "angular_max_rad": 0.0,
+        "angular_norm_rad": 0.0,
+        "linear_max_m": 1.0301441425470823e-08,
+        "linear_norm_m": 1.3431855008913686e-08,
+        "per_joint": {
+          "G1_L_ankle/left_ankle_loop_A_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 8.619456684621911e-09
+          },
+          "G1_L_ankle/left_ankle_loop_B_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 1.0301441425470823e-08
+          }
+        }
+      },
+      "iterations": null,
+      "joint_count": 8,
+      "joint_dof_count": 16,
+      "max_closure_um": 3864.8354522838345,
+      "mean_step_us": 19953.54940128677,
+      "mode": "Kamino CPU",
+      "p50_step_us": 19863.935885950923,
+      "p90_step_us": 19948.714901693165,
+      "relaxation": 1.0,
+      "rms_all_linear_um": 6061.248174560322,
+      "rms_closure_um": 2500.6325312628014,
+      "rms_motor_a_tracking_deg": 0.42736746694764977,
+      "rms_motor_b_tracking_deg": 0.3496638916594047,
+      "solver": "kamino",
+      "status": "ok",
+      "substeps_per_frame": 4,
+      "vbd_solve": null
+    },
+    {
+      "articulation_count": 1,
+      "body_count": 6,
+      "closure_joint_count": 2,
+      "device": "cpu",
+      "dt": 0.004166666666666667,
+      "final_all": {
+        "angular_max_rad": 0.00010806008227998402,
+        "angular_norm_rad": 0.0001096520032081225,
+        "linear_max_m": 0.002070474983392935,
+        "linear_norm_m": 0.0028811610464423492,
+        "per_joint": {
+          "G1_L_ankle/left_ankle_A_joint": {
+            "angular_rad": 6.252933101386416e-07,
+            "linear_m": 0.000429868328119922
+          },
+          "G1_L_ankle/left_ankle_A_rod_joint": {
+            "angular_rad": 0.0,
+            "linear_m": 0.00042985847686632304
+          },
+          "G1_L_ankle/left_ankle_B_joint": {
+            "angular_rad": 4.7010694634811355e-07,
+            "linear_m": 0.000405718502686041
+          },
+          "G1_L_ankle/left_ankle_B_rod_joint": {
+            "angular_rad": 0.0,
+            "linear_m": 0.00040570660101864266
+          },
+          "G1_L_ankle/left_ankle_loop_A_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0009065511000380999
+          },
+          "G1_L_ankle/left_ankle_loop_B_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 0.000696614196215245
+          },
+          "G1_L_ankle/left_ankle_pitch_joint": {
+            "angular_rad": 0.00010806008227998402,
+            "linear_m": 0.002070474983392935
+          },
+          "G1_L_ankle/left_ankle_roll_joint": {
+            "angular_rad": 1.8600226690352038e-05,
+            "linear_m": 0.0014171611214486316
+          }
+        }
+      },
+      "final_closure": {
+        "angular_max_rad": 0.0,
+        "angular_norm_rad": 0.0,
+        "linear_max_m": 0.0009065511000380999,
+        "linear_norm_m": 0.0011432874683774423,
+        "per_joint": {
+          "G1_L_ankle/left_ankle_loop_A_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0009065511000380999
+          },
+          "G1_L_ankle/left_ankle_loop_B_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 0.000696614196215245
+          }
+        }
+      },
+      "fps": 60,
+      "frames": 180,
+      "initial_closure": {
+        "angular_max_rad": 0.0,
+        "angular_norm_rad": 0.0,
+        "linear_max_m": 1.0301441425470823e-08,
+        "linear_norm_m": 1.3431855008913686e-08,
+        "per_joint": {
+          "G1_L_ankle/left_ankle_loop_A_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 8.619456684621911e-09
+          },
+          "G1_L_ankle/left_ankle_loop_B_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 1.0301441425470823e-08
+          }
+        }
+      },
+      "iterations": 8,
+      "joint_count": 8,
+      "joint_dof_count": 16,
+      "max_closure_um": 9804.581263408723,
+      "mean_step_us": 1097.85986783476,
+      "mode": "VBD local CPU",
+      "p50_step_us": 1096.6095142066479,
+      "p90_step_us": 1105.2710469812155,
+      "relaxation": 1.0,
+      "rms_all_linear_um": 6485.657974334395,
+      "rms_closure_um": 2171.3495055299854,
+      "rms_motor_a_tracking_deg": 0.44673815064070554,
+      "rms_motor_b_tracking_deg": 0.3723297728353778,
+      "solver": "vbd",
+      "status": "ok",
+      "substeps_per_frame": 4,
+      "vbd_solve": "local"
+    },
+    {
+      "articulation_count": 1,
+      "body_count": 6,
+      "closure_joint_count": 2,
+      "device": "cpu",
+      "dt": 0.004166666666666667,
+      "final_all": {
+        "angular_max_rad": 5.4054054573110446e-09,
+        "angular_norm_rad": 5.477815622587401e-09,
+        "linear_max_m": 1.3808370576988145e-07,
+        "linear_norm_m": 1.457330147576685e-07,
+        "per_joint": {
+          "G1_L_ankle/left_ankle_A_joint": {
+            "angular_rad": 7.540708998305246e-10,
+            "linear_m": 3.637978807091713e-12
+          },
+          "G1_L_ankle/left_ankle_A_rod_joint": {
+            "angular_rad": 0.0,
+            "linear_m": 5.116720084145462e-09
+          },
+          "G1_L_ankle/left_ankle_B_joint": {
+            "angular_rad": 4.598100682191213e-10,
+            "linear_m": 7.450708493518528e-09
+          },
+          "G1_L_ankle/left_ankle_B_rod_joint": {
+            "angular_rad": 0.0,
+            "linear_m": 7.040721530875581e-09
+          },
+          "G1_L_ankle/left_ankle_loop_A_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 3.6189660453551223e-09
+          },
+          "G1_L_ankle/left_ankle_loop_B_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 1.3808370576988145e-07
+          },
+          "G1_L_ankle/left_ankle_pitch_joint": {
+            "angular_rad": 8.948528553729149e-11,
+            "linear_m": 1.9406494381339028e-09
+          },
+          "G1_L_ankle/left_ankle_roll_joint": {
+            "angular_rad": 5.4054054573110446e-09,
+            "linear_m": 4.4976361584185076e-08
+          }
+        }
+      },
+      "final_closure": {
+        "angular_max_rad": 0.0,
+        "angular_norm_rad": 0.0,
+        "linear_max_m": 1.3808370576988145e-07,
+        "linear_norm_m": 1.381311214548721e-07,
+        "per_joint": {
+          "G1_L_ankle/left_ankle_loop_A_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 3.6189660453551223e-09
+          },
+          "G1_L_ankle/left_ankle_loop_B_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 1.3808370576988145e-07
+          }
+        }
+      },
+      "fps": 60,
+      "frames": 180,
+      "initial_closure": {
+        "angular_max_rad": 0.0,
+        "angular_norm_rad": 0.0,
+        "linear_max_m": 1.0301441425470823e-08,
+        "linear_norm_m": 1.3431855008913686e-08,
+        "per_joint": {
+          "G1_L_ankle/left_ankle_loop_A_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 8.619456684621911e-09
+          },
+          "G1_L_ankle/left_ankle_loop_B_ball": {
+            "angular_rad": 0.0,
+            "linear_m": 1.0301441425470823e-08
+          }
+        }
+      },
+      "iterations": 8,
+      "joint_count": 8,
+      "joint_dof_count": 16,
+      "max_closure_um": 18705.18978658174,
+      "mean_step_us": 882.9554638770574,
+      "mode": "VBD sparse direct CPU",
+      "p50_step_us": 882.489955984056,
+      "p90_step_us": 889.1011122614145,
+      "relaxation": 1.0,
+      "rms_all_linear_um": 1692.4703395918627,
+      "rms_closure_um": 825.8442515733801,
+      "rms_motor_a_tracking_deg": 0.4325936340933542,
+      "rms_motor_b_tracking_deg": 0.3549655413896797,
+      "solver": "vbd",
+      "status": "ok",
+      "substeps_per_frame": 4,
+      "vbd_solve": "block_sparse_joints"
+    }
+  ],
+  "scenario": "g1-ankle",
+  "source": "private_g1_closed_loop_ankle_joint_graph"
+}

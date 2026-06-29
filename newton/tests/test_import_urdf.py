@@ -366,6 +366,23 @@ def parse_urdf(urdf: str, builder: newton.ModelBuilder, res_dir: dict[str, str] 
 
 
 class TestImportUrdfBasic(unittest.TestCase):
+    def test_ball_joint_extension(self):
+        for joint_type in ("ball", "spherical"):
+            with self.subTest(joint_type=joint_type):
+                urdf = f"""
+                <robot name="ball_joint_test">
+                    <link name="base"/>
+                    <link name="child"/>
+                    <joint name="ball" type="{joint_type}">
+                        <parent link="base"/>
+                        <child link="child"/>
+                    </joint>
+                </robot>
+                """
+                builder = newton.ModelBuilder()
+                parse_urdf(urdf, builder)
+                self.assertEqual(builder.joint_type[-1], newton.JointType.BALL)
+
     def test_sphere_urdf(self):
         # load a urdf containing a sphere with r=0.5 and pos=(1.0,2.0,3.0)
         builder = newton.ModelBuilder()

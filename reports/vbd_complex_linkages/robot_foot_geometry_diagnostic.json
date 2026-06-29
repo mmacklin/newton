@@ -1,0 +1,28 @@
+{
+  "current_model": {
+    "roll_motor_angle_deg": 40.0,
+    "best_output_roll_deg": 38.275649313093986,
+    "minimum_rod_length_residual_rss_mm": 35.948187938339544,
+    "note": "Endpoint-distance lower bound; the current universal joints add orientation constraints."
+  },
+  "vbd_sparse_variants_90_frames": [
+    {
+      "variant": "current universal joints and anchors",
+      "output_roll_range_deg": 16.40450308098398,
+      "roll_motor_range_deg": 16.481937757410346,
+      "rms_closure_um": 735.2838334834049
+    },
+    {
+      "variant": "spherical rod ends, current anchors",
+      "output_roll_range_deg": 55.72646494771975,
+      "roll_motor_range_deg": 55.97873540310962,
+      "rms_closure_um": 1958.6834700452569
+    },
+    {
+      "variant": "spherical rod ends, compatible roll-anchor plane",
+      "output_roll_range_deg": 82.07109522385369,
+      "roll_motor_range_deg": 82.04612234227518,
+      "rms_closure_um": 35.07193431250936
+    }
+  ]
+}

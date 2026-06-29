@@ -1,0 +1,573 @@
+{
+  "rows": [
+    {
+      "articulation_count": 1,
+      "body_count": 8,
+      "closure_joint_count": 3,
+      "contact_normal_damping_scale": 1.0,
+      "contact_normal_stiffness_scale": 1.0,
+      "device": "cpu",
+      "diagonal_regularization": 0.0,
+      "dt": 0.004,
+      "final_all": {
+        "angular_max_rad": 0.00033499700867237946,
+        "angular_norm_rad": 0.00033499813066983377,
+        "linear_max_m": 0.0003180049806573827,
+        "linear_norm_m": 0.0004610320855872049,
+        "per_joint": {
+          "ankle_dual_axis_gimbal_pitch": {
+            "angular_rad": 0.00033499700867237946,
+            "linear_m": 0.00012852068983310107
+          },
+          "ankle_dual_axis_gimbal_roll": {
+            "angular_rad": 4.371311316163413e-07,
+            "linear_m": 4.42014577173787e-09
+          },
+          "pitch_horn_to_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.00020654375138129294
+          },
+          "pitch_motor_reducer": {
+            "angular_rad": 5.759985952688487e-07,
+            "linear_m": 0.00014748203847107777
+          },
+          "pitch_pushrod_to_foot_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0003180049806573827
+          },
+          "roll_horn_to_left_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 8.715197577819276e-05
+          },
+          "roll_horn_to_right_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 8.731889938588134e-05
+          },
+          "roll_left_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 8.745670018210054e-05
+          },
+          "roll_motor_reducer": {
+            "angular_rad": 4.783005240698302e-07,
+            "linear_m": 1.601740420218135e-09
+          },
+          "roll_right_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 8.732607912205371e-05
+          },
+          "world_to_lower_leg": {
+            "angular_rad": 1.0170616775507171e-08,
+            "linear_m": 9.41733586785209e-10
+          }
+        }
+      },
+      "final_closure": {
+        "angular_max_rad": 0.0,
+        "angular_norm_rad": 0.0,
+        "linear_max_m": 0.0003180049806573827,
+        "linear_norm_m": 0.00034117691338142345,
+        "per_joint": {
+          "pitch_pushrod_to_foot_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0003180049806573827
+          },
+          "roll_left_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 8.745670018210054e-05
+          },
+          "roll_right_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 8.732607912205371e-05
+          }
+        }
+      },
+      "fps": 50,
+      "frames": 180,
+      "initial_all": {
+        "angular_max_rad": 0.0,
+        "angular_norm_rad": 0.0,
+        "linear_max_m": 3.585767487975363e-08,
+        "linear_norm_m": 6.412750068366176e-08,
+        "per_joint": {
+          "ankle_dual_axis_gimbal_pitch": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0
+          },
+          "ankle_dual_axis_gimbal_roll": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0
+          },
+          "pitch_horn_to_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 1.6864913631453382e-08
+          },
+          "pitch_motor_reducer": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0
+          },
+          "pitch_pushrod_to_foot_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 1.0038615047763665e-08
+          },
+          "roll_horn_to_left_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 2.4037382807777167e-08
+          },
+          "roll_horn_to_right_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 2.4037382807777167e-08
+          },
+          "roll_left_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 3.585767487975363e-08
+          },
+          "roll_motor_reducer": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0
+          },
+          "roll_right_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 3.585767487975363e-08
+          },
+          "world_to_lower_leg": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0
+          }
+        }
+      },
+      "initial_closure": {
+        "angular_max_rad": 0.0,
+        "angular_norm_rad": 0.0,
+        "linear_max_m": 3.585767487975363e-08,
+        "linear_norm_m": 5.169448217790189e-08,
+        "per_joint": {
+          "pitch_pushrod_to_foot_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 1.0038615047763665e-08
+          },
+          "roll_left_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 3.585767487975363e-08
+          },
+          "roll_right_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 3.585767487975363e-08
+          }
+        }
+      },
+      "iterations": null,
+      "joint_count": 11,
+      "joint_dof_count": 22,
+      "joint_kd": 500.0,
+      "joint_ke": 200000.0,
+      "kamino_converged_fraction": 0.9955555555555555,
+      "kamino_p50_dual_residual": 4.524165706243366e-05,
+      "kamino_p50_iterations": 54.0,
+      "max_closure_um": 1910.8224015479395,
+      "max_foot_angular_speed": 18.274011611938477,
+      "mean_step_us": 11537.779271328713,
+      "mode": "Kamino CPU, compatible linkage",
+      "output_pitch_range_deg": 77.38391561690194,
+      "output_roll_range_deg": 82.91463947016886,
+      "p50_step_us": 11191.831901669502,
+      "p90_step_us": 15193.189051933587,
+      "pitch_motor_range_deg": 101.15941677771376,
+      "pitch_target_range_deg": 99.99427568481184,
+      "relaxation": 1.0,
+      "rms_all_angular_deg": 0.06263050925385748,
+      "rms_all_linear_um": 1536.967609070657,
+      "rms_closure_um": 1184.012698817818,
+      "rms_pitch_tracking_deg": 0.5335158288301437,
+      "rms_roll_tracking_deg": 1.1625613401891852,
+      "robot_foot_geometry": "compatible",
+      "roll_motor_range_deg": 82.91456358923759,
+      "roll_target_range_deg": 79.99984208640025,
+      "solver": "kamino",
+      "status": "ok",
+      "substeps_per_frame": 5,
+      "tangential_stiffness_scale": 1.0,
+      "target_frequency_scale": 1.0,
+      "vbd_solve": null
+    },
+    {
+      "articulation_count": 1,
+      "body_count": 8,
+      "closure_joint_count": 3,
+      "contact_normal_damping_scale": 1.0,
+      "contact_normal_stiffness_scale": 1.0,
+      "device": "cpu",
+      "diagonal_regularization": 0.0,
+      "dt": 0.004,
+      "final_all": {
+        "angular_max_rad": 0.00019088951796682123,
+        "angular_norm_rad": 0.0002738103195682774,
+        "linear_max_m": 0.0012086389982554004,
+        "linear_norm_m": 0.0023185292409370222,
+        "per_joint": {
+          "ankle_dual_axis_gimbal_pitch": {
+            "angular_rad": 0.00019088951796682123,
+            "linear_m": 0.0012086389982554004
+          },
+          "ankle_dual_axis_gimbal_roll": {
+            "angular_rad": 5.4120786675810563e-05,
+            "linear_m": 0.0008392830942380748
+          },
+          "pitch_horn_to_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0008617906244479402
+          },
+          "pitch_motor_reducer": {
+            "angular_rad": 3.901851667345151e-05,
+            "linear_m": 0.0008572329765447344
+          },
+          "pitch_pushrod_to_foot_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0008603865609292034
+          },
+          "roll_horn_to_left_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0005997396800652182
+          },
+          "roll_horn_to_right_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.00019648234661071042
+          },
+          "roll_left_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0005511492980748284
+          },
+          "roll_motor_reducer": {
+            "angular_rad": 6.888929334279638e-05,
+            "linear_m": 0.00039559320480236557
+          },
+          "roll_right_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.00017756993465501748
+          },
+          "world_to_lower_leg": {
+            "angular_rad": 0.00017127768127050876,
+            "linear_m": 0.00032014590344201193
+          }
+        }
+      },
+      "final_closure": {
+        "angular_max_rad": 0.0,
+        "angular_norm_rad": 0.0,
+        "linear_max_m": 0.0008603865609292034,
+        "linear_norm_m": 0.0010370928910610395,
+        "per_joint": {
+          "pitch_pushrod_to_foot_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0008603865609292034
+          },
+          "roll_left_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0005511492980748284
+          },
+          "roll_right_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.00017756993465501748
+          }
+        }
+      },
+      "fps": 50,
+      "frames": 180,
+      "initial_all": {
+        "angular_max_rad": 0.0,
+        "angular_norm_rad": 0.0,
+        "linear_max_m": 3.585767487975363e-08,
+        "linear_norm_m": 6.412750068366176e-08,
+        "per_joint": {
+          "ankle_dual_axis_gimbal_pitch": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0
+          },
+          "ankle_dual_axis_gimbal_roll": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0
+          },
+          "pitch_horn_to_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 1.6864913631453382e-08
+          },
+          "pitch_motor_reducer": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0
+          },
+          "pitch_pushrod_to_foot_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 1.0038615047763665e-08
+          },
+          "roll_horn_to_left_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 2.4037382807777167e-08
+          },
+          "roll_horn_to_right_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 2.4037382807777167e-08
+          },
+          "roll_left_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 3.585767487975363e-08
+          },
+          "roll_motor_reducer": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0
+          },
+          "roll_right_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 3.585767487975363e-08
+          },
+          "world_to_lower_leg": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0
+          }
+        }
+      },
+      "initial_closure": {
+        "angular_max_rad": 0.0,
+        "angular_norm_rad": 0.0,
+        "linear_max_m": 3.585767487975363e-08,
+        "linear_norm_m": 5.169448217790189e-08,
+        "per_joint": {
+          "pitch_pushrod_to_foot_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 1.0038615047763665e-08
+          },
+          "roll_left_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 3.585767487975363e-08
+          },
+          "roll_right_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 3.585767487975363e-08
+          }
+        }
+      },
+      "iterations": 8,
+      "joint_count": 11,
+      "joint_dof_count": 22,
+      "joint_kd": 125.0,
+      "joint_ke": 50000.0,
+      "kamino_converged_fraction": null,
+      "kamino_p50_dual_residual": null,
+      "kamino_p50_iterations": null,
+      "max_closure_um": 1459.4969551659556,
+      "max_foot_angular_speed": 20.635177612304688,
+      "mean_step_us": 1486.3501428900397,
+      "mode": "VBD local CPU, compatible linkage",
+      "output_pitch_range_deg": 82.19054818183713,
+      "output_roll_range_deg": 86.45008349197266,
+      "p50_step_us": 1485.6394845992327,
+      "p90_step_us": 1495.8289684727788,
+      "pitch_motor_range_deg": 101.02821192538254,
+      "pitch_target_range_deg": 99.99427568481184,
+      "relaxation": 1.0,
+      "rms_all_angular_deg": 0.009358618538779022,
+      "rms_all_linear_um": 987.1328568242311,
+      "rms_closure_um": 423.2586764261696,
+      "rms_pitch_tracking_deg": 0.8182251466259326,
+      "rms_roll_tracking_deg": 3.3187830803301006,
+      "robot_foot_geometry": "compatible",
+      "roll_motor_range_deg": 85.80036982377105,
+      "roll_target_range_deg": 79.99984208640025,
+      "solver": "vbd",
+      "status": "ok",
+      "substeps_per_frame": 5,
+      "tangential_stiffness_scale": 1.0,
+      "target_frequency_scale": 1.0,
+      "vbd_solve": "local"
+    },
+    {
+      "articulation_count": 1,
+      "body_count": 8,
+      "closure_joint_count": 3,
+      "contact_normal_damping_scale": 1.0,
+      "contact_normal_stiffness_scale": 1.0,
+      "device": "cpu",
+      "diagonal_regularization": 0.0,
+      "dt": 0.004,
+      "final_all": {
+        "angular_max_rad": 0.00011278851188443922,
+        "angular_norm_rad": 0.00016568765203329327,
+        "linear_max_m": 0.000854842436911324,
+        "linear_norm_m": 0.0015801500863467997,
+        "per_joint": {
+          "ankle_dual_axis_gimbal_pitch": {
+            "angular_rad": 0.0001092089990501479,
+            "linear_m": 0.000854842436911324
+          },
+          "ankle_dual_axis_gimbal_roll": {
+            "angular_rad": 2.848006213105198e-05,
+            "linear_m": 0.0006032147070466272
+          },
+          "pitch_horn_to_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0005917887154937491
+          },
+          "pitch_motor_reducer": {
+            "angular_rad": 2.5419543762450647e-05,
+            "linear_m": 0.0005961736893535076
+          },
+          "pitch_pushrod_to_foot_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0005900983571244685
+          },
+          "roll_horn_to_left_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0003238347086145478
+          },
+          "roll_horn_to_right_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 4.9448299434330946e-05
+          },
+          "roll_left_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.00032721650746421905
+          },
+          "roll_motor_reducer": {
+            "angular_rad": 3.6705272176956525e-05,
+            "linear_m": 0.00027349615598533535
+          },
+          "roll_right_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 5.319906892362111e-05
+          },
+          "world_to_lower_leg": {
+            "angular_rad": 0.00011278851188443922,
+            "linear_m": 0.00023745044545179416
+          }
+        }
+      },
+      "final_closure": {
+        "angular_max_rad": 0.0,
+        "angular_norm_rad": 0.0,
+        "linear_max_m": 0.0005900983571244685,
+        "linear_norm_m": 0.0006768433014903955,
+        "per_joint": {
+          "pitch_pushrod_to_foot_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0005900983571244685
+          },
+          "roll_left_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 0.00032721650746421905
+          },
+          "roll_right_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 5.319906892362111e-05
+          }
+        }
+      },
+      "fps": 50,
+      "frames": 180,
+      "initial_all": {
+        "angular_max_rad": 0.0,
+        "angular_norm_rad": 0.0,
+        "linear_max_m": 3.585767487975363e-08,
+        "linear_norm_m": 6.412750068366176e-08,
+        "per_joint": {
+          "ankle_dual_axis_gimbal_pitch": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0
+          },
+          "ankle_dual_axis_gimbal_roll": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0
+          },
+          "pitch_horn_to_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 1.6864913631453382e-08
+          },
+          "pitch_motor_reducer": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0
+          },
+          "pitch_pushrod_to_foot_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 1.0038615047763665e-08
+          },
+          "roll_horn_to_left_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 2.4037382807777167e-08
+          },
+          "roll_horn_to_right_pushrod_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 2.4037382807777167e-08
+          },
+          "roll_left_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 3.585767487975363e-08
+          },
+          "roll_motor_reducer": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0
+          },
+          "roll_right_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 3.585767487975363e-08
+          },
+          "world_to_lower_leg": {
+            "angular_rad": 0.0,
+            "linear_m": 0.0
+          }
+        }
+      },
+      "initial_closure": {
+        "angular_max_rad": 0.0,
+        "angular_norm_rad": 0.0,
+        "linear_max_m": 3.585767487975363e-08,
+        "linear_norm_m": 5.169448217790189e-08,
+        "per_joint": {
+          "pitch_pushrod_to_foot_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 1.0038615047763665e-08
+          },
+          "roll_left_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 3.585767487975363e-08
+          },
+          "roll_right_pushrod_to_gimbal_universal": {
+            "angular_rad": 0.0,
+            "linear_m": 3.585767487975363e-08
+          }
+        }
+      },
+      "iterations": 8,
+      "joint_count": 11,
+      "joint_dof_count": 22,
+      "joint_kd": 125.0,
+      "joint_ke": 50000.0,
+      "kamino_converged_fraction": null,
+      "kamino_p50_dual_residual": null,
+      "kamino_p50_iterations": null,
+      "max_closure_um": 956.1591579642137,
+      "max_foot_angular_speed": 18.7746524810791,
+      "mean_step_us": 925.6013463634779,
+      "mode": "VBD sparse direct CPU, compatible linkage",
+      "output_pitch_range_deg": 78.5755184296218,
+      "output_roll_range_deg": 82.65140057671704,
+      "p50_step_us": 924.7245034202933,
+      "p90_step_us": 931.1820613220334,
+      "pitch_motor_range_deg": 100.71718186417158,
+      "pitch_target_range_deg": 99.99427568481184,
+      "relaxation": 1.0,
+      "rms_all_angular_deg": 0.004356719469342428,
+      "rms_all_linear_um": 655.0939974707501,
+      "rms_closure_um": 265.05851515742535,
+      "rms_pitch_tracking_deg": 0.5556477517030967,
+      "rms_roll_tracking_deg": 0.9409193339207096,
+      "robot_foot_geometry": "compatible",
+      "roll_motor_range_deg": 82.31634991041376,
+      "roll_target_range_deg": 79.99984208640025,
+      "solver": "vbd",
+      "status": "ok",
+      "substeps_per_frame": 5,
+      "tangential_stiffness_scale": 1.0,
+      "target_frequency_scale": 1.0,
+      "vbd_solve": "block_sparse_joints"
+    }
+  ],
+  "scenario": "robot-foot",
+  "source": "attached_internal_three_pushrod_robot_foot"
+}

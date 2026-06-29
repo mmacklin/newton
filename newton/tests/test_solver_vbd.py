@@ -1260,6 +1260,7 @@ def _body_body_contact_damping_ignores_penalty_ramp(test, device):
                 0.95,
                 0,
                 0.01,
+                1.0,
             ],
             outputs=[body0, body1, point0_world, point1_world, force_on_body1],
             device=device,

@@ -10,7 +10,19 @@ import numpy as np
 import warp as wp
 
 import newton
+from newton._src.solvers.vbd.rigid_sparse_articulation_kernels import _joint_projectors
 from newton.examples.cable import example_cable_cross_slide_table
+
+
+@wp.kernel
+def _evaluate_angular_projector(
+    joint_type: int,
+    joint_axis: wp.array[wp.vec3],
+    parent_anchor_q: wp.quat,
+    angular_projector: wp.array[wp.mat33],
+):
+    _, P_ang = _joint_projectors(joint_type, joint_axis, 0, 0, 1, parent_anchor_q)
+    angular_projector[0] = P_ang
 
 
 def _quat_mul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -181,7 +193,7 @@ def _quat_rotvec(q: np.ndarray) -> np.ndarray:
     return q[0:3] * (angle / vector_norm)
 
 
-def _make_loop_model() -> newton.Model:
+def _make_loop_model(device: str = "cpu") -> newton.Model:
     builder = newton.ModelBuilder(gravity=0.0)
     inertia = wp.mat33(np.eye(3, dtype=np.float32)) * 0.1
     positions = [
@@ -232,7 +244,7 @@ def _make_loop_model() -> newton.Model:
         child_xform=wp.transform(p=wp.vec3(*(mid - positions[0])), q=wp.quat_identity()),
     )
     builder.color()
-    return builder.finalize(device="cpu")
+    return builder.finalize(device=device)
 
 
 def _make_single_body_model(com: wp.vec3 | None = None) -> newton.Model:
@@ -322,7 +334,34 @@ def _make_projected_joint_chain_model(joint_kind: str) -> newton.Model:
 
     joints = []
     JointDofConfig = newton.ModelBuilder.JointDofConfig
-    if joint_kind == "prismatic":
+    if joint_kind == "revolute":
+        joints.append(
+            builder.add_joint_revolute(
+                parent=-1,
+                child=bodies[0],
+                parent_xform=wp.transform(p=wp.vec3(*positions[0]), q=wp.quat_identity()),
+                child_xform=wp.transform(),
+                axis=newton.Axis.Y,
+                target_ke=0.0,
+                target_kd=0.0,
+                limit_ke=0.0,
+                limit_kd=0.0,
+            )
+        )
+        joints.append(
+            builder.add_joint_revolute(
+                parent=bodies[0],
+                child=bodies[1],
+                parent_xform=wp.transform(p=wp.vec3(0.175, 0.0, 0.0), q=wp.quat_identity()),
+                child_xform=wp.transform(p=wp.vec3(-0.175, 0.0, 0.0), q=wp.quat_identity()),
+                axis=newton.Axis.Y,
+                target_ke=0.0,
+                target_kd=0.0,
+                limit_ke=0.0,
+                limit_kd=0.0,
+            )
+        )
+    elif joint_kind == "prismatic":
         joints.append(
             builder.add_joint_prismatic(
                 parent=-1,
@@ -604,6 +643,21 @@ def _solve_residual(mode: str) -> float:
     return _joint_residual(model, state_out)
 
 
+def _solve_loop_q(mode: str, device: str) -> np.ndarray:
+    model = _make_loop_model(device)
+    state_in = model.state()
+    state_out = model.state()
+    control = model.control()
+    newton.eval_fk(model, model.joint_q, model.joint_qd, state_in)
+    _perturb_body_poses(state_in, translation_amplitude=0.02, rotation_amplitude=0.0)
+
+    solver = newton.solvers.SolverVBD(
+        model, iterations=1, rigid_articulation_solve=mode, rigid_articulation_relaxation=1.0
+    )
+    solver.step(state_in, state_out, control, None, 1.0 / 120.0)
+    return state_out.body_q.numpy()
+
+
 def _solve_single_body_q(mode: str) -> np.ndarray:
     model = _make_single_body_model()
     state_in = model.state()
@@ -644,6 +698,43 @@ def _solve_offset_com_single_body_q(mode: str) -> np.ndarray:
 
 
 class TestVBDSparseArticulation(unittest.TestCase):
+    def test_builder_accepts_closed_loop_articulation(self):
+        builder = newton.ModelBuilder(gravity=0.0)
+        inertia = wp.mat33(np.eye(3, dtype=np.float32))
+        bodies = [
+            builder.add_link(xform=wp.transform(wp.vec3(float(i), 0.0, 0.0)), mass=1.0, inertia=inertia)
+            for i in range(3)
+        ]
+        joints = [builder.add_joint_fixed(parent=-1, child=bodies[0])]
+        joints.append(builder.add_joint_fixed(parent=bodies[0], child=bodies[1]))
+        joints.append(builder.add_joint_fixed(parent=bodies[1], child=bodies[2]))
+        joints.append(builder.add_joint_fixed(parent=bodies[0], child=bodies[2]))
+
+        builder.add_articulation(joints, allow_closed_loops=True)
+        model = builder.finalize(device="cpu")
+
+        self.assertEqual(model.articulation_count, 1)
+        np.testing.assert_array_equal(model.joint_articulation.numpy(), np.zeros(4, dtype=np.int32))
+
+    def test_sparse_revolute_projector_uses_parent_frame(self):
+        axis = np.array([0.2, -0.4, 0.7], dtype=np.float32)
+        axis /= np.linalg.norm(axis)
+        parent_rotation = wp.quat_from_axis_angle(wp.normalize(wp.vec3(0.6, 0.1, -0.3)), 1.1)
+        projector = wp.empty(1, dtype=wp.mat33, device="cpu")
+        wp.launch(
+            _evaluate_angular_projector,
+            dim=1,
+            inputs=[
+                int(newton.JointType.REVOLUTE),
+                wp.array([axis], dtype=wp.vec3, device="cpu"),
+                parent_rotation,
+            ],
+            outputs=[projector],
+            device="cpu",
+        )
+        expected = np.eye(3) - np.outer(axis, axis)
+        np.testing.assert_allclose(projector.numpy()[0], expected, rtol=1.0e-6, atol=1.0e-6)
+
     def test_sparse_single_body_matches_local(self):
         local_q = _solve_single_body_q("local")
         sparse_q = _solve_single_body_q("block_sparse_joints")
@@ -659,6 +750,12 @@ class TestVBDSparseArticulation(unittest.TestCase):
         sparse_residual = _solve_residual("block_sparse_joints")
         self.assertLess(sparse_residual, 0.9 * local_residual)
 
+    @unittest.skipUnless(wp.is_cuda_available(), "CUDA device required")
+    def test_sparse_articulation_cuda_matches_cpu_serial(self):
+        cpu_q = _solve_loop_q("block_sparse_joints", "cpu")
+        cuda_q = _solve_loop_q("block_sparse_joints", "cuda:0")
+        np.testing.assert_allclose(cuda_q, cpu_q, rtol=2.0e-4, atol=2.0e-4)
+
     def test_sparse_articulation_default_relaxation_is_tuned(self):
         model = _make_single_body_model()
         solver = newton.solvers.SolverVBD(model, iterations=1, rigid_articulation_solve="block_sparse_joints")
@@ -670,7 +767,7 @@ class TestVBDSparseArticulation(unittest.TestCase):
         self.assertLess(sparse_energy, 0.05 * local_energy)
 
     def test_sparse_articulation_supports_projected_joint_types(self):
-        for joint_kind in ("prismatic", "d6", "cable"):
+        for joint_kind in ("revolute", "prismatic", "d6", "cable"):
             with self.subTest(joint_kind=joint_kind):
                 local_linear, local_angular = _solve_projected_joint_split_residual(joint_kind, "local")
                 sparse_linear, sparse_angular = _solve_projected_joint_split_residual(joint_kind, "block_sparse_joints")
