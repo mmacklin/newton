@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import html
 import json
+import math
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,6 +45,11 @@ def _fmt(value: float | None, digits: int = 1) -> str:
     return f"{value:,.{digits}f}"
 
 
+def _budget_reduction(row: dict) -> str:
+    value = row.get("residual_reduction_at_budget")
+    return "-" if value is None else f"{value:,.1f}x"
+
+
 def _video(name: str, title: str, text: str) -> str:
     stem = name.removesuffix(".mp4")
     return f"""
@@ -56,6 +62,66 @@ def _video(name: str, title: str, text: str) -> str:
     </article>"""
 
 
+def _cable_convergence_svg(rows: list[dict]) -> str:
+    width, height = 860, 340
+    left, right, top, bottom = 76, 24, 24, 58
+    plot_width = width - left - right
+    plot_height = height - top - bottom
+    times = [row["p50_step_us"] / 1.0e3 for row in rows]
+    residuals = [row["residual_m"] * 1.0e6 for row in rows]
+    x_min, x_max = math.log10(min(times) * 0.85), math.log10(max(times) * 1.15)
+    y_min, y_max = math.log10(min(residuals) * 0.65), math.log10(max(residuals) * 1.5)
+
+    def x(value: float) -> float:
+        return left + plot_width * (math.log10(value) - x_min) / (x_max - x_min)
+
+    def y(value: float) -> float:
+        return top + plot_height * (y_max - math.log10(value)) / (y_max - y_min)
+
+    parts = [
+        f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="Cable residual versus CPU wall time">',
+        '<rect width="100%" height="100%" fill="#f7f8f7"/>',
+    ]
+    for tick in (0.2, 0.5, 1.0, 2.0):
+        if min(times) * 0.85 <= tick <= max(times) * 1.15:
+            px = x(tick)
+            parts.append(f'<line x1="{px:.1f}" y1="{top}" x2="{px:.1f}" y2="{height - bottom}" stroke="#d7dce0"/>')
+            parts.append(f'<text x="{px:.1f}" y="{height - bottom + 22}" text-anchor="middle">{tick:g}</text>')
+    for tick in (0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0):
+        if min(residuals) * 0.65 <= tick <= max(residuals) * 1.5:
+            py = y(tick)
+            parts.append(f'<line x1="{left}" y1="{py:.1f}" x2="{width - right}" y2="{py:.1f}" stroke="#d7dce0"/>')
+            parts.append(f'<text x="{left - 10}" y="{py + 4:.1f}" text-anchor="end">{tick:g}</text>')
+    colors = {"local": "#a6411d", "block_sparse_joints": "#006c67"}
+    labels = {"local": "VBD local", "block_sparse_joints": "VBD sparse direct"}
+    for mode in ("local", "block_sparse_joints"):
+        mode_rows = sorted((row for row in rows if row["mode"] == mode), key=lambda row: row["p50_step_us"])
+        points = " ".join(
+            f"{x(row['p50_step_us'] / 1.0e3):.1f},{y(row['residual_m'] * 1.0e6):.1f}" for row in mode_rows
+        )
+        parts.append(f'<polyline points="{points}" fill="none" stroke="{colors[mode]}" stroke-width="3"/>')
+        for row in mode_rows:
+            px = x(row["p50_step_us"] / 1.0e3)
+            py = y(row["residual_m"] * 1.0e6)
+            parts.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="4" fill="{colors[mode]}"/>')
+            parts.append(f'<text x="{px + 7:.1f}" y="{py - 7:.1f}" fill="{colors[mode]}">i{row["iterations"]}</text>')
+        legend_x = 575 if mode == "local" else 700
+        parts.append(
+            f'<line x1="{legend_x}" y1="16" x2="{legend_x + 22}" y2="16" stroke="{colors[mode]}" stroke-width="3"/>'
+        )
+        parts.append(f'<text x="{legend_x + 28}" y="20">{labels[mode]}</text>')
+    parts.extend(
+        [
+            f'<line x1="{left}" y1="{height - bottom}" x2="{width - right}" y2="{height - bottom}" stroke="#171a1d"/>',
+            f'<line x1="{left}" y1="{top}" x2="{left}" y2="{height - bottom}" stroke="#171a1d"/>',
+            f'<text x="{left + plot_width / 2:.1f}" y="{height - 10}" text-anchor="middle">CPU p50 substep [ms]</text>',
+            f'<text transform="translate(18 {top + plot_height / 2:.1f}) rotate(-90)" text-anchor="middle">Aggregate joint residual [µm]</text>',
+            "</svg>",
+        ]
+    )
+    return "".join(parts)
+
+
 def main() -> None:
     foot = _load("robot_foot_compatible_results.json")
     foot_geometry = _load("robot_foot_geometry_diagnostic.json")
@@ -63,6 +129,7 @@ def main() -> None:
     dr_free_ankle = _load("dr_legs_free_ankle_results.json")
     dr_free_ankle_cuda = _load("dr_legs_free_ankle_cuda_results.json")
     matrix = _load("dr_legs_matrix_diagnostic.json")
+    visual_validation = _load("visual_validation_results.json")
     iteration_sweep = json.loads((FORMULATION_DATA_SOURCE / "iteration_sweep_cpu_sparse.json").read_text())
     g1_cpu_graph = json.loads((FORMULATION_DATA_SOURCE / "g1_cpu_graph.json").read_text())
     g1_cuda_graph = json.loads((FORMULATION_DATA_SOURCE / "g1_cuda_graph.json").read_text())
@@ -84,6 +151,7 @@ def main() -> None:
         "dr_legs_free_ankle_results.json",
         "dr_legs_free_ankle_cuda_results.json",
         "dr_legs_matrix_diagnostic.json",
+        "visual_validation_results.json",
     ):
         shutil.copy2(SOURCE / name, OUTPUT / name)
     for stale_name in ("robot_foot_results.json", "dr_legs_results.json", "dr_legs_tuning"):
@@ -104,6 +172,23 @@ def main() -> None:
     dr_free_sparse = next(row for row in dr_free_ankle["rows"] if row.get("vbd_solve") == "block_sparse_joints")
     dr_cuda_kamino = _row(dr_free_ankle_cuda, "kamino")
     dr_cuda_sparse = next(row for row in dr_free_ankle_cuda["rows"] if row.get("vbd_solve") == "block_sparse_joints")
+    visual_rows = {row["scenario"]: row for row in visual_validation["visuals"]}
+    four_bar_visual = visual_rows["four-bar"]
+    cable_visual = visual_rows["cable"]
+    cable_convergence = visual_validation["cable_convergence"]
+    cable_i4_sparse = next(
+        row for row in cable_convergence if row["mode"] == "block_sparse_joints" and row["iterations"] == 4
+    )
+    cable_table_rows = "".join(
+        "<tr>"
+        f"<td>{'VBD local' if row['mode'] == 'local' else 'VBD sparse direct'}</td>"
+        f"<td>{row['iterations']}</td>"
+        f"<td>{row['p50_step_us'] / 1.0e3:.3f}</td>"
+        f"<td>{row['residual_m'] * 1.0e6:,.3f}</td>"
+        f"<td>{_budget_reduction(row)}</td>"
+        "</tr>"
+        for row in cable_convergence
+    )
     synthetic = {
         scenario: {
             (iterations, mode): _sweep_row(iteration_sweep, scenario, iterations, mode)
@@ -129,15 +214,17 @@ h2{{font-size:22px;margin:42px 0 14px;border-bottom:1px solid var(--line);paddin
 p{{max-width:850px}} .lede{{font-size:18px;color:#30363b}} .meta,.note{{color:var(--muted)}} .status{{border-left:4px solid var(--accent);padding:12px 16px;background:var(--soft);max-width:900px}}
 .warn{{border-left-color:var(--warn)}} table{{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;display:block;overflow-x:auto}} th,td{{text-align:right;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap}} th:first-child,td:first-child{{text-align:left}} th{{background:var(--soft);font-size:13px}}
 .media-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}} .media{{min-width:0}} video{{display:block;width:100%;aspect-ratio:16/9;background:#111}} code{{background:var(--soft);padding:1px 4px}}
+.validation-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}} .validation-grid article{{min-width:0}}
 .pill{{display:inline-block;border:1px solid var(--line);padding:2px 7px;margin-right:5px;font-size:12px}} a{{color:var(--accent)}}
 figure{{margin:24px 0}} figure img{{display:block;width:100%;height:auto;border:1px solid var(--line);background:#f7f8f7}} figcaption{{margin-top:8px;color:var(--muted);font-size:13px}}
+figure>svg{{display:block;width:100%;height:auto;border:1px solid var(--line);background:#f7f8f7}} figure>svg text{{font:12px system-ui,sans-serif}}
 .formula-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin:18px 0}} .formula-grid>div{{border-top:3px solid var(--accent);padding:10px 14px;background:var(--soft)}}
 .code-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin:18px 0}} pre{{margin:0;overflow:auto;background:#202724;color:#edf2ee;padding:16px;border-radius:4px;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}} pre code{{background:none;padding:0}}
 .code-links{{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 20px}} .code-links a{{border:1px solid var(--line);padding:7px 10px;text-decoration:none;background:var(--soft)}}
 .equation-note{{border-left:4px solid var(--accent);padding:10px 14px;background:var(--soft);max-width:930px}}
 .analysis-heading{{margin:26px 0 10px}} .glossary{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 28px;margin:14px 0 26px}}
 .glossary>div{{border-top:1px solid var(--line);padding:10px 0}} .glossary dt{{font-weight:700}} .glossary dd{{margin:3px 0 0;color:var(--muted)}}
-@media(max-width:800px){{main{{padding:24px 16px}}.media-grid{{grid-template-columns:1fr}}table{{font-size:12px}}th,td{{padding:7px 5px}}}}
+@media(max-width:800px){{main{{padding:24px 16px}}.media-grid,.validation-grid{{grid-template-columns:1fr}}table{{font-size:12px}}th,td{{padding:7px 5px}}}}
 @media(max-width:800px){{.formula-grid,.code-grid,.glossary{{grid-template-columns:1fr}}}}
 </style></head><body><main>
 <h1>VBD Sparse Direct Articulation Solver</h1>
@@ -265,6 +352,29 @@ apply_pose_updates(delta, relaxation)</code></pre>
 <p>The cooperative CUDA path is {cuda_graph_rows["vbd_sparse"]["cuda_graph_p50_step_us"] / cuda_graph_rows["vbd_sparse_block32"]["cuda_graph_p50_step_us"]:.1f}x faster than the serial sparse CUDA baseline. The CPU remains faster for one small articulation because the GPU has limited independent work; the later DR Legs table reports the integrated solver with contact.</p>
 <p class="note">Raw formulation data: <a href="formulation_data/iteration_sweep_cpu_sparse.json">iteration sweep</a>, <a href="formulation_data/bench_cpu_sparse.json">CPU sparse cases</a>, <a href="formulation_data/g1_cpu_graph.json">G1 CPU graph</a>, and <a href="formulation_data/g1_cuda_graph.json">G1 CUDA graph</a>.</p>
 
+<h2>Public visual validations</h2>
+<p>These self-contained mechanisms use only Newton primitives and are generated by the public <a href="{GITHUB_BLOB}/reports/vbd_complex_linkages/bench_visual_validations.py">visual-validation harness</a>. Each video shows local VBD on the left and sparse-direct VBD on the right with identical models, timesteps, and iteration counts.</p>
+<div class="validation-grid">
+  <article>
+    <h3>Driven closed four-bar</h3>
+    <video controls muted loop playsinline preload="metadata" poster="{four_bar_visual["poster"]}"><source src="{four_bar_visual["video"]}?v=20260629b" type="video/mp4"></video>
+    <p>Three moving links, four revolute joints, and one explicit world closure. At eight iterations, local VBD records {_fmt(four_bar_visual["local"]["rms_residual_um"], 3)} µm RMS joint error; sparse direct records {_fmt(four_bar_visual["sparse"]["rms_residual_um"], 3)} µm.</p>
+  </article>
+  <article>
+    <h3>Hanging 32-segment cable</h3>
+    <video controls muted loop playsinline preload="metadata" poster="{cable_visual["poster"]}"><source src="{cable_visual["video"]}?v=20260629b" type="video/mp4"></video>
+    <p>A stiff cable chain swings under gravity from one fixed end. At four iterations, local VBD records {_fmt(cable_visual["local"]["rms_residual_um"], 1)} µm RMS connectivity error; sparse direct records {_fmt(cable_visual["sparse"]["rms_residual_um"], 1)} µm.</p>
+  </article>
+</div>
+
+<h3 class="analysis-heading">Cable convergence per wall-clock time</h3>
+<p>The cable is reset to the same perturbed state for each residual measurement. CPU latency is measured separately as median steady-state <code>solver.step()</code> time over 50 samples. The plot therefore compares achieved joint error against measured solver cost rather than assuming equal iterations imply equal work.</p>
+<figure>{_cable_convergence_svg(cable_convergence)}<figcaption>Residual after one substep versus CPU wall time. At four sparse iterations, the solve reaches {cable_i4_sparse["residual_m"] * 1.0e6:.2f} µm in {cable_i4_sparse["p50_step_us"] / 1.0e3:.3f} ms; the best local configuration inside that measured time budget leaves {cable_i4_sparse["best_local_residual_at_budget_m"] * 1.0e6:.1f} µm, a {cable_i4_sparse["residual_reduction_at_budget"]:.0f}x larger residual.</figcaption></figure>
+<table><thead><tr><th>Solver</th><th>Iterations</th><th>CPU p50 [ms]</th><th>Aggregate residual [µm]</th><th>Reduction vs best local in budget</th></tr></thead><tbody>
+{cable_table_rows}
+</tbody></table>
+<p class="note">Raw data: <a href="visual_validation_results.json">visual validation and cable convergence JSON</a>. The i1 sparse point is slightly faster than local i1 in this run, so no slower local point exists strictly inside its measured budget; later sparse points use the best local row at or below their p50 latency.</p>
+
 <h2>Evaluation methods</h2>
 <p>CPU measurements use Warp's single-threaded CPU backend on one AMD EPYC 9B45 core. GPU measurements use an NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb partition. Reported p50 and p90 values are synchronized wall-clock substep times after warm-up and include Python dispatch. The end-to-end benchmarks below do not use graph capture. Contact-free examples time <code>solver.step()</code>; DR Legs reports the Newton collision pass separately from the solver.</p>
 <h3 class="analysis-heading">Metrics and glossary</h3>
@@ -369,7 +479,7 @@ apply_pose_updates(delta, relaxation)</code></pre>
 <h2>Interpretation</h2>
 <p>For these configurations, articulation-wide sparse VBD gives lower geometric closure error than local VBD and Kamino. It is also faster than local VBD on the two contact-free CPU tests and is the only VBD mode to complete the DR Legs contact test. The result supports a unified maximal-coordinate rigid-body path in which joints receive a coupled direct solve while contact curvature remains block diagonal.</p>
 <p>These are achieved-error comparisons, not equal-tolerance benchmarks. VBD uses a fixed eight nonlinear iterations, while Kamino uses residual-based PADMM stopping with different constraint and contact models. The timings include current Warp and Python overhead, and the single-articulation GPU workloads do not saturate the device.</p>
-<p class="note">Reproducible data: <a href="robot_foot_compatible_results.json">compatible robot foot</a>, <a href="robot_foot_geometry_diagnostic.json">foot geometry check</a>, <a href="g1_ankle_results.json">G1 ankle</a>, <a href="dr_legs_free_ankle_results.json">DR Legs CPU</a>, <a href="dr_legs_free_ankle_cuda_results.json">DR Legs CUDA</a>, and <a href="dr_legs_matrix_diagnostic.json">numerical checks</a>.</p>
+<p class="note">Reproducible data: <a href="robot_foot_compatible_results.json">compatible robot foot</a>, <a href="robot_foot_geometry_diagnostic.json">foot geometry check</a>, <a href="g1_ankle_results.json">G1 ankle</a>, <a href="dr_legs_free_ankle_results.json">DR Legs CPU</a>, <a href="dr_legs_free_ankle_cuda_results.json">DR Legs CUDA</a>, <a href="dr_legs_matrix_diagnostic.json">numerical checks</a>, and <a href="visual_validation_results.json">public visual validations</a>.</p>
 </main></body></html>"""
     (OUTPUT / "index.html").write_text(body)
     print(OUTPUT / "index.html")
