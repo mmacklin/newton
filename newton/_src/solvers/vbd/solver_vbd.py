@@ -2350,8 +2350,12 @@ class SolverVBD(TendonStateMixin, SolverBase):
                 self.tendon_seg_attachment_r_local_step,
                 self.tendon_seg_rolling_delta_l,
                 self.tendon_seg_rolling_delta_r,
+                self.tendon_cone_sweep_count,
                 1,
                 1,
+                0,
+                self.tendon_max_sweeps,
+                self.tendon_settle_tol,
             ],
             device=self.device,
         )
