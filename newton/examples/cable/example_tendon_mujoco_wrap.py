@@ -7,8 +7,8 @@
 # Minimal MuJoCo-style dynamic tendon routing prototype.  A vertical cable
 # starts as a straight inactive route.  Three authored rolling links move
 # horizontally into the cable at the same time from alternating sides.  The
-# example updates only the solver active set; the tendon solver builds the
-# straight bypass or wrapped route from that active set.
+# tendon solver updates the active set once per substep and builds either the
+# straight bypass or the wrapped route.
 #
 # Command: python -m newton.examples tendon_mujoco_wrap
 #
@@ -193,17 +193,10 @@ class Example:
         distance, alpha = self._candidate_span_projection(i)
         return 0.0 < alpha < 1.0 and distance <= self.radius
 
-    def _update_active_set(self):
-        link_active = self.solver.tendon_link_active.numpy()
-        for i, link_idx in enumerate(self.candidate_link_indices):
-            link_active[link_idx] = 1 if self._candidate_should_wrap(i) else 0
-        self.solver.tendon_link_active.assign(link_active)
-
     def simulate(self):
         for substep in range(self.sim_substeps):
             t = self.sim_time + substep * self.sim_dt
             self._update_kinematic_bodies(t)
-            self._update_active_set()
             self.state_0.clear_forces()
             self.solver.step(self.state_0, self.state_1, self.control, self.contacts, self.sim_dt)
             self.state_0, self.state_1 = self.state_1, self.state_0

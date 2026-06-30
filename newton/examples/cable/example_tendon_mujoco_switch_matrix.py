@@ -225,7 +225,6 @@ class Example:
         self._saw_enabled_segment = np.zeros(len(self.lanes), dtype=bool)
 
         self._update_kinematic_bodies(0.0)
-        self._update_active_set()
 
         if self.viewer is not None:
             self.viewer.set_model(self.model)
@@ -323,17 +322,10 @@ class Example:
         distance, alpha = self._candidate_span_projection(lane)
         return 0.0 < alpha < 1.0 and distance <= self.radius
 
-    def _update_active_set(self):
-        link_active = self.solver.tendon_link_active.numpy()
-        for lane in self.lanes:
-            link_active[lane["candidate_link"]] = 1 if self._candidate_should_wrap(lane) else 0
-        self.solver.tendon_link_active.assign(link_active)
-
     def simulate(self):
         for substep in range(self.sim_substeps):
             t = self.sim_time + substep * self.sim_dt
             self._update_kinematic_bodies(t)
-            self._update_active_set()
             self.state_0.clear_forces()
             self.solver.step(self.state_0, self.state_1, self.control, self.contacts, self.sim_dt)
             self.state_0, self.state_1 = self.state_1, self.state_0

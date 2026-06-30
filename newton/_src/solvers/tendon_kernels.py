@@ -88,6 +88,115 @@ def advance_point_on_circle(
 
 
 @wp.kernel
+def update_tendon_link_active(
+    body_q: wp.array[wp.transform],
+    tendon_start: wp.array[int],
+    tendon_link_body: wp.array[int],
+    tendon_link_type: wp.array[int],
+    tendon_link_radius: wp.array[float],
+    tendon_link_orientation: wp.array[int],
+    tendon_link_offset: wp.array[wp.vec3],
+    tendon_link_axis: wp.array[wp.vec3],
+    tendon_link_route_rest_length: wp.array[float],
+    tendon_link_active: wp.array[int],
+):
+    """Update optional rolling links from intersection with their bypass span."""
+    tendon_id = wp.tid()
+    link_start = tendon_start[tendon_id]
+    link_end = tendon_start[tendon_id + 1]
+
+    for link_idx in range(link_start + 1, link_end - 1):
+        if tendon_link_type[link_idx] != int(TendonLinkType.ROLLING):
+            continue
+        # A bypass material length is stored only for rolling links authored as
+        # inactive candidates. Links authored as part of the fixed route stay active.
+        if tendon_link_route_rest_length[link_idx] <= 0.0 or tendon_link_radius[link_idx] <= 0.0:
+            continue
+
+        prev_link = link_idx - 1
+        next_link = link_idx + 1
+
+        prev_pose = body_q[tendon_link_body[prev_link]]
+        next_pose = body_q[tendon_link_body[next_link]]
+        candidate_pose = body_q[tendon_link_body[link_idx]]
+        prev_center = wp.transform_point(prev_pose, tendon_link_offset[prev_link])
+        next_center = wp.transform_point(next_pose, tendon_link_offset[next_link])
+        candidate_center = wp.transform_point(candidate_pose, tendon_link_offset[link_idx])
+
+        prev_rolling = (
+            tendon_link_type[prev_link] == int(TendonLinkType.ROLLING)
+            and tendon_link_active[prev_link] != 0
+            and tendon_link_radius[prev_link] > 0.0
+        )
+        next_rolling = (
+            tendon_link_type[next_link] == int(TendonLinkType.ROLLING)
+            and tendon_link_active[next_link] != 0
+            and tendon_link_radius[next_link] > 0.0
+        )
+
+        bypass_l = prev_center
+        bypass_r = next_center
+        if prev_rolling and next_rolling:
+            prev_normal = wp.transform_vector(prev_pose, tendon_link_axis[prev_link])
+            next_normal = wp.transform_vector(next_pose, tendon_link_axis[next_link])
+            for _iter in range(10):
+                bypass_r = tangent_point_circle(
+                    bypass_l,
+                    next_center,
+                    tendon_link_radius[next_link],
+                    next_normal,
+                    tendon_link_orientation[next_link],
+                )
+                bypass_l = tangent_point_circle(
+                    bypass_r,
+                    prev_center,
+                    tendon_link_radius[prev_link],
+                    prev_normal,
+                    -tendon_link_orientation[prev_link],
+                )
+        elif prev_rolling:
+            prev_normal = wp.transform_vector(prev_pose, tendon_link_axis[prev_link])
+            bypass_l = tangent_point_circle(
+                next_center,
+                prev_center,
+                tendon_link_radius[prev_link],
+                prev_normal,
+                -tendon_link_orientation[prev_link],
+            )
+        elif next_rolling:
+            next_normal = wp.transform_vector(next_pose, tendon_link_axis[next_link])
+            bypass_r = tangent_point_circle(
+                prev_center,
+                next_center,
+                tendon_link_radius[next_link],
+                next_normal,
+                tendon_link_orientation[next_link],
+            )
+
+        # Routing is defined in the candidate's cable plane. Projecting the
+        # bypass span makes the test independent of harmless out-of-plane drift.
+        normal = wp.transform_vector(candidate_pose, tendon_link_axis[link_idx])
+        normal_length = wp.length(normal)
+        if normal_length <= 1.0e-8:
+            tendon_link_active[link_idx] = 0
+            continue
+        normal = normal / normal_length
+        span = bypass_r - bypass_l
+        candidate_offset = candidate_center - bypass_l
+        span = span - wp.dot(span, normal) * normal
+        candidate_offset = candidate_offset - wp.dot(candidate_offset, normal) * normal
+        span_length_sq = wp.dot(span, span)
+        active = int(0)
+        if span_length_sq > 1.0e-12:
+            alpha = wp.dot(candidate_offset, span) / span_length_sq
+            closest_offset = alpha * span
+            distance = wp.length(candidate_offset - closest_offset)
+            if alpha > 0.0 and alpha < 1.0 and distance <= tendon_link_radius[link_idx]:
+                active = 1
+        tendon_link_active[link_idx] = active
+
+
+@wp.kernel
 def update_tendon_attachments(
     body_q: wp.array[wp.transform],
     tendon_start: wp.array[int],
