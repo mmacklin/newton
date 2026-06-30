@@ -15,7 +15,7 @@ import warp as wp
 import newton
 import newton.examples
 from newton._src.solvers.xpbd.kernels import apply_body_deltas
-from newton.tests.unittest_utils import add_function_test, get_cuda_test_devices, get_test_devices
+from newton.tests.unittest_utils import add_function_test, get_test_devices
 
 
 @wp.kernel
@@ -31,10 +31,51 @@ def _compute_body_com(
     )
 
 
-@wp.kernel
-def _body_translation_loss(body_q: wp.array[wp.transform], loss: wp.array[float]):
-    position = wp.transform_get_translation(body_q[0])
-    loss[0] = position[0] + position[1] + position[2]
+def _apply_test_body_delta(
+    device,
+    q_in,
+    body_com,
+    body_deltas,
+    position_residual=None,
+    orientation_residual=None,
+    orientation_residual_reference=None,
+):
+    """Apply one unconstrained body delta while preserving optional residual buffers."""
+    identity_inertia = wp.mat33(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+    qd_in = wp.zeros(1, dtype=wp.spatial_vector, device=device)
+    body_inertia = wp.array([identity_inertia], dtype=wp.mat33, device=device)
+    body_inv_mass = wp.ones(1, dtype=float, device=device)
+    body_inv_inertia = wp.array([identity_inertia], dtype=wp.mat33, device=device)
+    q_out = wp.empty_like(q_in)
+    qd_out = wp.empty_like(qd_in)
+    if position_residual is None:
+        position_residual = wp.zeros(1, dtype=wp.vec3, device=device)
+    if orientation_residual is None:
+        orientation_residual = wp.zeros(1, dtype=wp.quat, device=device)
+    if orientation_residual_reference is None:
+        orientation_residual_reference = wp.zeros(1, dtype=wp.quat, device=device)
+
+    wp.launch(
+        apply_body_deltas,
+        dim=1,
+        inputs=[
+            q_in,
+            qd_in,
+            body_com,
+            body_inertia,
+            body_inv_mass,
+            body_inv_inertia,
+            body_deltas,
+            None,
+            1.0,
+            position_residual,
+            orientation_residual,
+            orientation_residual_reference,
+        ],
+        outputs=[q_out, qd_out, position_residual, orientation_residual, orientation_residual_reference],
+        device=device,
+    )
+    return q_out, qd_out, position_residual, orientation_residual, orientation_residual_reference
 
 
 def test_particle_particle_friction_uses_relative_velocity(test, device):
@@ -1276,8 +1317,8 @@ def test_xpbd_joint_reaction_f_balances_centered_tendon_load(test, device):
 def test_xpbd_compensated_delta_matches_stored_com(test, device):
     """Compensation should preserve physical COM corrections along every world axis."""
 
-    # The first case detects frame-dependent coefficient reuse. The others cover generic axes and
-    # a deliberately large correction; tolerances scale with float32 machine precision.
+    # These minimized float32 regression inputs avoid the exact arithmetic of axis-aligned poses.
+    # The first detects frame-dependent coefficient reuse; the others cover generic axes.
     cases = [
         (
             "x",
@@ -1298,7 +1339,6 @@ def test_xpbd_compensated_delta_matches_stored_com(test, device):
             [0.45214739441871643, 0.768560528755188, 0.07669907808303833],
         ),
     ]
-    identity_inertia = wp.mat33(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
     linear_delta = np.zeros(3, dtype=np.float64)
 
     for axis, position_values, com_values, angular_values in cases:
@@ -1311,41 +1351,13 @@ def test_xpbd_compensated_delta_matches_stored_com(test, device):
                 dtype=wp.transform,
                 device=device,
             )
-            qd_in = wp.zeros(1, dtype=wp.spatial_vector, device=device)
             body_com = wp.array([com], dtype=wp.vec3, device=device)
-            body_inertia = wp.array([identity_inertia], dtype=wp.mat33, device=device)
-            body_inv_mass = wp.ones(1, dtype=float, device=device)
-            body_inv_inertia = wp.array([identity_inertia], dtype=wp.mat33, device=device)
             body_deltas = wp.array(
                 [wp.spatial_vector(0.0, 0.0, 0.0, angular_delta[0], angular_delta[1], angular_delta[2])],
                 dtype=wp.spatial_vector,
                 device=device,
             )
-            q_out = wp.empty_like(q_in)
-            qd_out = wp.empty_like(qd_in)
-            position_residual = wp.zeros(1, dtype=wp.vec3, device=device)
-            orientation_residual = wp.zeros(1, dtype=wp.quat, device=device)
-
-            wp.launch(
-                apply_body_deltas,
-                dim=1,
-                inputs=[
-                    q_in,
-                    qd_in,
-                    body_com,
-                    body_inertia,
-                    body_inv_mass,
-                    body_inv_inertia,
-                    body_deltas,
-                    None,
-                    1.0,
-                    position_residual,
-                    orientation_residual,
-                    None,
-                ],
-                outputs=[q_out, qd_out, position_residual, orientation_residual, None],
-                device=device,
-            )
+            q_out, _, position_residual, _, _ = _apply_test_body_delta(device, q_in, body_com, body_deltas)
 
             world_com_in = wp.empty(1, dtype=wp.vec3, device=device)
             world_com_out = wp.empty(1, dtype=wp.vec3, device=device)
@@ -1366,300 +1378,6 @@ def test_xpbd_compensated_delta_matches_stored_com(test, device):
             )
 
 
-def test_xpbd_roundoff_state_is_differentiable(test, device):
-    """Roundoff tracking should preserve gradients through multiple body-delta passes."""
-
-    identity_inertia = wp.mat33(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
-    q_in = wp.array(
-        [wp.transform(wp.vec3(12.0, -7.0, 3.0), wp.quat_identity())],
-        dtype=wp.transform,
-        device=device,
-        requires_grad=True,
-    )
-    qd_in = wp.zeros(1, dtype=wp.spatial_vector, device=device, requires_grad=True)
-    body_com = wp.array([wp.vec3(0.7, -0.4, 0.2)], dtype=wp.vec3, device=device)
-    body_inertia = wp.array([identity_inertia], dtype=wp.mat33, device=device)
-    body_inv_mass = wp.ones(1, dtype=float, device=device)
-    body_inv_inertia = wp.array([identity_inertia], dtype=wp.mat33, device=device)
-    body_delta_values = np.array([0.1, -0.2, 0.3, 0.4, -0.5, 0.6], dtype=np.float32)
-    body_deltas = wp.array(
-        [wp.spatial_vector(*body_delta_values)],
-        dtype=wp.spatial_vector,
-        device=device,
-        requires_grad=True,
-    )
-    zero_deltas = wp.zeros(1, dtype=wp.spatial_vector, device=device, requires_grad=True)
-
-    # Residuals are stop-gradient numerical workspace in the solver. Reuse the same buffers here
-    # to cover the allocation-free path used during differentiable CUDA graph capture.
-    position_residual = wp.zeros(1, dtype=wp.vec3, device=device)
-    orientation_residual = wp.zeros(1, dtype=wp.quat, device=device)
-    orientation_reference = wp.zeros(1, dtype=wp.quat, device=device)
-    q_mid = wp.empty_like(q_in, requires_grad=True)
-    qd_mid = wp.empty_like(qd_in, requires_grad=True)
-    q_out = wp.empty_like(q_in, requires_grad=True)
-    qd_out = wp.empty_like(qd_in, requires_grad=True)
-    loss = wp.zeros(1, dtype=float, device=device, requires_grad=True)
-
-    with wp.Tape() as tape:
-        wp.launch(
-            apply_body_deltas,
-            dim=1,
-            inputs=[
-                q_in,
-                qd_in,
-                body_com,
-                body_inertia,
-                body_inv_mass,
-                body_inv_inertia,
-                body_deltas,
-                None,
-                1.0,
-                position_residual,
-                orientation_residual,
-                orientation_reference,
-            ],
-            outputs=[
-                q_mid,
-                qd_mid,
-                position_residual,
-                orientation_residual,
-                orientation_reference,
-            ],
-            device=device,
-        )
-        wp.launch(
-            apply_body_deltas,
-            dim=1,
-            inputs=[
-                q_mid,
-                qd_mid,
-                body_com,
-                body_inertia,
-                body_inv_mass,
-                body_inv_inertia,
-                zero_deltas,
-                None,
-                1.0,
-                position_residual,
-                orientation_residual,
-                orientation_reference,
-            ],
-            outputs=[
-                q_out,
-                qd_out,
-                position_residual,
-                orientation_residual,
-                orientation_reference,
-            ],
-            device=device,
-        )
-        wp.launch(_body_translation_loss, dim=1, inputs=[q_out], outputs=[loss], device=device)
-
-    tape.backward(loss)
-
-    delta_grad = tape.gradients.get(body_deltas)
-    pose_grad = tape.gradients.get(q_in)
-    test.assertIsNotNone(delta_grad)
-    test.assertIsNotNone(pose_grad)
-    test.assertTrue(np.all(np.isfinite(delta_grad.numpy())))
-    test.assertTrue(np.all(np.isfinite(pose_grad.numpy())))
-    test.assertGreater(np.linalg.norm(delta_grad.numpy()), 0.0)
-
-    analytic_gradient = delta_grad.numpy()[0]
-    finite_difference_step = float(np.cbrt(np.finfo(np.float32).eps))
-
-    def evaluate(delta_values):
-        q_eval_in = wp.array(
-            [wp.transform(wp.vec3(12.0, -7.0, 3.0), wp.quat_identity())],
-            dtype=wp.transform,
-            device=device,
-        )
-        qd_eval_in = wp.zeros(1, dtype=wp.spatial_vector, device=device)
-        deltas_eval = wp.array(
-            [wp.spatial_vector(*delta_values)],
-            dtype=wp.spatial_vector,
-            device=device,
-        )
-        zero_deltas_eval = wp.zeros(1, dtype=wp.spatial_vector, device=device)
-        position_residual_eval = wp.zeros(1, dtype=wp.vec3, device=device)
-        orientation_residual_eval = wp.zeros(1, dtype=wp.quat, device=device)
-        orientation_reference_eval = wp.zeros(1, dtype=wp.quat, device=device)
-        q_eval_mid = wp.empty_like(q_eval_in)
-        qd_eval_mid = wp.empty_like(qd_eval_in)
-        q_eval_out = wp.empty_like(q_eval_in)
-        qd_eval_out = wp.empty_like(qd_eval_in)
-
-        wp.launch(
-            apply_body_deltas,
-            dim=1,
-            inputs=[
-                q_eval_in,
-                qd_eval_in,
-                body_com,
-                body_inertia,
-                body_inv_mass,
-                body_inv_inertia,
-                deltas_eval,
-                None,
-                1.0,
-                position_residual_eval,
-                orientation_residual_eval,
-                orientation_reference_eval,
-            ],
-            outputs=[
-                q_eval_mid,
-                qd_eval_mid,
-                position_residual_eval,
-                orientation_residual_eval,
-                orientation_reference_eval,
-            ],
-            device=device,
-        )
-        wp.launch(
-            apply_body_deltas,
-            dim=1,
-            inputs=[
-                q_eval_mid,
-                qd_eval_mid,
-                body_com,
-                body_inertia,
-                body_inv_mass,
-                body_inv_inertia,
-                zero_deltas_eval,
-                None,
-                1.0,
-                position_residual_eval,
-                orientation_residual_eval,
-                orientation_reference_eval,
-            ],
-            outputs=[
-                q_eval_out,
-                qd_eval_out,
-                position_residual_eval,
-                orientation_residual_eval,
-                orientation_reference_eval,
-            ],
-            device=device,
-        )
-        return float(np.sum(q_eval_out.numpy()[0, :3]))
-
-    finite_difference_gradient = np.empty_like(body_delta_values)
-    for component in range(len(body_delta_values)):
-        finite_difference_losses = []
-        for direction in (-1.0, 1.0):
-            perturbed_delta = body_delta_values.copy()
-            perturbed_delta[component] += direction * finite_difference_step
-            finite_difference_losses.append(evaluate(perturbed_delta))
-        finite_difference_gradient[component] = (finite_difference_losses[1] - finite_difference_losses[0]) / (
-            2.0 * finite_difference_step
-        )
-    np.testing.assert_allclose(
-        analytic_gradient,
-        finite_difference_gradient,
-        rtol=5.0e-2,
-        atol=np.finfo(np.float32).eps,
-        err_msg="Compensated body-delta gradient should match a central finite difference",
-    )
-
-
-def test_xpbd_joint_roundoff_state_is_differentiable(test, device):
-    """XPBD joint compensation should preserve gradient flow through a full solver step."""
-
-    builder = newton.ModelBuilder(gravity=-9.81, up_axis=newton.Axis.Z)
-    body = builder.add_link()
-    builder.add_shape_box(
-        body,
-        xform=wp.transform(wp.vec3(0.5, 0.0, 0.0), wp.quat_identity()),
-        hx=0.5,
-        hy=0.05,
-        hz=0.05,
-    )
-    joint = builder.add_joint_revolute(
-        -1,
-        body,
-        parent_xform=wp.transform_identity(),
-        child_xform=wp.transform_identity(),
-        axis=wp.vec3(0.0, 1.0, 0.0),
-    )
-    builder.add_articulation([joint])
-    model = builder.finalize(device=device, requires_grad=True)
-
-    joint_q = model.joint_q.numpy()
-    joint_qd = model.joint_qd.numpy()
-    joint_q[0] = 0.4
-    joint_qd[0] = 1.7
-    model.joint_q.assign(joint_q)
-    model.joint_qd.assign(joint_qd)
-
-    state_in = model.state(requires_grad=True)
-    state_out = model.state(requires_grad=True)
-    newton.eval_fk(model, model.joint_q, model.joint_qd, state_in)
-    state_in.clear_forces()
-    solver = newton.solvers.SolverXPBD(
-        model,
-        iterations=8,
-        joint_linear_relaxation=1.0,
-        joint_angular_relaxation=1.0,
-    )
-    control = model.control()
-    dt = 1.0e-2
-    loss = wp.zeros(1, dtype=float, device=device, requires_grad=True)
-
-    with wp.Tape() as tape:
-        solver.step(state_in, state_out, control, None, dt)
-        wp.launch(_body_translation_loss, dim=1, inputs=[state_out.body_q], outputs=[loss], device=device)
-
-    tape.backward(loss)
-
-    pose_grad = tape.gradients.get(state_in.body_q)
-    velocity_grad = tape.gradients.get(state_in.body_qd)
-    test.assertIsNotNone(pose_grad)
-    test.assertIsNotNone(velocity_grad)
-    test.assertTrue(np.all(np.isfinite(pose_grad.numpy())))
-    test.assertTrue(np.all(np.isfinite(velocity_grad.numpy())))
-    test.assertGreater(np.linalg.norm(pose_grad.numpy()) + np.linalg.norm(velocity_grad.numpy()), 0.0)
-
-
-def test_xpbd_joint_roundoff_cuda_graph_capture(test, device):
-    """Differentiable joint compensation should remain CUDA graph-capturable."""
-
-    builder = newton.ModelBuilder(gravity=-9.81, up_axis=newton.Axis.Z)
-    body = builder.add_link()
-    builder.add_shape_box(body, hx=0.5, hy=0.05, hz=0.05)
-    joint = builder.add_joint_revolute(-1, body, axis=wp.vec3(0.0, 1.0, 0.0))
-    builder.add_articulation([joint])
-    model = builder.finalize(device=device, requires_grad=True)
-    solver = newton.solvers.SolverXPBD(model, iterations=8)
-    control = model.control()
-
-    # Compile all kernels before capture so this test isolates graph compatibility.
-    warm_in = model.state(requires_grad=True)
-    warm_out = model.state(requires_grad=True)
-    warm_in.clear_forces()
-    warm_loss = wp.zeros(1, dtype=float, device=device, requires_grad=True)
-    with wp.Tape() as warm_tape:
-        solver.step(warm_in, warm_out, control, None, 1.0e-2)
-        wp.launch(_body_translation_loss, dim=1, inputs=[warm_out.body_q], outputs=[warm_loss], device=device)
-    warm_tape.backward(warm_loss)
-
-    state_in = model.state(requires_grad=True)
-    state_out = model.state(requires_grad=True)
-    state_in.clear_forces()
-    loss = wp.zeros(1, dtype=float, device=device, requires_grad=True)
-    tape = wp.Tape()
-    with wp.ScopedCapture(device=device) as capture:
-        with tape:
-            solver.step(state_in, state_out, control, None, 1.0e-2)
-            wp.launch(_body_translation_loss, dim=1, inputs=[state_out.body_q], outputs=[loss], device=device)
-        tape.backward(loss)
-
-    wp.capture_launch(capture.graph)
-    pose_grad = tape.gradients.get(state_in.body_q)
-    test.assertIsNotNone(pose_grad)
-    test.assertTrue(np.all(np.isfinite(pose_grad.numpy())))
-
-
 def test_xpbd_orientation_residual_survives_independent_rotation(test, device):
     """Orientation compensation should survive varied corrections and independent rotations."""
 
@@ -1675,6 +1393,8 @@ def test_xpbd_orientation_residual_survives_independent_rotation(test, device):
         return q / np.linalg.norm(q)
 
     float32_epsilon = np.finfo(np.float32).eps
+    # Keep the exact coefficients: simpler axis-aligned inputs often normalize without leaving a
+    # residual and therefore miss the quaternion-rebasing bug.
     cases = [
         (
             "sub_resolution",
@@ -1698,8 +1418,6 @@ def test_xpbd_orientation_residual_survives_independent_rotation(test, device):
             2.0 * float32_epsilon,
         ),
     ]
-    identity_inertia = wp.mat33(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
-
     for name, orientation_values, independent_values, angular_values, tolerance in cases:
         with test.subTest(name=name):
             orientation = np.array(orientation_values, dtype=np.float64)
@@ -1710,47 +1428,14 @@ def test_xpbd_orientation_residual_survives_independent_rotation(test, device):
                 dtype=wp.transform,
                 device=device,
             )
-            qd_in = wp.zeros(1, dtype=wp.spatial_vector, device=device)
             body_com = wp.zeros(1, dtype=wp.vec3, device=device)
-            body_inertia = wp.array([identity_inertia], dtype=wp.mat33, device=device)
-            body_inv_mass = wp.ones(1, dtype=float, device=device)
-            body_inv_inertia = wp.array([identity_inertia], dtype=wp.mat33, device=device)
             body_deltas = wp.array(
                 [wp.spatial_vector(0.0, 0.0, 0.0, *angular_delta)],
                 dtype=wp.spatial_vector,
                 device=device,
             )
-            q_mid = wp.empty_like(q_in)
-            qd_mid = wp.empty_like(qd_in)
-            position_residual = wp.zeros(1, dtype=wp.vec3, device=device)
-            orientation_residual = wp.zeros(1, dtype=wp.quat, device=device)
-            orientation_residual_reference = wp.zeros(1, dtype=wp.quat, device=device)
-
-            wp.launch(
-                apply_body_deltas,
-                dim=1,
-                inputs=[
-                    q_in,
-                    qd_in,
-                    body_com,
-                    body_inertia,
-                    body_inv_mass,
-                    body_inv_inertia,
-                    body_deltas,
-                    None,
-                    1.0,
-                    position_residual,
-                    orientation_residual,
-                    orientation_residual_reference,
-                ],
-                outputs=[
-                    q_mid,
-                    qd_mid,
-                    position_residual,
-                    orientation_residual,
-                    orientation_residual_reference,
-                ],
-                device=device,
+            q_mid, qd_mid, position_residual, orientation_residual, orientation_residual_reference = (
+                _apply_test_body_delta(device, q_in, body_com, body_deltas)
             )
 
             independently_rotated_q = wp.array(
@@ -1758,34 +1443,15 @@ def test_xpbd_orientation_residual_survives_independent_rotation(test, device):
                 dtype=wp.transform,
                 device=device,
             )
-            q_out = wp.empty_like(q_in)
-            qd_out = wp.empty_like(qd_in)
             body_deltas.zero_()
-            wp.launch(
-                apply_body_deltas,
-                dim=1,
-                inputs=[
-                    independently_rotated_q,
-                    qd_in,
-                    body_com,
-                    body_inertia,
-                    body_inv_mass,
-                    body_inv_inertia,
-                    body_deltas,
-                    None,
-                    1.0,
-                    position_residual,
-                    orientation_residual,
-                    orientation_residual_reference,
-                ],
-                outputs=[
-                    q_out,
-                    qd_out,
-                    position_residual,
-                    orientation_residual,
-                    orientation_residual_reference,
-                ],
-                device=device,
+            q_out, _, _, _, _ = _apply_test_body_delta(
+                device,
+                independently_rotated_q,
+                body_com,
+                body_deltas,
+                position_residual,
+                orientation_residual,
+                orientation_residual_reference,
             )
 
             stored_mid_orientation = q_mid.numpy()[0, 3:].astype(np.float64)
@@ -1815,6 +1481,8 @@ def test_xpbd_orientation_residual_survives_independent_rotation(test, device):
 def test_xpbd_joint_reaction_f_matches_offset_tendon_load_at_large_pose(test, device):
     """Joint reaction should balance a known tendon wrench at a large world pose."""
 
+    # A generic large transform exposes the lost COM corrections that an origin-centered fixture
+    # rounds too accurately to detect.
     position = np.array([78.8276025390625, 91.031767578125, -4.9664501953125], dtype=np.float64)
     orientation = np.array(
         [-0.5250166058540344, 0.24299220740795135, -0.7181521058082581, 0.3867427706718445],
@@ -1957,9 +1625,9 @@ def test_xpbd_joint_reaction_f_stable_after_convergence(test, device):
     control = model.control()
     contacts = model.contacts()
 
-    def run(iterations, requires_grad):
-        state_in = model.state(requires_grad=requires_grad)
-        state_out = model.state(requires_grad=requires_grad)
+    def run(iterations):
+        state_in = model.state()
+        state_out = model.state()
         state_in.body_q.assign(initial_body_q)
         state_in.body_qd.assign(initial_body_qd)
         state_in.clear_forces()
@@ -1967,19 +1635,17 @@ def test_xpbd_joint_reaction_f_stable_after_convergence(test, device):
         solver.step(state_in, state_out, control, contacts, 1.0e-3)
         return solver.joint_reaction_f.numpy()[joint]
 
-    for requires_grad in (False, True):
-        with test.subTest(requires_grad=requires_grad):
-            converged_reaction = run(16, requires_grad)
-            extra_iteration_reaction = run(128, requires_grad)
+    converged_reaction = run(16)
+    extra_iteration_reaction = run(128)
 
-            test.assertGreater(np.linalg.norm(converged_reaction[:3]), 1.0)
-            np.testing.assert_allclose(
-                extra_iteration_reaction,
-                converged_reaction,
-                rtol=0.0,
-                atol=1.0e-6,
-                err_msg="Joint reaction should not accumulate sub-resolution corrections after convergence",
-            )
+    test.assertGreater(np.linalg.norm(converged_reaction[:3]), 1.0)
+    np.testing.assert_allclose(
+        extra_iteration_reaction,
+        converged_reaction,
+        rtol=0.0,
+        atol=1.0e-6,
+        err_msg="Joint reaction should not accumulate sub-resolution corrections after convergence",
+    )
 
 
 def test_xpbd_dynamic_pair_reaction_stable_after_convergence(test, device):
@@ -2057,9 +1723,9 @@ def test_xpbd_dynamic_pair_reaction_stable_after_convergence(test, device):
     control = model.control()
     contacts = model.contacts()
 
-    def run(iterations, requires_grad):
-        state_in = model.state(requires_grad=requires_grad)
-        state_out = model.state(requires_grad=requires_grad)
+    def run(iterations):
+        state_in = model.state()
+        state_out = model.state()
         state_in.body_q.assign(initial_body_q)
         state_in.body_qd.assign(initial_body_qd)
         state_in.clear_forces()
@@ -2070,17 +1736,13 @@ def test_xpbd_dynamic_pair_reaction_stable_after_convergence(test, device):
         final_momentum = np.sum(body_mass[:, None] * final_body_qd[:, :3], axis=0)
         return reaction, final_momentum
 
-    for requires_grad in (False, True):
-        with test.subTest(requires_grad=requires_grad):
-            converged_reaction, converged_momentum = run(256, requires_grad)
-            extra_iteration_reaction, extra_iteration_momentum = run(512, requires_grad)
+    converged_reaction, converged_momentum = run(256)
+    extra_iteration_reaction, extra_iteration_momentum = run(512)
 
-            relative_change = np.linalg.norm(extra_iteration_reaction - converged_reaction) / np.linalg.norm(
-                converged_reaction
-            )
-            test.assertLess(relative_change, 1.0e-6)
-            np.testing.assert_allclose(converged_momentum, initial_momentum, rtol=1.0e-6, atol=1.0e-3)
-            np.testing.assert_allclose(extra_iteration_momentum, initial_momentum, rtol=1.0e-6, atol=1.0e-3)
+    relative_change = np.linalg.norm(extra_iteration_reaction - converged_reaction) / np.linalg.norm(converged_reaction)
+    test.assertLess(relative_change, 1.0e-6)
+    np.testing.assert_allclose(converged_momentum, initial_momentum, rtol=1.0e-6, atol=1.0e-3)
+    np.testing.assert_allclose(extra_iteration_momentum, initial_momentum, rtol=1.0e-6, atol=1.0e-3)
 
 
 def test_xpbd_joint_reaction_f_includes_offset_tendon_torque(test, device):
@@ -2679,30 +2341,6 @@ add_function_test(
     "test_xpbd_compensated_delta_matches_stored_com",
     test_xpbd_compensated_delta_matches_stored_com,
     devices=devices,
-    check_output=False,
-)
-
-add_function_test(
-    TestSolverXPBD,
-    "test_xpbd_roundoff_state_is_differentiable",
-    test_xpbd_roundoff_state_is_differentiable,
-    devices=devices,
-    check_output=False,
-)
-
-add_function_test(
-    TestSolverXPBD,
-    "test_xpbd_joint_roundoff_state_is_differentiable",
-    test_xpbd_joint_roundoff_state_is_differentiable,
-    devices=devices,
-    check_output=False,
-)
-
-add_function_test(
-    TestSolverXPBD,
-    "test_xpbd_joint_roundoff_cuda_graph_capture",
-    test_xpbd_joint_roundoff_cuda_graph_capture,
-    devices=get_cuda_test_devices(),
     check_output=False,
 )
 

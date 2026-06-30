@@ -257,10 +257,9 @@ class SolverXPBD(TendonStateMixin, SolverBase):
             position_delta_residual = None
             orientation_delta_residual = None
             orientation_delta_residual_reference = None
-            if compensate_roundoff:
-                # Roundoff is numerical workspace rather than physical simulation state. Keep it
-                # solver-owned and stop-gradient so body-delta application remains allocation-free
-                # and CUDA graph-capturable, including when the surrounding state records gradients.
+            if compensate_roundoff and not state_in.requires_grad:
+                # Tape needs immutable primals, while this numerical workspace is updated in place.
+                # Keep differentiable XPBD on its established uncompensated update path for now.
                 position_delta_residual = self._joint_position_delta_residual
                 orientation_delta_residual = self._joint_orientation_delta_residual
                 orientation_delta_residual_reference = self._joint_orientation_delta_residual_reference
@@ -306,7 +305,7 @@ class SolverXPBD(TendonStateMixin, SolverBase):
 
         model = self.model
 
-        if model.joint_count:
+        if model.joint_count and not state_in.requires_grad:
             self._joint_position_delta_residual.zero_()
             self._joint_orientation_delta_residual.zero_()
             self._joint_orientation_delta_residual_reference.zero_()
