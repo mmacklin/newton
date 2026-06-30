@@ -817,21 +817,27 @@ def apply_body_deltas(
     deltas: wp.array[wp.spatial_vector],
     constraint_inv_weights: wp.array[float],
     dt: float,
+    position_delta_residual_in: wp.array[wp.vec3],
+    orientation_delta_residual_in: wp.array[wp.quat],
+    orientation_delta_residual_reference_in: wp.array[wp.quat],
     # outputs
     q_out: wp.array[wp.transform],
     qd_out: wp.array[wp.spatial_vector],
-    position_delta_residual: wp.array[wp.vec3],
-    orientation_delta_residual: wp.array[wp.quat],
+    position_delta_residual_out: wp.array[wp.vec3],
+    orientation_delta_residual_out: wp.array[wp.quat],
+    orientation_delta_residual_reference_out: wp.array[wp.quat],
 ):
     tid = wp.tid()
     inv_m = body_inv_m[tid]
     if inv_m == 0.0:
         q_out[tid] = q_in[tid]
         qd_out[tid] = qd_in[tid]
-        if position_delta_residual:
-            position_delta_residual[tid] = wp.vec3(0.0)
-        if orientation_delta_residual:
-            orientation_delta_residual[tid] = wp.quat(0.0, 0.0, 0.0, 0.0)
+        if position_delta_residual_out:
+            position_delta_residual_out[tid] = wp.vec3(0.0)
+        if orientation_delta_residual_out:
+            orientation_delta_residual_out[tid] = wp.quat(0.0, 0.0, 0.0, 0.0)
+        if orientation_delta_residual_reference_out:
+            orientation_delta_residual_reference_out[tid] = wp.transform_get_rotation(q_in[tid])
         return
     inv_I = body_inv_I[tid]
 
@@ -860,27 +866,58 @@ def apply_body_deltas(
     dw1 = wp.quat_rotate(q0, dwb - dt * inv_I * tb)
 
     linear_residual = wp.vec3(0.0)
-    if position_delta_residual:
-        linear_residual = position_delta_residual[tid]
+    if position_delta_residual_in:
+        linear_residual = position_delta_residual_in[tid]
 
     angular_residual = wp.quat(0.0, 0.0, 0.0, 0.0)
-    if orientation_delta_residual:
-        angular_residual = orientation_delta_residual[tid]
+    if orientation_delta_residual_in:
+        angular_residual = orientation_delta_residual_in[tid]
 
-    # Compensate the additive quaternion update before applying the established normalization.
-    q_step = 0.5 * wp.quat(dw1 * dt, 0.0) * q0 + angular_residual
+    q_step_base = 0.5 * wp.quat(dw1 * dt, 0.0) * q0
+    q_step = q_step_base + angular_residual
     q1_pre = q0 + q_step
-    angular_residual = q_step - (q1_pre - q0)
     q1 = wp.normalize(q1_pre)
 
-    # Compensated COM update keeps the float32 remainder separate from the absolute position.
+    # Quaternion coefficient residuals are tied to the pose that produced them. Compare the two
+    # normalized float32 candidates directly so rebasing happens only when it changes the stored
+    # orientation. Opposite quaternion signs represent the same orientation.
+    has_angular_residual = (
+        angular_residual[0] != 0.0
+        or angular_residual[1] != 0.0
+        or angular_residual[2] != 0.0
+        or angular_residual[3] != 0.0
+    )
+    if has_angular_residual and orientation_delta_residual_reference_in:
+        q_reference = orientation_delta_residual_reference_in[tid]
+        missing_world_step = angular_residual * wp.quat_inverse(q_reference)
+        rebased_angular_residual = missing_world_step * q0
+        rebased_q_step = q_step_base + rebased_angular_residual
+        rebased_q1_pre = q0 + rebased_q_step
+        rebased_q1 = wp.normalize(rebased_q1_pre)
+        same_orientation = (
+            q1[0] == rebased_q1[0] and q1[1] == rebased_q1[1] and q1[2] == rebased_q1[2] and q1[3] == rebased_q1[3]
+        )
+        opposite_orientation = (
+            q1[0] == -rebased_q1[0] and q1[1] == -rebased_q1[1] and q1[2] == -rebased_q1[2] and q1[3] == -rebased_q1[3]
+        )
+        if not same_orientation and not opposite_orientation:
+            angular_residual = rebased_angular_residual
+            q_step = rebased_q_step
+            q1_pre = rebased_q1_pre
+            q1 = rebased_q1
+
+    angular_residual = q_step - (q1_pre - q0)
+
+    # Measure compensation from the COM reconstructed from the final stored pose. This includes
+    # roundoff from both the COM update and the COM-to-body-origin reconstruction.
     com = body_com[tid]
     x_com = p0 + wp.quat_rotate(q0, com)
     linear_step = dp * dt + linear_residual
     x_com_new = x_com + linear_step
-    linear_residual = linear_step - (x_com_new - x_com)
-    p1 = x_com_new
-    p1 -= wp.quat_rotate(q1, com)
+    rotated_com_1 = wp.quat_rotate(q1, com)
+    p1 = x_com_new - rotated_com_1
+    x_com_stored = p1 + rotated_com_1
+    linear_residual = linear_step - (x_com_stored - x_com)
 
     q_out[tid] = wp.transform(p1, q1)
 
@@ -895,10 +932,12 @@ def apply_body_deltas(
         w1 = wp.vec3(0.0)
 
     qd_out[tid] = wp.spatial_vector(v1, w1)
-    if position_delta_residual:
-        position_delta_residual[tid] = linear_residual
-    if orientation_delta_residual:
-        orientation_delta_residual[tid] = angular_residual
+    if position_delta_residual_out:
+        position_delta_residual_out[tid] = linear_residual
+    if orientation_delta_residual_out:
+        orientation_delta_residual_out[tid] = angular_residual
+    if orientation_delta_residual_reference_out:
+        orientation_delta_residual_reference_out[tid] = q1
 
 
 @wp.kernel
