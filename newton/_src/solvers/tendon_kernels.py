@@ -100,6 +100,7 @@ def update_tendon_attachments(
     tendon_link_axis: wp.array[wp.vec3],
     seg_rest_length: wp.array[float],
     seg_rest_length_step: wp.array[float],
+    seg_stretch: wp.array[float],
     seg_compliance: wp.array[float],
     seg_damping: wp.array[float],
     seg_active: wp.array[int],
@@ -287,6 +288,20 @@ def update_tendon_attachments(
         seg_rest_length[seg_right] = rest_r
 
     if apply_rolling_transfer != 0 or apply_pinhole_slip != 0:
+        # Snapshot the per-segment stretch d = len - rest ONCE, at its own (~1e-7) scale. The
+        # capstan sweeps below run on this stored d, not on a fresh len-rest each sweep: for a
+        # stiff cable d is a tiny difference of ~1e-3 lengths, so recomputing it every sweep
+        # loses the (even tinier) friction transfers to float32 cancellation. len is constant
+        # during this call (bodies move only in the stretch solve), so the cancellation is paid
+        # once here; the sweeps then accumulate transfers precisely. rest is rebuilt at the end.
+        for s_snap in range(num_segs):
+            seg = seg_offset + s_snap
+            if seg_active[seg] != 0:
+                len_snap = wp.length(seg_attachment_r[seg] - seg_attachment_l[seg])
+                # raw (signed) stretch: negative when the span is slack -- preserved so the
+                # rebuild below conserves total cable length (rest = len - stretch).
+                seg_stretch[seg] = len_snap - seg_rest_length[seg]
+
         material_sweep_count = int(4)
         for i in range(1, num_links - 1):
             link_idx = link_start + i
@@ -339,14 +354,18 @@ def update_tendon_attachments(
                         cap_ratio = wp.exp(wp.min(wp.max(tendon_link_mu[link_idx], 0.0) * theta, 20.0))
                         beta = (cap_ratio - 1.0) / (cap_ratio + 1.0)
 
-                        rest_l = seg_rest_length[seg_adj_left] + seg_rolling_delta_r[seg_adj_left] * beta
-                        rest_r = seg_rest_length[seg_adj_right] + seg_rolling_delta_l[seg_adj_right] * beta
-                        if rest_l < min_rest:
-                            rest_l = min_rest
-                        if rest_r < min_rest:
-                            rest_r = min_rest
-                        seg_rest_length[seg_adj_left] = rest_l
-                        seg_rest_length[seg_adj_right] = rest_r
+                        # rolling beta-nudge, expressed on the stretch state (rest += x  <=>  d -= x);
+                        # rest >= min_rest  <=>  d <= len - min_rest.
+                        len_al = wp.length(seg_attachment_r[seg_adj_left] - seg_attachment_l[seg_adj_left])
+                        len_ar = wp.length(seg_attachment_r[seg_adj_right] - seg_attachment_l[seg_adj_right])
+                        stretch_l = seg_stretch[seg_adj_left] - seg_rolling_delta_r[seg_adj_left] * beta
+                        stretch_r = seg_stretch[seg_adj_right] - seg_rolling_delta_l[seg_adj_right] * beta
+                        if stretch_l > len_al - min_rest:
+                            stretch_l = len_al - min_rest
+                        if stretch_r > len_ar - min_rest:
+                            stretch_r = len_ar - min_rest
+                        seg_stretch[seg_adj_left] = stretch_l
+                        seg_stretch[seg_adj_right] = stretch_r
 
                 seg_left = int(-1)
                 seg_right = int(-1)
@@ -433,16 +452,22 @@ def update_tendon_attachments(
 
                 len_l = wp.length(seg_attachment_r[seg_left] - seg_attachment_l[seg_left])
                 len_r = wp.length(seg_attachment_r[seg_right] - seg_attachment_l[seg_right])
-                d_l = len_l - seg_rest_length[seg_left]
-                d_r = len_r - seg_rest_length[seg_right]
+                # work on the precise stretch state instead of recomputing len-rest each sweep.
+                # keep the raw stretch (may be negative when a span is slack) separate from the
+                # clamped value used only in the force ratio -- the transfer is applied to the raw
+                # stretch so slack material is conserved (rest = len - stretch), exactly as the
+                # original code applied delta to seg_rest_length.
+                d_l_raw = seg_stretch[seg_left]
+                d_r_raw = seg_stretch[seg_right]
+                d_l = wp.max(d_l_raw, 0.0)
+                d_r = wp.max(d_r_raw, 0.0)
 
-                if d_l < 0.0:
-                    d_l = 0.0
-                if d_r < 0.0:
-                    d_r = 0.0
-
-                comp_l = wp.max(seg_active_compliance[seg_left], 1.0e-8)
-                comp_r = wp.max(seg_active_compliance[seg_right], 1.0e-8)
+                # use the true per-segment compliance for the cone: the precise stretch state
+                # above removes the conditioning need for the old 1e-8 floor, and clamping here
+                # would mismatch the cone (d/clamp) against the real tension (d/comp) and inflate
+                # interior tensions across a compliance jump (e.g. c = rest/EA short segments).
+                comp_l = wp.max(seg_active_compliance[seg_left], 1.0e-30)
+                comp_r = wp.max(seg_active_compliance[seg_right], 1.0e-30)
                 force_l = d_l / comp_l
                 force_r = d_r / comp_r
                 delta = float(0.0)
@@ -452,21 +477,32 @@ def update_tendon_attachments(
                     delta = (comp_r * d_l - cap_ratio * comp_l * d_r) / (comp_r + cap_ratio * comp_l)
                     if delta < 0.0:
                         delta = 0.0
-                    max_delta = seg_rest_length[seg_right] - min_rest
+                    # rest_right -= delta must keep rest_right >= min_rest; rest_right = len_r - d_r_raw
+                    max_delta = len_r - d_r_raw - min_rest
                     if max_delta < 0.0:
                         max_delta = 0.0
                     if delta > max_delta:
                         delta = max_delta
-                    seg_rest_length[seg_left] = seg_rest_length[seg_left] + delta
-                    seg_rest_length[seg_right] = seg_rest_length[seg_right] - delta
+                    # rest_left += delta => d_l -= delta ; rest_right -= delta => d_r += delta
+                    seg_stretch[seg_left] = d_l_raw - delta
+                    seg_stretch[seg_right] = d_r_raw + delta
                 elif force_r > force_l * cap_ratio:
                     delta = (comp_l * d_r - cap_ratio * comp_r * d_l) / (comp_l + cap_ratio * comp_r)
                     if delta < 0.0:
                         delta = 0.0
-                    max_delta = seg_rest_length[seg_left] - min_rest
+                    max_delta = len_l - d_l_raw - min_rest
                     if max_delta < 0.0:
                         max_delta = 0.0
                     if delta > max_delta:
                         delta = max_delta
-                    seg_rest_length[seg_left] = seg_rest_length[seg_left] - delta
-                    seg_rest_length[seg_right] = seg_rest_length[seg_right] + delta
+                    seg_stretch[seg_left] = d_l_raw + delta
+                    seg_stretch[seg_right] = d_r_raw - delta
+
+        # rebuild rest lengths from the telescoped stretch state (one cancellation per call,
+        # paid once instead of every sweep -- this is what keeps the capstan accurate for stiff
+        # cables where d = len - rest would otherwise vanish into float32 noise).
+        for s_wb in range(num_segs):
+            seg = seg_offset + s_wb
+            if seg_active[seg] != 0:
+                len_wb = wp.length(seg_attachment_r[seg] - seg_attachment_l[seg])
+                seg_rest_length[seg] = wp.max(len_wb - seg_stretch[seg], min_rest)

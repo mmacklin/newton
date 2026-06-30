@@ -2332,6 +2332,7 @@ class SolverVBD(TendonStateMixin, SolverBase):
                 model.tendon_link_axis,
                 self.tendon_seg_rest_length,
                 self.tendon_seg_rest_length_step,
+                self.tendon_seg_stretch,
                 model.tendon_seg_compliance,
                 model.tendon_seg_damping,
                 self.tendon_seg_active,
