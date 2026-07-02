@@ -200,12 +200,17 @@ class TendonStateMixin:
             # transport (kept at its own scale so stiff-cable friction transfers survive float32)
             self.tendon_seg_stretch = wp.zeros_like(self.tendon_seg_rest_length)
 
-            route_rest_np, route_seg_mask = self._compute_active_route_rest_lengths(model)
             link_type_np = model.tendon_link_type.numpy()
             link_state_np = model.tendon_link_active.numpy()
             self._has_dynamic_tendon_links = bool(
-                np.any((link_type_np == int(TendonLinkType.ROLLING)) & (link_state_np != int(TendonLinkState.FIXED)))
+                np.any((link_type_np == int(TendonLinkType.ROLLING)) & (link_state_np == int(TendonLinkState.DYNAMIC)))
             )
+            if self._has_dynamic_tendon_links and model.body_q is not None:
+                # Resolve the initial topology before measuring its free-span rest lengths.
+                self._update_tendon_link_active(model, model.body_q)
+                wp.copy(self.tendon_link_active_step, self.tendon_link_active)
+
+            route_rest_np, route_seg_mask = self._compute_active_route_rest_lengths(model)
             self.tendon_link_route_rest_length = wp.array(route_rest_np, dtype=float, device=model.device)
 
             self._init_tendon_attachment_points(model, auto_mask, route_seg_mask)
@@ -243,7 +248,6 @@ class TendonStateMixin:
                 model.tendon_link_orientation,
                 model.tendon_link_offset,
                 model.tendon_link_axis,
-                self.tendon_link_route_rest_length,
                 self.tendon_link_active,
             ],
             device=model.device,
@@ -262,7 +266,7 @@ class TendonStateMixin:
         link_type = model.tendon_link_type.numpy()
         link_radius = model.tendon_link_radius.numpy()
         link_orientation = model.tendon_link_orientation.numpy()
-        link_active = model.tendon_link_active.numpy()
+        link_active = self.tendon_link_active.numpy()
         link_offset = model.tendon_link_offset.numpy()
         link_axis = model.tendon_link_axis.numpy()
         body_q_np = body_q.numpy()

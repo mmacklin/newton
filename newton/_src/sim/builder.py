@@ -4493,7 +4493,7 @@ class ModelBuilder:
         radius: float = 0.0,
         orientation: int = 1,
         mu: float = 0.0,
-        active: bool | None = None,
+        dynamic: bool = False,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         axis: tuple[float, float, float] = (0.0, 0.0, 1.0),
         compliance: float = 0.0,
@@ -4513,10 +4513,9 @@ class ModelBuilder:
             radius: Contact radius [m] for ROLLING links (pulley radius).
             orientation: Winding direction, +1 or -1.
             mu: Coulomb friction coefficient at this contact.
-            active: Dynamic routing state. ``None`` keeps the link permanently
-                active. ``True`` and ``False`` allow
-                :class:`~newton.solvers.SolverXPBD` to update a ROLLING link and
-                select whether it starts active or inactive.
+            dynamic: Whether :class:`~newton.solvers.SolverXPBD` should update
+                this ROLLING link from the current route geometry. The initial
+                state is resolved before tendon rest lengths are measured.
             offset: Local-frame position of the cable plane center on the body [m].
             axis: Local-frame normal of the cable plane on the body.
             compliance: Compliance [m/N] for the segment ending at this link
@@ -4531,14 +4530,14 @@ class ModelBuilder:
         """
         link_idx = len(self.tendon_link_body)
         tendon_link_start = self.tendon_start[-1]
-        if active is not None and link_type != int(TendonLinkType.ROLLING):
-            raise ValueError("active may only be set for ROLLING tendon links")
+        if dynamic and link_type != int(TendonLinkType.ROLLING):
+            raise ValueError("dynamic routing is only supported for ROLLING tendon links")
         if (
             link_idx > tendon_link_start
             and link_type == int(TendonLinkType.ROLLING)
-            and active is not None
+            and dynamic
             and self.tendon_link_type[-1] == int(TendonLinkType.ROLLING)
-            and self.tendon_link_active[-1] != int(TendonLinkState.FIXED)
+            and self.tendon_link_active[-1] == int(TendonLinkState.DYNAMIC)
         ):
             raise ValueError("Consecutive dynamic ROLLING tendon links are not supported")
 
@@ -4547,12 +4546,7 @@ class ModelBuilder:
         self.tendon_link_radius.append(radius)
         self.tendon_link_orientation.append(orientation)
         self.tendon_link_mu.append(mu)
-        if active is None:
-            route_state = TendonLinkState.FIXED
-        elif active:
-            route_state = TendonLinkState.ACTIVE
-        else:
-            route_state = TendonLinkState.INACTIVE
+        route_state = TendonLinkState.DYNAMIC if dynamic else TendonLinkState.FIXED
         self.tendon_link_active.append(int(route_state))
         self.tendon_link_offset.append(offset)
         self.tendon_link_axis.append(axis)

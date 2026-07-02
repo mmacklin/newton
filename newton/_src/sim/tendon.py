@@ -49,5 +49,8 @@ class TendonLinkState(IntEnum):
     ACTIVE = 1
     """Link is dynamically routed and currently active."""
 
+    DYNAMIC = 2
+    """Link is dynamically routed and its initial state has not been resolved."""
+
     FIXED = 3
     """Link is permanently active and excluded from dynamic routing."""

@@ -139,7 +139,6 @@ def update_tendon_link_active(
     tendon_link_orientation: wp.array[int],
     tendon_link_offset: wp.array[wp.vec3],
     tendon_link_axis: wp.array[wp.vec3],
-    tendon_link_route_rest_length: wp.array[float],
     tendon_link_active: wp.array[int],
 ):
     """Update optional rolling links from intersection with their bypass span."""
