@@ -572,5 +572,5 @@
     }
   ],
   "scenario": "robot-foot",
-  "source": "attached_internal_three_pushrod_robot_foot"
+  "source": "newton_example_kamino_robot_foot"
 }

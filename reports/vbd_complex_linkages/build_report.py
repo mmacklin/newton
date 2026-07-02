@@ -326,6 +326,7 @@ apply_pose_updates(delta, relaxation)</code></pre>
   <a href="{GITHUB_BLOB}/newton/_src/solvers/vbd/rigid_sparse_articulation.py">Symbolic layout</a>
   <a href="{GITHUB_BLOB}/newton/_src/solvers/vbd/rigid_sparse_articulation_kernels.py">Warp assembly and solve kernels</a>
   <a href="{GITHUB_BLOB}/newton/_src/solvers/vbd/solver_vbd.py">Solver integration</a>
+  <a href="{GITHUB_BLOB}/newton/examples/kamino/example_kamino_robot_foot.py">Three-pushrod robot-foot example</a>
   <a href="{GITHUB_BLOB}/newton/tests/test_vbd_sparse_articulation.py">Regression tests</a>
   <a href="{GITHUB_BLOB}/reports/vbd_sparse_articulation/bench_vbd_sparse_articulation.py">Synthetic benchmark</a>
   <a href="{GITHUB_BLOB}/reports/vbd_sparse_articulation/bench_robot_perf.py">Robot performance harness</a>

@@ -23,15 +23,8 @@ import warp as wp
 
 import newton
 
-EXTERNAL = Path("/home/horde/external-assets")
-ATTACHED_DEMO = (
-    EXTERNAL
-    / "kamino_linkage_demos_20260625"
-    / "src"
-    / "newton"
-    / "examples"
-    / "kamino"
-    / "example_kamino_robot_foot.py"
+ROBOT_FOOT_EXAMPLE = (
+    Path(__file__).resolve().parents[2] / "newton" / "examples" / "kamino" / "example_kamino_robot_foot.py"
 )
 
 
@@ -150,12 +143,12 @@ DR_LEGS_MODES.update(
 )
 
 
-def _load_attached_robot_foot() -> ModuleType:
-    if not ATTACHED_DEMO.is_file():
-        raise FileNotFoundError(f"Missing attached robot-foot demo: {ATTACHED_DEMO}")
-    spec = importlib.util.spec_from_file_location("attached_kamino_robot_foot", ATTACHED_DEMO)
+def _load_robot_foot_example() -> ModuleType:
+    if not ROBOT_FOOT_EXAMPLE.is_file():
+        raise FileNotFoundError(f"Missing robot-foot example: {ROBOT_FOOT_EXAMPLE}")
+    spec = importlib.util.spec_from_file_location("kamino_robot_foot", ROBOT_FOOT_EXAMPLE)
     if spec is None or spec.loader is None:
-        raise ImportError(f"Could not load {ATTACHED_DEMO}")
+        raise ImportError(f"Could not load {ROBOT_FOOT_EXAMPLE}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -172,7 +165,7 @@ def _single_closed_loop_articulation(builder: newton.ModelBuilder, label: str) -
 
 
 def build_robot_foot_model(device: str, geometry: str = "source") -> tuple[newton.Model, ModuleType, dict[str, str]]:
-    source = _load_attached_robot_foot()
+    source = _load_robot_foot_example()
     if geometry == "compatible":
         source._FOOT_LEFT_PIVOT = source._FOOT_LEFT_PIVOT.copy()
         source._FOOT_RIGHT_PIVOT = source._FOOT_RIGHT_PIVOT.copy()
@@ -1031,7 +1024,7 @@ def main() -> None:
     payload = {
         "scenario": args.scenario,
         "source": {
-            "robot-foot": "attached_internal_three_pushrod_robot_foot",
+            "robot-foot": "newton_example_kamino_robot_foot",
             "dr-legs": "newton_assets_disney_research_dr_legs",
         }[args.scenario],
         "rows": rows,
