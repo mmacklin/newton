@@ -407,8 +407,8 @@ class SolverXPBD(TendonStateMixin, SolverBase):
             # rolling slip/friction stages.  Stretch carries cable load; the
             # slip stage applies capstan-limited spin-axis coupling.
             if model.tendon_segment_count > 0 and body_q is not None:
-                self._update_tendon_link_active(model, body_q)
                 self._snapshot_tendon_step_state()
+                self._update_tendon_link_active(model, body_q)
                 self.tendon_seg_lambda.zero_()
 
             for i in range(self.iterations):
@@ -698,6 +698,7 @@ class SolverXPBD(TendonStateMixin, SolverBase):
                                 self.tendon_seg_active_compliance,
                                 self.tendon_seg_active_damping,
                                 self.tendon_link_active,
+                                self.tendon_link_active_step,
                                 self.tendon_link_route_rest_length,
                                 self.tendon_seg_attachment_l,
                                 self.tendon_seg_attachment_r,

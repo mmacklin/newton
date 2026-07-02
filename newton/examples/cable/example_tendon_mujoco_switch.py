@@ -304,7 +304,7 @@ class Example:
 
         assert link_type[self.lower_link] == int(newton.TendonLinkType.ROLLING)
         assert link_type[self.middle_link] == int(newton.TendonLinkType.ROLLING)
-        assert initial_active[self.lower_link] == 1
+        assert initial_active[self.lower_link] != 0
         assert initial_active[self.middle_link] == 0
         assert len(active_history) > 0, "No switch-wrap active-set samples were recorded"
         assert active_history[0] == 0 and active_history[-1] == 0, (

@@ -38,3 +38,16 @@ class TendonLinkType(IntEnum):
     Attachment follows the body point, while rest length transfers between
     adjacent segments subject to ``mu`` and the local bend angle.
     """
+
+
+class TendonLinkState(IntEnum):
+    """Internal route state for a tendon link."""
+
+    INACTIVE = 0
+    """Link is dynamically routed and currently bypassed."""
+
+    ACTIVE = 1
+    """Link is dynamically routed and currently active."""
+
+    FIXED = 3
+    """Link is permanently active and excluded from dynamic routing."""

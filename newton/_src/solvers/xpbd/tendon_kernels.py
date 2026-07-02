@@ -10,7 +10,7 @@ capstan slip through the link friction coefficient.
 
 import warp as wp
 
-from ...sim.tendon import TendonLinkType
+from ...sim.tendon import TendonLinkState, TendonLinkType
 from ..tendon_kernels import (  # noqa: F401
     advance_point_on_circle,
     signed_arc_length,
@@ -201,7 +201,7 @@ def solve_tendon_slip(
         link_idx = link_start + i
         if tendon_link_type[link_idx] != int(TendonLinkType.ROLLING):
             continue
-        if tendon_link_active[link_idx] == 0:
+        if tendon_link_active[link_idx] == int(TendonLinkState.INACTIVE):
             continue
 
         radius = tendon_link_radius[link_idx]
