@@ -15,7 +15,7 @@ import warp as wp
 
 from ..sim import Model
 from ..sim.tendon import TendonLinkType
-from .tendon_kernels import update_tendon_attachments
+from .tendon_kernels import update_tendon_attachments, update_tendon_link_active
 
 
 def _transform_point_np(pose: np.ndarray, point: np.ndarray) -> np.ndarray:
@@ -99,6 +99,7 @@ class TendonStateMixin:
 
     def _init_tendon_state(self, model: Model, allocate_xpbd_lambdas: bool = True) -> None:
         """Allocate mutable tendon state arrays and build segment/link mappings."""
+        self._has_dynamic_tendon_links = False
         # Solver-level cable cone parameters (a solver may override before calling this).
         if not hasattr(self, "tendon_max_sweeps"):
             self.tendon_max_sweeps = 256
@@ -196,6 +197,7 @@ class TendonStateMixin:
             self.tendon_seg_stretch = wp.zeros_like(self.tendon_seg_rest_length)
 
             route_rest_np, route_seg_mask = self._compute_active_route_rest_lengths(model)
+            self._has_dynamic_tendon_links = bool(np.any(route_rest_np > 0.0))
             self.tendon_link_route_rest_length = wp.array(route_rest_np, dtype=float, device=model.device)
 
             self._init_tendon_attachment_points(model, auto_mask, route_seg_mask)
@@ -208,6 +210,29 @@ class TendonStateMixin:
         wp.copy(self.tendon_seg_rest_length_step, self.tendon_seg_rest_length)
         wp.copy(self.tendon_seg_attachment_l_local_step, self.tendon_seg_attachment_l_local)
         wp.copy(self.tendon_seg_attachment_r_local_step, self.tendon_seg_attachment_r_local)
+
+    def _update_tendon_link_active(self, model: Model, body_q: wp.array[wp.transform]) -> None:
+        """Update solver-owned dynamic routing flags from the current body poses."""
+        if not self._has_dynamic_tendon_links:
+            return
+
+        wp.launch(
+            kernel=update_tendon_link_active,
+            dim=model.tendon_count,
+            inputs=[
+                body_q,
+                model.tendon_start,
+                model.tendon_link_body,
+                model.tendon_link_type,
+                model.tendon_link_radius,
+                model.tendon_link_orientation,
+                model.tendon_link_offset,
+                model.tendon_link_axis,
+                self.tendon_link_route_rest_length,
+                self.tendon_link_active,
+            ],
+            device=model.device,
+        )
 
     def _compute_active_route_rest_lengths(self, model: Model) -> tuple[np.ndarray, np.ndarray]:
         """Compute bypass material lengths for initially inactive rolling links."""

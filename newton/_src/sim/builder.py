@@ -67,6 +67,7 @@ from .graph_coloring import (
     construct_particle_graph,
 )
 from .model import Model
+from .tendon import TendonLinkType
 
 try:
     from newton_actuators import Actuator as _LegacyActuator
@@ -4515,6 +4516,8 @@ class ModelBuilder:
             active: Initial active-set flag for this route link. Inactive
                 interior links are skipped by the solver active route, which
                 connects the nearest active route sites on either side.
+                :class:`~newton.solvers.SolverXPBD` updates initially inactive
+                ROLLING links once per time step from the current route geometry.
             offset: Local-frame position of the cable plane center on the body [m].
             axis: Local-frame normal of the cable plane on the body.
             compliance: Compliance [m/N] for the segment ending at this link
@@ -4528,6 +4531,16 @@ class ModelBuilder:
             The link index.
         """
         link_idx = len(self.tendon_link_body)
+        tendon_link_start = self.tendon_start[-1]
+        if (
+            link_idx > tendon_link_start
+            and link_type == int(TendonLinkType.ROLLING)
+            and not active
+            and self.tendon_link_type[-1] == int(TendonLinkType.ROLLING)
+            and self.tendon_link_active[-1] == 0
+        ):
+            raise ValueError("Consecutive inactive ROLLING tendon links are not supported")
+
         self.tendon_link_body.append(body)
         self.tendon_link_type.append(link_type)
         self.tendon_link_radius.append(radius)
@@ -4538,7 +4551,6 @@ class ModelBuilder:
         self.tendon_link_axis.append(axis)
 
         # create a segment for every link after the first in this tendon
-        tendon_link_start = self.tendon_start[-1]
         if link_idx > tendon_link_start:
             self.tendon_seg_compliance.append(compliance)
             self.tendon_seg_damping.append(damping)

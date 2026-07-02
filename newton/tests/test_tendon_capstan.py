@@ -720,6 +720,63 @@ def run_model(model, num_frames=80, substeps=12, fps=60, return_solver=False):
     return state_0
 
 
+def build_force_driven_dynamic_route(device):
+    """Build an initially straight tendon with a force-driven optional rolling link."""
+    builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=0.0)
+    dof = newton.ModelBuilder.JointDofConfig
+
+    lower = builder.add_body(
+        xform=wp.transform(p=wp.vec3(0.0, 0.0, -0.5)),
+        mass=0.0,
+        is_kinematic=True,
+    )
+    upper = builder.add_body(
+        xform=wp.transform(p=wp.vec3(0.0, 0.0, 0.5)),
+        mass=0.0,
+        is_kinematic=True,
+    )
+    initial_candidate_position = wp.vec3(0.25, 0.0, 0.0)
+    candidate = builder.add_body(
+        xform=wp.transform(p=initial_candidate_position),
+        mass=1.0,
+        inertia=wp.mat33(0.01, 0.0, 0.0, 0.0, 0.01, 0.0, 0.0, 0.0, 0.01),
+        lock_inertia=True,
+    )
+    joint = builder.add_joint_d6(
+        parent=-1,
+        child=candidate,
+        linear_axes=[dof(axis=Axis.X)],
+        parent_xform=wp.transform(p=initial_candidate_position),
+        child_xform=wp.transform(),
+    )
+    builder.add_articulation([joint])
+
+    builder.add_tendon()
+    builder.add_tendon_link(
+        body=lower,
+        link_type=int(TendonLinkType.ATTACHMENT),
+        axis=(0.0, 1.0, 0.0),
+    )
+    candidate_link = builder.add_tendon_link(
+        body=candidate,
+        link_type=int(TendonLinkType.ROLLING),
+        radius=0.1,
+        orientation=1,
+        active=False,
+        axis=(0.0, 1.0, 0.0),
+        compliance=1.0e-2,
+        rest_length=-1.0,
+    )
+    builder.add_tendon_link(
+        body=upper,
+        link_type=int(TendonLinkType.ATTACHMENT),
+        axis=(0.0, 1.0, 0.0),
+        compliance=1.0e-2,
+        rest_length=-1.0,
+    )
+    return builder.finalize(device=device), candidate, candidate_link
+
+
 def run_motorized_model(model, drive_joint, target=2.0, num_frames=70, substeps=10, fps=60):
     dt = 1.0 / fps / substeps
     solver = newton.solvers.SolverXPBD(model, iterations=12, joint_linear_relaxation=0.8)
@@ -742,7 +799,28 @@ def run_motorized_model(model, drive_joint, target=2.0, num_frames=70, substeps=
 
 
 class TestTendonCapstan(unittest.TestCase):
-    pass
+    def test_rejects_consecutive_inactive_rolling_links(self):
+        builder = newton.ModelBuilder()
+        bodies = [builder.add_body(mass=0.0) for _ in range(3)]
+        builder.add_tendon()
+        builder.add_tendon_link(
+            body=bodies[0],
+            link_type=int(TendonLinkType.ATTACHMENT),
+        )
+        builder.add_tendon_link(
+            body=bodies[1],
+            link_type=int(TendonLinkType.ROLLING),
+            radius=0.1,
+            active=False,
+        )
+
+        with self.assertRaisesRegex(ValueError, "Consecutive inactive ROLLING tendon links"):
+            builder.add_tendon_link(
+                body=bodies[2],
+                link_type=int(TendonLinkType.ROLLING),
+                radius=0.1,
+                active=False,
+            )
 
 
 def _hinge_y_angle(body_q, body_idx):
@@ -930,6 +1008,108 @@ def test_mujoco_wrap_straight_bypass_activates_and_deactivates(test, device):
         test.assertTrue(
             np.all(example._max_active_lateral > example.radius * 0.35),
             f"Active routes should visibly leave the straight vertical line: {example._max_active_lateral}",
+        )
+
+
+def test_force_driven_dynamic_route_updates_inside_solver(test, device):
+    """A force-driven rolling candidate should switch without host-side active-set updates."""
+    with wp.ScopedDevice(device):
+        model, candidate, candidate_link = build_force_driven_dynamic_route(device)
+        solver = newton.solvers.SolverXPBD(model, iterations=8, joint_linear_relaxation=1.0)
+        state_0, state_1 = model.state(), model.state()
+        control, contacts = model.control(), model.contacts()
+        newton.eval_fk(model, model.joint_q, model.joint_qd, state_0)
+
+        expected_material_length = float(solver.tendon_total_cable.numpy()[0])
+        body_f = np.zeros((model.body_count, 6), dtype=np.float32)
+        active_history = []
+        material_length_errors = []
+        dt = 1.0 / 120.0
+
+        def step(force_x):
+            state_0.clear_forces()
+            body_f[candidate] = (force_x, 0.0, 0.0, 0.0, 0.0, 0.0)
+            state_0.body_f.assign(body_f)
+            solver.step(state_0, state_1, control, contacts, dt)
+            candidate_active = int(solver.tendon_link_active.numpy()[candidate_link])
+            active_history.append(candidate_active)
+
+            seg_active = solver.tendon_seg_active.numpy().astype(bool)
+            material_length = float(np.sum(solver.tendon_seg_rest_length.numpy()[seg_active]))
+            if candidate_active:
+                candidate_center = state_1.body_q.numpy()[candidate, :3]
+                att_l = solver.tendon_seg_attachment_l.numpy()
+                att_r = solver.tendon_seg_attachment_r.numpy()
+                radius_l = att_r[0] - candidate_center
+                radius_r = att_l[1] - candidate_center
+                theta = abs(
+                    np.atan2(
+                        np.dot(np.cross(radius_l, radius_r), np.array([0.0, 1.0, 0.0])),
+                        np.dot(radius_l, radius_r),
+                    )
+                )
+                material_length += theta * float(model.tendon_link_radius.numpy()[candidate_link])
+            material_length_errors.append(abs(material_length - expected_material_length))
+            return state_1, state_0
+
+        for _ in range(60):
+            state_0, state_1 = step(-2.0)
+
+        test.assertEqual(active_history[-1], 1, "Solver should activate a candidate moved into the span")
+
+        body_qd = state_0.body_qd.numpy()
+        body_qd[candidate] = 0.0
+        state_0.body_qd.assign(body_qd)
+        for _ in range(60):
+            state_0, state_1 = step(4.0)
+
+        test.assertEqual(active_history[-1], 0, "Solver should deactivate a candidate moved clear of the span")
+        test.assertLess(
+            max(material_length_errors),
+            1.0e-5,
+            "Active-set transitions should conserve free-span rest length plus wrapped material",
+        )
+
+
+def test_dynamic_route_cuda_graph_capture(test, device):
+    """Solver-owned active-set updates should remain CUDA graph-capturable."""
+    device = wp.get_device(device)
+    if not wp.is_mempool_enabled(device):
+        test.skipTest("CUDA graph capture requires the Warp memory pool")
+
+    with wp.ScopedDevice(device):
+        # Compile the solver kernels outside capture using a disposable solver state.
+        warm_model, warm_candidate, _ = build_force_driven_dynamic_route(device)
+        warm_solver = newton.solvers.SolverXPBD(warm_model, iterations=8, joint_linear_relaxation=1.0)
+        warm_0, warm_1 = warm_model.state(), warm_model.state()
+        newton.eval_fk(warm_model, warm_model.joint_q, warm_model.joint_qd, warm_0)
+        warm_force = np.zeros((warm_model.body_count, 6), dtype=np.float32)
+        warm_force[warm_candidate] = (-2.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        warm_0.body_f.assign(warm_force)
+        warm_solver.step(warm_0, warm_1, warm_model.control(), None, 1.0 / 120.0)
+
+        model, candidate, candidate_link = build_force_driven_dynamic_route(device)
+        solver = newton.solvers.SolverXPBD(model, iterations=8, joint_linear_relaxation=1.0)
+        state_0, state_1 = model.state(), model.state()
+        control = model.control()
+        newton.eval_fk(model, model.joint_q, model.joint_qd, state_0)
+        newton.eval_fk(model, model.joint_q, model.joint_qd, state_1)
+        body_f = np.zeros((model.body_count, 6), dtype=np.float32)
+        body_f[candidate] = (-2.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        state_0.body_f.assign(body_f)
+        state_1.body_f.assign(body_f)
+
+        with wp.ScopedCapture(device=device) as capture:
+            solver.step(state_0, state_1, control, None, 1.0 / 120.0)
+            solver.step(state_1, state_0, control, None, 1.0 / 120.0)
+
+        for _ in range(30):
+            wp.capture_launch(capture.graph)
+
+        test.assertEqual(
+            int(solver.tendon_link_active.numpy()[candidate_link]),
+            1,
+            "Captured solver steps should activate a force-driven routing candidate",
         )
 
 
@@ -1922,6 +2102,7 @@ def test_settle_tol_early_out_matches_full_sweeps(test, device):
 devices = ["cpu"]
 if wp.is_cuda_available():
     devices.append("cuda:0")
+cuda_devices = [device for device in devices if device.startswith("cuda")]
 
 add_test(TestTendonCapstan, "pinhole_slip_atwood", devices, test_pinhole_slip_atwood)
 add_test(
@@ -1983,6 +2164,13 @@ add_test(
     devices,
     test_mujoco_wrap_straight_bypass_activates_and_deactivates,
 )
+add_test(
+    TestTendonCapstan,
+    "force_driven_dynamic_route_updates_inside_solver",
+    devices,
+    test_force_driven_dynamic_route_updates_inside_solver,
+)
+add_test(TestTendonCapstan, "dynamic_route_cuda_graph_capture", cuda_devices, test_dynamic_route_cuda_graph_capture)
 add_test(
     TestTendonCapstan,
     "mujoco_wrap_uses_expected_side_of_capstan",
