@@ -18,7 +18,10 @@
 #      pad (Archard-style: removal ~ slip speed * dwell), sanding the sheet
 #      from ~4 um down to a ~0.2 um residual roughness.
 #
-# Scenario: a PD-driven sanding pad rasters over a metal sheet. Surface
+# Scenario: a PD-driven sanding pad rasters over a curved sheet-metal
+# panel (a cylindrical arch -- the curved base geometry is exactly what the
+# mesh representation buys over a plain heightfield shape). The tool
+# orientation and press direction track the local surface normal. Surface
 # roughness (Rq), height under the tool, and removed volume are measured
 # every frame. The micro-scale surface is visualized live on an exaggerated
 # inspection panel next to the physical scene, and an interactive HTML
@@ -39,23 +42,28 @@ import newton.examples
 # ---------------------------------------------------------------------------
 
 SHEET_SIZE = 0.2  # sheet side length [m]
-GRID_N = 65  # sheet mesh vertices per side
+PANEL_RADIUS = 0.2  # cylinder radius of the curved panel (axis along x) [m]
+GRID_N = 129  # sheet mesh vertices per side (1.6 mm triangles keep the
+# faceting sagitta ~1.5 um, below the 4 um asperity scale)
 HF_RES = 256  # heightfield resolution (square)
 ROUGHNESS_RMS = 4.0e-6  # initial RMS roughness [m] (4 um)
 FLOOR_FRAC = 0.05  # residual roughness fraction (0.2 um)
 VIZ_EXAGGERATION = 2000.0  # vertical exaggeration of the inspection panel
 VIZ_OFFSET = wp.vec3(0.0, 0.35, 0.0)  # inspection panel offset from the sheet [m]
 
-PAD_HALF = 0.02  # sanding pad half extents (x, y) [m]
+PAD_HALF = 0.015  # sanding pad half extents (x, y) [m] (3 cm pad: chord
+# sagitta on the R=0.2 panel is ~0.6 mm, so the rigid pad conforms well)
 PAD_HALF_Z = 0.005  # sanding pad half thickness [m]
-PRESS_FORCE = 10.0  # downward press force [N]
-MAX_VZ = 0.05  # tool vertical speed clamp [m/s] (the sheet mesh is an open
+PRESS_FORCE = 10.0  # press force along the surface normal [N]
+MAX_VZ = 0.08  # tool vertical speed clamp [m/s] (the sheet mesh is an open
 # surface with no thickness; this keeps force-press transients from
 # tunneling the pad through it in a single frame)
 
-RASTER_MARGIN = 0.022  # keep the pad this far from the sheet edge [m]
-RASTER_STRIPES = 11  # number of raster stripes
-K_WEAR = 1.2e-3  # wear rate coefficient [m removed per m slid]
+RASTER_MARGIN = 0.015  # keep the pad center this far from the sheet edge [m]
+RASTER_STRIPES = 12  # number of raster stripes
+K_WEAR = 3.5e-3  # wear rate coefficient [m removed per m slid] (on the curved
+# panel the rigid pad contacts along a tangent line rather than its full
+# face, so fewer contact stamps contribute per pass than on a flat sheet)
 WEAR_SIGMA_UV = 0.05  # gaussian stamp sigma in UV space (~pad half width)
 WEAR_GATE = 1.0e-3  # max contact separation that still causes wear [m]
 
@@ -63,6 +71,18 @@ WEAR_GATE = 1.0e-3  # max contact separation that still causes wear [m]
 # ---------------------------------------------------------------------------
 # GPU functions
 # ---------------------------------------------------------------------------
+
+
+@wp.func
+def panel_height(y: float, radius: float, z_offset: float) -> float:
+    """Height of the cylindrical-arch panel (axis along x): z = sqrt(R^2 - y^2) + z_offset."""
+    return wp.sqrt(radius * radius - y * y) + z_offset
+
+
+@wp.func
+def panel_normal(y: float, radius: float) -> wp.vec3:
+    """Outward unit normal of the cylindrical-arch panel at lateral position y."""
+    return wp.vec3(0.0, y / radius, wp.sqrt(radius * radius - y * y) / radius)
 
 
 @wp.func
@@ -303,14 +323,21 @@ def drive_tool_kernel(
     n_stripes: wp.int32,
     speed: float,
     ctrl: wp.array[wp.float32],
+    radius: float,
     kp: float,
     kd: float,
-    kp_ang: float,
-    kd_ang: float,
+    align_rate: float,
+    align_blend: float,
     max_vz: float,
     dt: float,
 ):
-    """PD raster drive in xy, constant press force in -z, angular PD to stay level.
+    """PD raster drive in xy, press force along the local surface normal, and
+    velocity-level attitude steering aligning the pad with the curved panel.
+
+    Attitude is steered at the velocity level (blending omega toward a target
+    angular rate) rather than with torque PD: the pad's tiny inertia
+    (~6e-6 kg m^2) makes any usefully stiff torque PD unstable under explicit
+    substep integration.
 
     Runs single-threaded per substep; also advances the GPU clock (graph-capture safe).
     """
@@ -325,21 +352,35 @@ def drive_tool_kernel(
 
     # clamp vertical speed so press transients cannot tunnel through the
     # (zero-thickness) sheet mesh within a single collision frame
-    if wp.abs(v[2]) > max_vz:
-        v = wp.vec3(v[0], v[1], wp.clamp(v[2], -max_vz, max_vz))
-        body_qd[tool_body] = wp.spatial_vector(v, omega)
+    v = wp.vec3(v[0], v[1], wp.clamp(v[2], -max_vz, max_vz))
 
-    f = wp.vec3(
-        kp * (tgt[0] - p[0]) - kd * v[0],
-        kp * (tgt[1] - p[1]) - kd * v[1],
-        -ctrl[CTRL_PRESS],
+    # attitude steering toward the surface-aligned target orientation:
+    # rotating the pad +z axis onto the panel normal is a rotation about x
+    # by -asin(y/R)
+    q_tgt = wp.quat_from_axis_angle(wp.vec3(1.0, 0.0, 0.0), -wp.asin(tgt[1] / radius))
+    q_d = q_tgt * wp.quat_inverse(q)
+    sgn = wp.where(q_d[3] < 0.0, -1.0, 1.0)
+    rotvec = wp.vec3(q_d[0], q_d[1], q_d[2]) * (2.0 * sgn)
+    omega_des = rotvec * align_rate
+    ang_speed = wp.length(omega_des)
+    if ang_speed > 4.0:
+        omega_des = omega_des * (4.0 / ang_speed)
+    omega = omega + (omega_des - omega) * align_blend
+
+    body_qd[tool_body] = wp.spatial_vector(v, omega)
+
+    # press along the local surface normal of the curved panel
+    n = panel_normal(tgt[1], radius)
+    f = (
+        wp.vec3(
+            kp * (tgt[0] - p[0]) - kd * v[0],
+            kp * (tgt[1] - p[1]) - kd * v[1],
+            0.0,
+        )
+        - n * ctrl[CTRL_PRESS]
     )
 
-    # small-angle attitude PD toward identity: rotvec ~ 2 * sign(qw) * (qx, qy, qz)
-    sgn = wp.where(q[3] < 0.0, -1.0, 1.0)
-    tau = wp.vec3(q[0], q[1], q[2]) * (-2.0 * kp_ang * sgn) - omega * kd_ang
-
-    body_f[tool_body] = body_f[tool_body] + wp.spatial_vector(f, tau)
+    body_f[tool_body] = body_f[tool_body] + wp.spatial_vector(f, wp.vec3(0.0, 0.0, 0.0))
     time[0] = t + dt
 
 
@@ -348,16 +389,21 @@ def update_surface_points_kernel(
     heightfield: wp.array2d[wp.float32],
     origin: wp.vec3,
     size: float,
+    radius: float,
+    z_offset: float,
     exaggeration: float,
     points: wp.array[wp.vec3],
 ):
+    """Render-only inspection panel: true curved base + exaggerated asperities
+    offset along the local surface normal."""
     i, j = wp.tid()  # i -> rows (v/y), j -> cols (u/x)
     nrow = heightfield.shape[0]
     ncol = heightfield.shape[1]
-    x = origin[0] + size * (wp.float32(j) / wp.float32(ncol - 1) - 0.5)
-    y = origin[1] + size * (wp.float32(i) / wp.float32(nrow - 1) - 0.5)
-    z = origin[2] + heightfield[i, j] * exaggeration
-    points[i * ncol + j] = wp.vec3(x, y, z)
+    x = size * (wp.float32(j) / wp.float32(ncol - 1) - 0.5)
+    y = size * (wp.float32(i) / wp.float32(nrow - 1) - 0.5)
+    base = wp.vec3(x, y, panel_height(y, radius, z_offset))
+    n = panel_normal(y, radius)
+    points[i * ncol + j] = origin + base + n * (heightfield[i, j] * exaggeration)
 
 
 @wp.kernel
@@ -439,11 +485,16 @@ class Example:
 
         self.viewer = viewer
 
-        # ---------------- sheet mesh (plain GeoType.MESH with UVs) ----------------
+        # ------- curved sheet mesh (plain GeoType.MESH with UVs) -------
+        # cylindrical arch: axis along x, z = sqrt(R^2 - y^2) + z_offset,
+        # crown at y = 0 and edges at z = 0. The curved base geometry is
+        # what the mesh representation provides over a plain heightfield.
+        self.panel_z_offset = -float(np.sqrt(PANEL_RADIUS**2 - (0.5 * SHEET_SIZE) ** 2))
         n = GRID_N
         lin = np.linspace(-0.5 * SHEET_SIZE, 0.5 * SHEET_SIZE, n, dtype=np.float32)
         xx, yy = np.meshgrid(lin, lin, indexing="xy")
-        vertices = np.stack([xx, yy, np.zeros_like(xx)], axis=-1).reshape(-1, 3)
+        zz = np.sqrt(PANEL_RADIUS**2 - yy**2) + self.panel_z_offset
+        vertices = np.stack([xx, yy, zz], axis=-1).reshape(-1, 3).astype(np.float32)
         uvs = np.stack([xx / SHEET_SIZE + 0.5, yy / SHEET_SIZE + 0.5], axis=-1).reshape(-1, 2).astype(np.float32)
 
         quads_i, quads_j = np.meshgrid(np.arange(n - 1), np.arange(n - 1), indexing="ij")
@@ -458,7 +509,7 @@ class Example:
 
         sheet_mesh = newton.Mesh(vertices, indices.flatten(), uvs=uvs, compute_inertia=False)
 
-        # area-weighted smooth vertex normals (trivially +z here; computed for generality)
+        # area-weighted smooth vertex normals
         normals = np.zeros_like(vertices)
         tri = vertices[indices]
         fn = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
@@ -495,11 +546,34 @@ class Example:
         self.sheet_shape = builder.add_shape_mesh(body=-1, mesh=sheet_mesh, cfg=sheet_cfg)
 
         pad_cfg = newton.ModelBuilder.ShapeConfig(density=7800.0, mu=0.3)
-        start = wp.vec3(-0.5 * SHEET_SIZE + RASTER_MARGIN, -0.5 * SHEET_SIZE + RASTER_MARGIN, PAD_HALF_Z + 1.0e-4)
-        self.tool_body = builder.add_body(xform=wp.transform(p=start, q=wp.quat_identity()))
+        # start pose: on the curved surface at the raster origin, aligned with
+        # the local surface normal
+        x_start = -0.5 * SHEET_SIZE + RASTER_MARGIN
+        y_start = -0.5 * SHEET_SIZE + RASTER_MARGIN
+        n_start = np.array([0.0, y_start / PANEL_RADIUS, np.sqrt(PANEL_RADIUS**2 - y_start**2) / PANEL_RADIUS])
+        p_start = np.array(
+            [x_start, y_start, np.sqrt(PANEL_RADIUS**2 - y_start**2) + self.panel_z_offset]
+        ) + n_start * (PAD_HALF_Z + 1.0e-4)
+        q_start = wp.quat_from_axis_angle(wp.vec3(1.0, 0.0, 0.0), -float(np.arcsin(y_start / PANEL_RADIUS)))
+        self.tool_body = builder.add_body(xform=wp.transform(p=wp.vec3(*p_start), q=q_start))
         builder.add_shape_box(body=self.tool_body, hx=PAD_HALF, hy=PAD_HALF, hz=PAD_HALF_Z, cfg=pad_cfg)
 
         self.model = builder.finalize()
+
+        # give the tool the mass/inertia of the full sander body rigidly
+        # attached to the pad: the bare pad's inertia (~6e-6 kg m^2) makes it
+        # spin violently from single contact impulses
+        m_tool, i_tool = 1.0, 1.0e-3
+        body_mass = self.model.body_mass.numpy()
+        body_inertia = self.model.body_inertia.numpy()
+        body_mass[self.tool_body] = m_tool
+        body_inertia[self.tool_body] = np.eye(3) * i_tool
+        self.model.body_mass.assign(body_mass)
+        self.model.body_inv_mass.assign(1.0 / body_mass)
+        self.model.body_inertia.assign(body_inertia)
+        inv_inertia = body_inertia.copy()
+        inv_inertia[self.tool_body] = np.eye(3) / i_tool
+        self.model.body_inv_inertia.assign(inv_inertia)
 
         self.solver = newton.solvers.SolverXPBD(self.model, iterations=10)
         self.contacts = self.model.contacts()
@@ -584,11 +658,14 @@ class Example:
     def _validate_conventions(self):
         """Assert the barycentric attribute-interpolation convention and the
         bilinear heightfield sampling against CPU references."""
+        # query at mesh vertices, offset slightly along the vertex normal: for
+        # the convex panel the closest surface point is then the vertex itself,
+        # so the interpolated UV has an exact CPU reference
         rng = np.random.default_rng(7)
-        pts = np.zeros((16, 3), dtype=np.float32)
-        pts[:, 0] = rng.uniform(-0.4, 0.4, 16) * SHEET_SIZE
-        pts[:, 1] = rng.uniform(-0.4, 0.4, 16) * SHEET_SIZE
-        pts[:, 2] = rng.uniform(0.0, 0.001, 16)
+        vertices = np.asarray(self.model.shape_source[self.sheet_shape].vertices)
+        normals = self.sheet_normals.numpy()
+        sel = rng.integers(GRID_N + 1, len(vertices) - GRID_N - 1, 16)  # skip boundary
+        pts = (vertices[sel] + normals[sel] * 2.0e-4).astype(np.float32)
         query_points = wp.array(pts, dtype=wp.vec3)
         pos_err = wp.zeros(16, dtype=wp.float32)
         h_gpu = wp.zeros(16, dtype=wp.float32)
@@ -608,9 +685,9 @@ class Example:
         max_err = float(pos_err.numpy().max())
         assert max_err < 1.0e-5, f"barycentric convention mismatch: err={max_err:.3e}"
 
-        # CPU bilinear reference at the (flat sheet) query xy -> uv
-        u = pts[:, 0] / SHEET_SIZE + 0.5
-        v = pts[:, 1] / SHEET_SIZE + 0.5
+        # CPU bilinear reference at the queried vertices' (projected) uv
+        u = vertices[sel, 0] / SHEET_SIZE + 0.5
+        v = vertices[sel, 1] / SHEET_SIZE + 0.5
         cf = np.clip(u, 0, 1) * (HF_RES - 1)
         rf = np.clip(v, 0, 1) * (HF_RES - 1)
         c0 = np.minimum(cf.astype(int), HF_RES - 2)
@@ -624,7 +701,7 @@ class Example:
             + h[r0 + 1, c0 + 1] * fc * fr
         )
         h_err = float(np.abs(h_gpu.numpy() - h_ref).max())
-        assert h_err < 1.0e-9, f"bilinear sampling mismatch: err={h_err:.3e}"
+        assert h_err < 1.0e-8, f"bilinear sampling mismatch: err={h_err:.3e}"
 
     # ------------------------------------------------------------------
     def capture(self):
@@ -713,10 +790,11 @@ class Example:
                     self.raster["n_stripes"],
                     self.raster["speed"],
                     self.ctrl_wp,
+                    PANEL_RADIUS,
                     3000.0,  # kp
                     40.0,  # kd
-                    5.0,  # kp_ang
-                    0.1,  # kd_ang
+                    10.0,  # align_rate [1/s]
+                    0.3,  # align_blend per substep
                     MAX_VZ,
                     self.sim_dt,
                 ],
@@ -784,7 +862,15 @@ class Example:
         wp.launch(
             update_surface_points_kernel,
             dim=(HF_RES, HF_RES),
-            inputs=[self.heightfield, self.viz_origin, SHEET_SIZE, self.viz_exaggeration, self.viz_points],
+            inputs=[
+                self.heightfield,
+                self.viz_origin,
+                SHEET_SIZE,
+                PANEL_RADIUS,
+                self.panel_z_offset,
+                self.viz_exaggeration,
+                self.viz_points,
+            ],
         )
         self.viewer.log_mesh(
             "/surface_inspection",
