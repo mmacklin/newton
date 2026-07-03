@@ -485,6 +485,11 @@ class Example:
 
         self.viewer = viewer
 
+        # optional frame-accurate video capture via ViewerGL.get_frame()
+        # (includes imgui overlays when a UI is present, i.e. non-headless)
+        self.video_path = getattr(args, "capture", None) if args is not None else None
+        self._video_writer = None
+
         # ------- curved sheet mesh (plain GeoType.MESH with UVs) -------
         # cylindrical arch: axis along x, z = sqrt(R^2 - y^2) + z_offset,
         # crown at y = 0 and edges at z = 0. The curved base geometry is
@@ -890,6 +895,26 @@ class Example:
         self.viewer.log_image("heightfield", self.hf_image)
         self.viewer.end_frame()
 
+        # frame-accurate mp4 capture from the GL framebuffer (PBO readback);
+        # render_ui bakes the imgui overlays in when a UI exists
+        if self.video_path and hasattr(self.viewer, "get_frame"):
+            if self._video_writer is None:
+                import imageio.v2 as imageio  # noqa: PLC0415
+
+                self._video_writer = imageio.get_writer(
+                    self.video_path, fps=self.fps, codec="libx264", quality=8, macro_block_size=1
+                )
+            has_ui = getattr(self.viewer, "gui", None) is not None
+            frame = self.viewer.get_frame(render_ui=has_ui).numpy()
+            # crop to even dimensions for x264/yuv420p
+            frame = frame[: frame.shape[0] // 2 * 2, : frame.shape[1] // 2 * 2]
+            self._video_writer.append_data(frame)
+            if self.frame_count >= self.num_frames:
+                self._video_writer.close()
+                self._video_writer = None
+                print(f"Video captured to {self.video_path}")
+                self.video_path = None
+
     # ------------------------------------------------------------------
     def gui(self, ui):
         """Custom side-panel (auto-registered by newton.examples.run)."""
@@ -1051,8 +1076,18 @@ if __name__ == "__main__":
         default="~/reports/sanding-sim",
         help="Directory for the HTML report ('none' to disable).",
     )
+    parser.add_argument(
+        "--capture",
+        type=str,
+        default=None,
+        help="Capture an mp4 of the run via ViewerGL.get_frame() (requires imageio; "
+        "includes the imgui overlays when the viewer is not headless).",
+    )
     parser.set_defaults(num_frames=900)
     viewer, args = newton.examples.init(parser)
+
+    if args.capture:
+        args.capture = os.path.expanduser(args.capture)
 
     example = Example(viewer, args)
     newton.examples.run(example, args)
