@@ -44,7 +44,7 @@ HF_RES = 256  # heightfield resolution (square)
 ROUGHNESS_RMS = 4.0e-6  # initial RMS roughness [m] (4 um)
 FLOOR_FRAC = 0.05  # residual roughness fraction (0.2 um)
 VIZ_EXAGGERATION = 2000.0  # vertical exaggeration of the inspection panel
-VIZ_OFFSET_X = 0.32  # inspection panel offset from the sheet [m]
+VIZ_OFFSET = wp.vec3(0.0, 0.35, 0.0)  # inspection panel offset from the sheet [m]
 
 PAD_HALF = 0.02  # sanding pad half extents (x, y) [m]
 PAD_HALF_Z = 0.005  # sanding pad half thickness [m]
@@ -161,6 +161,13 @@ def displace_contacts_kernel(
         contact_point1[tid] = p_w + disp
 
 
+# live-tunable control parameters, read by kernels inside the captured CUDA
+# graph and written from the GUI: [press_force, wear_rate, wear_enabled]
+CTRL_PRESS = 0
+CTRL_WEAR_RATE = 1
+CTRL_WEAR_ENABLED = 2
+
+
 @wp.kernel
 def apply_wear_kernel(
     contact_count: wp.array[wp.int32],
@@ -181,7 +188,7 @@ def apply_wear_kernel(
     normals: wp.array[wp.vec3],
     heightfield: wp.array2d[wp.float32],
     max_query_dist: float,
-    k_wear: float,
+    ctrl: wp.array[wp.float32],
     sigma_uv: float,
     stamp_radius: wp.int32,
     gate: float,
@@ -237,7 +244,9 @@ def apply_wear_kernel(
     c0 = wp.int32(wp.clamp(uv[0], 0.0, 1.0) * wp.float32(ncol - 1))
     r0 = wp.int32(wp.clamp(uv[1], 0.0, 1.0) * wp.float32(nrow - 1))
 
-    dh0 = k_wear * slip * dt
+    dh0 = ctrl[CTRL_WEAR_RATE] * ctrl[CTRL_WEAR_ENABLED] * slip * dt
+    if dh0 == 0.0:
+        return
     inv_2s2 = 1.0 / (2.0 * sigma_uv * sigma_uv)
     du = 1.0 / wp.float32(ncol - 1)
     dv = 1.0 / wp.float32(nrow - 1)
@@ -293,7 +302,7 @@ def drive_tool_kernel(
     dy: float,
     n_stripes: wp.int32,
     speed: float,
-    press_force: float,
+    ctrl: wp.array[wp.float32],
     kp: float,
     kd: float,
     kp_ang: float,
@@ -323,7 +332,7 @@ def drive_tool_kernel(
     f = wp.vec3(
         kp * (tgt[0] - p[0]) - kd * v[0],
         kp * (tgt[1] - p[1]) - kd * v[1],
-        -press_force,
+        -ctrl[CTRL_PRESS],
     )
 
     # small-angle attitude PD toward identity: rotvec ~ 2 * sign(qw) * (qx, qy, qz)
@@ -349,6 +358,16 @@ def update_surface_points_kernel(
     y = origin[1] + size * (wp.float32(i) / wp.float32(nrow - 1) - 0.5)
     z = origin[2] + heightfield[i, j] * exaggeration
     points[i * ncol + j] = wp.vec3(x, y, z)
+
+
+@wp.kernel
+def heightfield_to_image_kernel(
+    heightfield: wp.array2d[wp.float32],
+    inv_scale: float,
+    image: wp.array2d[wp.float32],
+):
+    i, j = wp.tid()
+    image[i, j] = wp.clamp(heightfield[i, j] * inv_scale, 0.0, 1.0)
 
 
 @wp.kernel
@@ -516,6 +535,17 @@ class Example:
         self.stats_wp = wp.zeros(4, dtype=wp.float32)
         self.wear_stamp_radius = int(2.0 * WEAR_SIGMA_UV * (HF_RES - 1))
 
+        # GUI-tunable controls, read live by kernels inside the captured graph
+        self.press_force = PRESS_FORCE
+        self.wear_rate = K_WEAR
+        self.wear_enabled = True
+        self.ctrl_wp = wp.array(np.array([PRESS_FORCE, K_WEAR, 1.0], dtype=np.float32), dtype=wp.float32)
+        self.viz_exaggeration = VIZ_EXAGGERATION
+
+        # live heightfield image for the viewer (normalized to initial max)
+        self.hf_image = wp.zeros((HF_RES, HF_RES), dtype=wp.float32)
+        self.hf_image_inv_scale = 1.0 / max(float(h0.max()), 1.0e-9)
+
         # measurement history (CPU side, observational only)
         self.history = {
             "t": [],
@@ -531,7 +561,7 @@ class Example:
         self.snapshot_every = max(1, self.num_frames // 40)
 
         # exaggerated inspection panel (render-only mesh, updated per frame on GPU)
-        self.viz_origin = wp.vec3(VIZ_OFFSET_X, 0.0, 0.0)
+        self.viz_origin = VIZ_OFFSET
         self.viz_points = wp.zeros(HF_RES * HF_RES, dtype=wp.vec3)
         viz_i, viz_j = np.meshgrid(np.arange(HF_RES - 1), np.arange(HF_RES - 1), indexing="ij")
         w00 = (viz_i * HF_RES + viz_j).ravel()
@@ -545,7 +575,7 @@ class Example:
 
         self.viewer.set_model(self.model)
         # frame both the physical sheet and the exaggerated inspection panel
-        self.viewer.set_camera(pos=wp.vec3(0.16, -0.42, 0.28), pitch=-32.0, yaw=90.0)
+        self.viewer.set_camera(pos=wp.vec3(0.0, -0.42, 0.3), pitch=-28.0, yaw=90.0)
 
         self._validate_conventions()
         self.capture()
@@ -651,7 +681,7 @@ class Example:
                 self.sheet_normals,
                 self.heightfield,
                 self.max_query_dist,
-                K_WEAR,
+                self.ctrl_wp,
                 WEAR_SIGMA_UV,
                 self.wear_stamp_radius,
                 WEAR_GATE,
@@ -682,7 +712,7 @@ class Example:
                     self.raster["dy"],
                     self.raster["n_stripes"],
                     self.raster["speed"],
-                    PRESS_FORCE,
+                    self.ctrl_wp,
                     3000.0,  # kp
                     40.0,  # kd
                     5.0,  # kp_ang
@@ -702,6 +732,13 @@ class Example:
         self.sim_time += self.frame_dt
         self.frame_count += 1
         self._measure()
+
+        # overlay plots (no-op on non-GL viewers)
+        h = self.history
+        self.viewer.log_scalar("Rq roughness [um]", h["rms"][-1] * 1.0e6)
+        self.viewer.log_scalar("Max asperity [um]", h["max"][-1] * 1.0e6)
+        self.viewer.log_scalar("Height under tool [um]", h["h_tool"][-1] * 1.0e6)
+        self.viewer.log_scalar("Removed volume [mm3]", h["removed_volume"][-1] * 1.0e9)
 
     # ------------------------------------------------------------------
     def _measure(self):
@@ -743,10 +780,11 @@ class Example:
     def render(self):
         self.viewer.begin_frame(self.sim_time)
         self.viewer.log_state(self.state_0)
+        self.viewer.log_contacts(self.contacts, self.state_0)
         wp.launch(
             update_surface_points_kernel,
             dim=(HF_RES, HF_RES),
-            inputs=[self.heightfield, self.viz_origin, SHEET_SIZE, VIZ_EXAGGERATION, self.viz_points],
+            inputs=[self.heightfield, self.viz_origin, SHEET_SIZE, self.viz_exaggeration, self.viz_points],
         )
         self.viewer.log_mesh(
             "/surface_inspection",
@@ -757,7 +795,46 @@ class Example:
             metallic=0.9,
             backface_culling=False,
         )
+        # live heightfield image window (GL only)
+        wp.launch(
+            heightfield_to_image_kernel,
+            dim=(HF_RES, HF_RES),
+            inputs=[self.heightfield, self.hf_image_inv_scale, self.hf_image],
+        )
+        self.viewer.log_image("heightfield", self.hf_image)
         self.viewer.end_frame()
+
+    # ------------------------------------------------------------------
+    def gui(self, ui):
+        """Custom side-panel (auto-registered by newton.examples.run)."""
+        h = self.history
+        if h["t"]:
+            ui.text(f"Rq:          {h['rms'][-1] * 1e6:7.3f} um")
+            ui.text(f"target:      {ROUGHNESS_RMS * FLOOR_FRAC * 1e6:7.3f} um")
+            ui.text(f"max asperity:{h['max'][-1] * 1e6:7.3f} um")
+            ui.text(f"under tool:  {h['h_tool'][-1] * 1e6:7.3f} um")
+            ui.text(f"removed:     {h['removed_volume'][-1] * 1e9:7.2f} mm3")
+            progress = min(self.sim_time / self.raster_duration, 1.0)
+            ui.text(f"raster:      {100.0 * progress:5.1f} %")
+        ui.separator()
+
+        changed = False
+        c, self.press_force = ui.slider_float("Press force [N]", self.press_force, 0.0, 30.0)
+        changed |= c
+        c, self.wear_rate = ui.slider_float("Wear rate [mm/m]", self.wear_rate * 1.0e3, 0.0, 5.0)
+        self.wear_rate *= 1.0e-3
+        changed |= c
+        c, self.wear_enabled = ui.checkbox("Wear enabled", self.wear_enabled)
+        changed |= c
+        if changed:
+            self.ctrl_wp.assign(
+                np.array(
+                    [self.press_force, self.wear_rate, 1.0 if self.wear_enabled else 0.0],
+                    dtype=np.float32,
+                )
+            )
+
+        _, self.viz_exaggeration = ui.slider_float("Panel exaggeration", self.viz_exaggeration, 100.0, 8000.0)
 
     # ------------------------------------------------------------------
     def test_final(self):
@@ -821,6 +898,10 @@ _REPORT_TEMPLATE = """<!DOCTYPE html>
 <body>
 <h1>Sanding simulation <small>mesh + GPU heightfield contact displacement</small></h1>
 <div class="grid">
+ <div class="panel wide" id="video" style="display:none; text-align:center;">
+  <video src="sanding.mp4" controls loop muted playsinline style="max-width:100%; border-radius:6px;"
+         onloadeddata="document.getElementById('video').style.display='block'"></video>
+ </div>
  <div class="panel" id="rms"></div>
  <div class="panel" id="htool"></div>
  <div class="panel" id="removed"></div>
