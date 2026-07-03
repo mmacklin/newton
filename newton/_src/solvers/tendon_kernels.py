@@ -482,6 +482,13 @@ def update_tendon_attachments(
                 if seg_left < 0 or seg_right < 0:
                     continue
 
+                if material_sweep == 0 and is_rolling:
+                    # The common mode is material exchanged with the changing wrapped arc. Apply
+                    # it before relaxation so the capstan projection sees the conserved cable.
+                    common_rest_delta = 0.5 * (seg_rolling_delta_r[seg_adj_left] + seg_rolling_delta_l[seg_adj_right])
+                    seg_stretch[seg_left] = seg_stretch[seg_left] - common_rest_delta
+                    seg_stretch[seg_right] = seg_stretch[seg_right] - common_rest_delta
+
                 link_first = seg_active_link_r[seg_left]
                 link_last = seg_active_link_l[seg_right]
                 if link_last < link_first:
@@ -598,8 +605,8 @@ def update_tendon_attachments(
             if adaptive_cone_sweeps != 0 and rel_change < tendon_settle_tol:
                 converged = 1
 
-        # Apply rolling surface travel once after material relaxation. This kinematic transport is
-        # already scaled by the capstan beta factor and must not be iteratively eroded by cone sweeps.
+        # Apply the friction-limited differential transport once after material relaxation so
+        # cone sweeps cannot iteratively erode it.
         if apply_rolling_transfer != 0:
             for i_roll in range(1, num_links - 1):
                 link_idx = link_start + i_roll
@@ -637,16 +644,20 @@ def update_tendon_attachments(
                 cap_ratio = wp.exp(wp.min(wp.max(tendon_link_mu[link_idx], 0.0) * theta, 20.0))
                 beta = (cap_ratio - 1.0) / (cap_ratio + 1.0)
 
+                # Apply only the friction-limited differential mode after relaxation. The common
+                # mode above is independent of friction and already accounts for wrapped material.
+                rolling_delta_diff = 0.5 * (seg_rolling_delta_r[seg_adj_left] - seg_rolling_delta_l[seg_adj_right])
                 len_al = wp.length(seg_attachment_r[seg_adj_left] - seg_attachment_l[seg_adj_left])
                 len_ar = wp.length(seg_attachment_r[seg_adj_right] - seg_attachment_l[seg_adj_right])
-                stretch_l = seg_stretch[seg_adj_left] - seg_rolling_delta_r[seg_adj_left] * beta
-                stretch_r = seg_stretch[seg_adj_right] - seg_rolling_delta_l[seg_adj_right] * beta
-                if stretch_l > len_al - min_rest:
-                    stretch_l = len_al - min_rest
-                if stretch_r > len_ar - min_rest:
-                    stretch_r = len_ar - min_rest
-                seg_stretch[seg_adj_left] = stretch_l
-                seg_stretch[seg_adj_right] = stretch_r
+                rest_l = len_al - seg_stretch[seg_adj_left]
+                rest_r = len_ar - seg_stretch[seg_adj_right]
+                rolling_transfer = rolling_delta_diff * beta
+                # Bound the zero-sum transfer as a pair. Clamping either span independently would
+                # discard the clipped amount and create cable material at the minimum rest length.
+                rolling_transfer = wp.max(rolling_transfer, min_rest - rest_l)
+                rolling_transfer = wp.min(rolling_transfer, rest_r - min_rest)
+                seg_stretch[seg_adj_left] = seg_stretch[seg_adj_left] - rolling_transfer
+                seg_stretch[seg_adj_right] = seg_stretch[seg_adj_right] + rolling_transfer
 
         # rebuild rest lengths from the telescoped stretch state (one cancellation per call,
         # paid once instead of every sweep -- this is what keeps the capstan accurate for stiff

@@ -24,6 +24,7 @@ from newton.examples.cable.example_tendon_rolling_pulley import Example as Rolli
 from newton.examples.cable.example_tendon_xy_table import Example as XYTableExample
 from newton.examples.cable.example_tendon_xy_table import _desired_table_xy
 from newton.tests.test_tendon_capstan import (
+    _moving_rolling_route_material_error,
     build_dynamic_pulley_atwood,
     build_kinematic_pulley_atwood,
     build_motorized_pulley_drive,
@@ -679,6 +680,27 @@ def test_vbd_motorized_pulley_updates_rest_in_first_step(test, device):
         )
 
 
+def test_vbd_moving_rolling_route_conserves_material(test, device):
+    """VBD should conserve material while a rolling link's wrap angle changes."""
+    with wp.ScopedDevice(device):
+
+        def solver_factory(model):
+            _set_serial_body_coloring(model)
+            return _make_tendon_vbd_solver(model)
+
+        cases = ((0.0, None), (0.2, None), (100.0, None), (100.0, 1))
+        for mu, short_segment in cases:
+            with test.subTest(mu=mu, short_segment=short_segment):
+                error, min_rest = _moving_rolling_route_material_error(solver_factory, mu, short_segment)
+                test.assertLess(
+                    error,
+                    1.0e-4,
+                    f"VBD cable material drifted by {error} m for mu={mu}, short_segment={short_segment}",
+                )
+                if short_segment is not None:
+                    test.assertLess(min_rest, 1.1e-6, "The VBD material-donor span should exercise the clamp")
+
+
 def test_vbd_rolling_transfer_saturates_at_zero_span(test, device):
     """Rolling transfer should clamp before a free span goes negative."""
     with wp.ScopedDevice(device):
@@ -964,6 +986,12 @@ add_test(
     "vbd_motorized_pulley_updates_rest_in_first_step",
     devices,
     test_vbd_motorized_pulley_updates_rest_in_first_step,
+)
+add_test(
+    TestTendonVBD,
+    "vbd_moving_rolling_route_conserves_material",
+    devices,
+    test_vbd_moving_rolling_route_conserves_material,
 )
 add_test(
     TestTendonVBD,
