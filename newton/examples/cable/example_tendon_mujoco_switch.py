@@ -6,10 +6,10 @@
 #
 # Active-set tendon routing with one optional wrap candidate.  A tendon is
 # anchored to the end of a rotating top capsule.  When the capsule swings left,
-# the straight lower-guide-to-endpoint span intersects the middle capstan and
-# the solver activates that rolling link.  When the capsule swings right, the
-# solver skips the middle capstan and the tendon wraps only around the lower
-# guide.
+# the straight lower-guide-to-endpoint span reaches the middle capstan from the
+# inactive side selected by its orientation, the solver activates that rolling
+# link.  When the capsule swings right, the solver skips the middle capstan and
+# the tendon wraps only around the lower guide.
 #
 # Command: python -m newton.examples tendon_mujoco_switch
 #
@@ -225,16 +225,17 @@ class Example:
         )
         middle = self._world_point_for_link(self.middle_link, body_q)
         span = endpoint - lower_departure
-        alpha = float(
-            np.clip(np.dot(middle - lower_departure, span) / max(float(np.dot(span, span)), 1.0e-12), 0.0, 1.0)
-        )
+        span_length_sq = max(float(np.dot(span, span)), 1.0e-12)
+        alpha = float(np.clip(np.dot(middle - lower_departure, span) / span_length_sq, 0.0, 1.0))
         closest = lower_departure + alpha * span
         distance = float(np.linalg.norm((middle - closest)[[0, 2]]))
-        return distance, alpha
+        span_normal = np.cross(np.array([0.0, 1.0, 0.0]), span) / math.sqrt(span_length_sq)
+        signed_distance = float(np.dot(middle - closest, span_normal))
+        return distance, signed_distance, alpha
 
     def _middle_should_wrap(self):
-        distance, alpha = self._middle_span_projection()
-        return 0.0 < alpha < 1.0 and distance <= self.middle_radius
+        _, signed_distance, alpha = self._middle_span_projection()
+        return 0.0 < alpha < 1.0 and self.middle_orientation * signed_distance <= self.middle_radius
 
     def simulate(self):
         for substep in range(self.sim_substeps):
@@ -283,7 +284,7 @@ class Example:
             self._saw_middle_segment_disabled = (
                 self._saw_middle_segment_disabled or seg_active[self.middle_right_seg] == 0
             )
-            distance, _alpha = self._middle_span_projection()
+            distance, _signed_distance, _alpha = self._middle_span_projection()
             self._max_inactive_middle_penetration = max(
                 self._max_inactive_middle_penetration,
                 0.0,
@@ -312,7 +313,7 @@ class Example:
         )
         assert self._transition_count >= 2, f"Expected activate/deactivate transitions: {self._transition_count}"
         assert self._activation_mismatch_count == 0, (
-            f"Active flag diverged from lower-tangent-to-endpoint intersection test: {self._activation_mismatch_count}"
+            f"Active flag diverged from oriented lower-tangent-to-endpoint test: {self._activation_mismatch_count}"
         )
         assert np.max(top_x_history) > 0.45 and np.min(top_x_history) < -0.12, (
             f"Top endpoint did not sweep both sides: min/max x={np.min(top_x_history):.4f}/{np.max(top_x_history):.4f}"

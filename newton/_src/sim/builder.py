@@ -4513,9 +4513,10 @@ class ModelBuilder:
             radius: Contact radius [m] for ROLLING links (pulley radius).
             orientation: Winding direction, +1 or -1.
             mu: Coulomb friction coefficient at this contact.
-            dynamic: Whether :class:`~newton.solvers.SolverXPBD` should update
-                this ROLLING link from the current route geometry. The initial
-                state is resolved before tendon rest lengths are measured.
+            dynamic: Whether :class:`~newton.solvers.SolverXPBD` should treat
+                this ROLLING link as a one-sided obstacle selected by
+                ``orientation``. The initial state is resolved from the route
+                geometry before tendon rest lengths are measured.
             offset: Local-frame position of the cable plane center on the body [m].
             axis: Local-frame normal of the cable plane on the body.
             compliance: Compliance [m/N] for the segment ending at this link
