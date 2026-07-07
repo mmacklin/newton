@@ -14,7 +14,68 @@ import warp as wp
 
 import newton
 import newton.examples
+from newton._src.solvers.xpbd.kernels import apply_body_deltas
 from newton.tests.unittest_utils import add_function_test, get_test_devices
+
+
+@wp.kernel
+def _compute_body_com(
+    body_q: wp.array[wp.transform],
+    body_com: wp.array[wp.vec3],
+    world_com: wp.array[wp.vec3],
+):
+    tid = wp.tid()
+    transform = body_q[tid]
+    world_com[tid] = wp.transform_get_translation(transform) + wp.quat_rotate(
+        wp.transform_get_rotation(transform), body_com[tid]
+    )
+
+
+def _apply_test_body_delta(
+    device,
+    q_in,
+    body_com,
+    body_deltas,
+    position_residual=None,
+    orientation_residual=None,
+    orientation_residual_reference=None,
+):
+    """Apply one unconstrained body delta while preserving optional residual buffers."""
+    identity_inertia = wp.mat33(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+    qd_in = wp.zeros(1, dtype=wp.spatial_vector, device=device)
+    body_inertia = wp.array([identity_inertia], dtype=wp.mat33, device=device)
+    body_inv_mass = wp.ones(1, dtype=float, device=device)
+    body_inv_inertia = wp.array([identity_inertia], dtype=wp.mat33, device=device)
+    q_out = wp.empty_like(q_in)
+    qd_out = wp.empty_like(qd_in)
+    if position_residual is None:
+        position_residual = wp.zeros(1, dtype=wp.vec3, device=device)
+    if orientation_residual is None:
+        orientation_residual = wp.zeros(1, dtype=wp.quat, device=device)
+    if orientation_residual_reference is None:
+        orientation_residual_reference = wp.zeros(1, dtype=wp.quat, device=device)
+
+    wp.launch(
+        apply_body_deltas,
+        dim=1,
+        inputs=[
+            q_in,
+            qd_in,
+            body_com,
+            body_inertia,
+            body_inv_mass,
+            body_inv_inertia,
+            body_deltas,
+            None,
+            1.0,
+            position_residual,
+            orientation_residual,
+            orientation_residual_reference,
+        ],
+        outputs=[q_out, qd_out, position_residual, orientation_residual, orientation_residual_reference],
+        device=device,
+    )
+    return q_out, qd_out, position_residual, orientation_residual, orientation_residual_reference
 
 
 def test_particle_particle_friction_uses_relative_velocity(test, device):
@@ -1035,6 +1096,8 @@ def test_xpbd_parent_force_zero_for_free_body(test, device):
 
 def test_xpbd_parent_f_includes_control_joint_f(test, device):
     """XPBD ``body_parent_f`` should include feedforward joint forces."""
+    # Each deterministic float32 case loses COM reconstruction precision on the named axis when
+    # the body-origin subtraction is not included in the residual.
     cases = [
         ("prismatic", 7.0, np.array([7.0, 0.0, 0.0, 0.0, 0.0, 0.0])),
         ("revolute", 5.0, np.array([0.0, 0.0, 0.0, 0.0, 5.0, 0.0])),
@@ -1249,6 +1312,437 @@ def test_xpbd_joint_reaction_f_balances_centered_tendon_load(test, device):
         atol=1.0e-2,
         err_msg="Per-joint reaction should balance the centered tendon pull",
     )
+
+
+def test_xpbd_compensated_delta_matches_stored_com(test, device):
+    """Compensation should preserve physical COM corrections along every world axis."""
+
+    # These minimized float32 regression inputs avoid the exact arithmetic of axis-aligned poses.
+    # The first detects frame-dependent coefficient reuse; the others cover generic axes.
+    cases = [
+        (
+            "x",
+            [8.156218528747559, -1413.8487548828125, 2163.519775390625],
+            [-0.8937521576881409, -0.32368698716163635, -1.8234782218933105],
+            [0.5590193867683411, 0.6760625839233398, 0.25593602657318115],
+        ),
+        (
+            "y",
+            [-1989.7506103515625, -5.605644226074219, 7967.12646484375],
+            [-0.613669753074646, -0.282810777425766, -0.7529687881469727],
+            [0.5284032821655273, 0.6503674387931824, 0.5999389886856079],
+        ),
+        (
+            "z",
+            [1097.392822265625, 1484.0479736328125, 61.92136764526367],
+            [-1.6381856203079224, 0.805618941783905, -1.887710452079773],
+            [0.45214739441871643, 0.768560528755188, 0.07669907808303833],
+        ),
+    ]
+    linear_delta = np.zeros(3, dtype=np.float64)
+
+    for axis, position_values, com_values, angular_values in cases:
+        with test.subTest(axis=axis):
+            position = wp.vec3(*position_values)
+            com = wp.vec3(*com_values)
+            angular_delta = wp.vec3(*angular_values)
+            q_in = wp.array(
+                [wp.transform(position, wp.quat_identity())],
+                dtype=wp.transform,
+                device=device,
+            )
+            body_com = wp.array([com], dtype=wp.vec3, device=device)
+            body_deltas = wp.array(
+                [wp.spatial_vector(0.0, 0.0, 0.0, angular_delta[0], angular_delta[1], angular_delta[2])],
+                dtype=wp.spatial_vector,
+                device=device,
+            )
+            q_out, _, position_residual, _, _ = _apply_test_body_delta(device, q_in, body_com, body_deltas)
+
+            world_com_in = wp.empty(1, dtype=wp.vec3, device=device)
+            world_com_out = wp.empty(1, dtype=wp.vec3, device=device)
+            wp.launch(_compute_body_com, dim=1, inputs=[q_in, body_com], outputs=[world_com_in], device=device)
+            wp.launch(_compute_body_com, dim=1, inputs=[q_out, body_com], outputs=[world_com_out], device=device)
+
+            actual_delta = world_com_out.numpy()[0].astype(np.float64) - world_com_in.numpy()[0].astype(np.float64)
+            stored_residual = position_residual.numpy()[0].astype(np.float64)
+            np.testing.assert_allclose(
+                actual_delta + stored_residual,
+                linear_delta,
+                rtol=0.0,
+                atol=np.finfo(np.float32).eps,
+                err_msg=(
+                    "Position compensation must equal the requested physical COM correction minus the correction "
+                    "represented by the final stored transform"
+                ),
+            )
+
+
+def test_xpbd_orientation_residual_survives_independent_rotation(test, device):
+    """Orientation compensation should survive varied corrections and independent rotations."""
+
+    def quat_multiply(a, b):
+        return np.concatenate(
+            (
+                a[3] * b[:3] + b[3] * a[:3] + np.cross(a[:3], b[:3]),
+                [a[3] * b[3] - np.dot(a[:3], b[:3])],
+            )
+        )
+
+    def quat_normalize(q):
+        return q / np.linalg.norm(q)
+
+    float32_epsilon = np.finfo(np.float32).eps
+    # Keep the exact coefficients: simpler axis-aligned inputs often normalize without leaving a
+    # residual and therefore miss the quaternion-rebasing bug.
+    cases = [
+        (
+            "sub_resolution",
+            [0.5515589714050293, -0.78803950548172, -0.13399574160575867, 0.23837265372276306],
+            [-0.4513065218925476, 0.7668594717979431, 0.33181118965148926, -0.3132895231246948],
+            [-0.0016656698426231742, 0.003512135474011302, 0.0028139546047896147],
+            0.5 * float32_epsilon,
+        ),
+        (
+            "generic_axes",
+            [0.7384324073791504, 0.466004341840744, -0.2665167450904846, 0.40807637572288513],
+            [-0.7930372953414917, -0.594332218170166, 0.04485107585787773, -0.1258944272994995],
+            [-1.9048960208892822, 1.5098347663879395, -0.6029934287071228],
+            2.0 * float32_epsilon,
+        ),
+        (
+            "large_correction",
+            [0.26834166049957275, -0.21437884867191315, -0.7546015977859497, 0.5591161847114563],
+            [-0.04638015851378441, 0.21054482460021973, -0.8594607710838318, 0.46351584792137146],
+            [0.3785887658596039, 6.385866165161133, -1.9849498271942139],
+            2.0 * float32_epsilon,
+        ),
+    ]
+    for name, orientation_values, independent_values, angular_values, tolerance in cases:
+        with test.subTest(name=name):
+            orientation = np.array(orientation_values, dtype=np.float64)
+            independent_orientation = np.array(independent_values, dtype=np.float64)
+            angular_delta = np.array(angular_values, dtype=np.float64)
+            q_in = wp.array(
+                [wp.transform(wp.vec3(0.0), wp.quat(*orientation))],
+                dtype=wp.transform,
+                device=device,
+            )
+            body_com = wp.zeros(1, dtype=wp.vec3, device=device)
+            body_deltas = wp.array(
+                [wp.spatial_vector(0.0, 0.0, 0.0, *angular_delta)],
+                dtype=wp.spatial_vector,
+                device=device,
+            )
+            q_mid, qd_mid, position_residual, orientation_residual, orientation_residual_reference = (
+                _apply_test_body_delta(device, q_in, body_com, body_deltas)
+            )
+
+            independently_rotated_q = wp.array(
+                [wp.transform(wp.vec3(0.0), wp.quat(*independent_orientation))],
+                dtype=wp.transform,
+                device=device,
+            )
+            body_deltas.zero_()
+            q_out, _, _, _, _ = _apply_test_body_delta(
+                device,
+                independently_rotated_q,
+                body_com,
+                body_deltas,
+                position_residual,
+                orientation_residual,
+                orientation_residual_reference,
+            )
+
+            stored_mid_orientation = q_mid.numpy()[0, 3:].astype(np.float64)
+            applied_angular_delta = qd_mid.numpy()[0, 3:].astype(np.float64)
+            exact_step = 0.5 * quat_multiply(np.append(applied_angular_delta, 0.0), orientation)
+            exact_mid_orientation = quat_normalize(orientation + exact_step)
+            stored_mid_inverse = np.concatenate((-stored_mid_orientation[:3], [stored_mid_orientation[3]]))
+            stored_mid_inverse /= np.dot(stored_mid_orientation, stored_mid_orientation)
+            missing_world_rotation = quat_multiply(exact_mid_orientation, stored_mid_inverse)
+            expected = quat_normalize(quat_multiply(missing_world_rotation, independent_orientation))
+            actual = q_out.numpy()[0, 3:].astype(np.float64)
+            if np.dot(actual, expected) < 0.0:
+                actual = -actual
+
+            np.testing.assert_allclose(
+                actual,
+                expected,
+                rtol=0.0,
+                atol=tolerance,
+                err_msg=(
+                    "Orientation compensation must represent the same missing world-space rotation "
+                    "after the pose changes"
+                ),
+            )
+
+
+def test_xpbd_joint_reaction_f_matches_offset_tendon_load_at_large_pose(test, device):
+    """Joint reaction should balance a known tendon wrench at a large world pose."""
+
+    # A generic large transform exposes the lost COM corrections that an origin-centered fixture
+    # rounds too accurately to detect.
+    position = np.array([78.8276025390625, 91.031767578125, -4.9664501953125], dtype=np.float64)
+    orientation = np.array(
+        [-0.5250166058540344, 0.24299220740795135, -0.7181521058082581, 0.3867427706718445],
+        dtype=np.float64,
+    )
+    com = np.array([-0.5156180262565613, 0.006804720964282751, 0.9882628321647644], dtype=np.float64)
+    attachment_local = com + np.array([0.0, 0.2, 0.0], dtype=np.float64)
+
+    def rotate(q, value):
+        q_xyz = q[:3]
+        return value + 2.0 * np.cross(q_xyz, np.cross(q_xyz, value) + q[3] * value)
+
+    body_pose = wp.transform(wp.vec3(*position), wp.quat(*orientation))
+    attachment_world = position + rotate(orientation, attachment_local)
+    cable_direction = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+    anchor_position = attachment_world + cable_direction
+    identity_inertia = wp.mat33(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+
+    builder = newton.ModelBuilder(gravity=0.0, up_axis=newton.Axis.Z)
+    anchor = builder.add_body(
+        xform=wp.transform(wp.vec3(*anchor_position), wp.quat_identity()),
+        mass=0.0,
+        is_kinematic=True,
+    )
+    body = builder.add_link(
+        xform=body_pose,
+        mass=1.0,
+        inertia=identity_inertia,
+        com=wp.vec3(*com),
+        lock_inertia=True,
+    )
+    joint = builder.add_joint_fixed(
+        -1,
+        body,
+        parent_xform=body_pose,
+        child_xform=wp.transform_identity(),
+    )
+    builder.add_articulation([joint])
+
+    compliance = 1.0e-3
+    rest_length = 0.8
+    builder.add_tendon()
+    builder.add_tendon_link(
+        body=anchor,
+        link_type=int(newton.TendonLinkType.ATTACHMENT),
+        offset=(0.0, 0.0, 0.0),
+        axis=(0.0, 1.0, 0.0),
+    )
+    builder.add_tendon_link(
+        body=body,
+        link_type=int(newton.TendonLinkType.ATTACHMENT),
+        offset=tuple(attachment_local),
+        axis=(0.0, 1.0, 0.0),
+        compliance=compliance,
+        damping=0.0,
+        rest_length=rest_length,
+    )
+
+    model = builder.finalize(device=device)
+    solver = newton.solvers.SolverXPBD(
+        model,
+        iterations=128,
+        joint_linear_relaxation=1.0,
+        joint_angular_relaxation=1.0,
+    )
+    state_in = model.state()
+    state_out = model.state()
+    control = model.control()
+    newton.eval_fk(model, model.joint_q, model.joint_qd, state_in)
+    dt = 1.0 / 60.0
+    for _ in range(3):
+        solver.step(state_in, state_out, control, None, dt)
+        state_in, state_out = state_out, state_in
+
+    tendon_tension = float(-solver.tendon_seg_lambda.numpy()[0] / dt)
+    reaction = solver.joint_reaction_f.numpy()[joint].astype(np.float64)
+    attachment_l = solver.tendon_seg_attachment_l.numpy()[0].astype(np.float64)
+    attachment_r = solver.tendon_seg_attachment_r.numpy()[0].astype(np.float64)
+    span = attachment_l - attachment_r
+    cable_force = tendon_tension * span / np.linalg.norm(span)
+    body_pose_stored = state_in.body_q.numpy()[body].astype(np.float64)
+    body_world_com = body_pose_stored[:3] + rotate(body_pose_stored[3:], com)
+    moment_arm = attachment_r - body_world_com
+    expected = np.concatenate((-cable_force, -np.cross(moment_arm, cable_force)))
+
+    test.assertGreater(tendon_tension, 100.0, "Benchmark should apply a substantial tendon load")
+    np.testing.assert_allclose(
+        reaction,
+        expected,
+        rtol=7.0e-2,
+        atol=1.0,
+        err_msg="Joint reaction should balance the analytic force and torque from the offset tendon",
+    )
+
+
+def test_xpbd_joint_reaction_f_stable_after_convergence(test, device):
+    """Extra XPBD iterations should not change a converged joint reaction."""
+    half_width = 0.025
+    rod_length = 1.0
+    rod_volume = rod_length * (2.0 * half_width) ** 2
+
+    builder = newton.ModelBuilder(gravity=-9.81, up_axis=newton.Axis.Z)
+    body = builder.add_link(xform=wp.transform_identity())
+    builder.add_shape_box(
+        body,
+        xform=wp.transform(wp.vec3(0.5 * rod_length, 0.0, 0.0), wp.quat_identity()),
+        hx=0.5 * rod_length,
+        hy=half_width,
+        hz=half_width,
+        cfg=newton.ModelBuilder.ShapeConfig(density=1.0 / rod_volume),
+    )
+    joint = builder.add_joint_revolute(
+        -1,
+        body,
+        parent_xform=wp.transform_identity(),
+        child_xform=wp.transform_identity(),
+        axis=wp.vec3(0.0, 1.0, 0.0),
+    )
+    builder.add_articulation([joint])
+    model = builder.finalize(device=device)
+
+    joint_q = model.joint_q.numpy()
+    joint_qd = model.joint_qd.numpy()
+    joint_q[0] = 0.66
+    joint_qd[0] = 4.23
+    model.joint_q.assign(joint_q)
+    model.joint_qd.assign(joint_qd)
+
+    initial_state = model.state()
+    newton.eval_fk(model, model.joint_q, model.joint_qd, initial_state)
+    initial_body_q = initial_state.body_q.numpy().copy()
+    initial_body_qd = initial_state.body_qd.numpy().copy()
+
+    solver = newton.solvers.SolverXPBD(
+        model,
+        iterations=16,
+        joint_linear_relaxation=1.0,
+        joint_angular_relaxation=1.0,
+    )
+    control = model.control()
+    contacts = model.contacts()
+
+    def run(iterations):
+        state_in = model.state()
+        state_out = model.state()
+        state_in.body_q.assign(initial_body_q)
+        state_in.body_qd.assign(initial_body_qd)
+        state_in.clear_forces()
+        solver.iterations = iterations
+        solver.step(state_in, state_out, control, contacts, 1.0e-3)
+        return solver.joint_reaction_f.numpy()[joint]
+
+    converged_reaction = run(16)
+    extra_iteration_reaction = run(128)
+
+    test.assertGreater(np.linalg.norm(converged_reaction[:3]), 1.0)
+    np.testing.assert_allclose(
+        extra_iteration_reaction,
+        converged_reaction,
+        rtol=0.0,
+        atol=1.0e-6,
+        err_msg="Joint reaction should not accumulate sub-resolution corrections after convergence",
+    )
+
+
+def test_xpbd_dynamic_pair_reaction_stable_after_convergence(test, device):
+    """A converged reaction between moving dynamic bodies should remain stable."""
+    # Unequal masses and a generic world transform expose asymmetric float32 roundoff that an
+    # equal-mass, axis-aligned pair resolves exactly.
+    builder = newton.ModelBuilder(gravity=0.0, up_axis=newton.Axis.Z)
+    parent = builder.add_link()
+    builder.add_shape_box(
+        parent,
+        hx=0.2,
+        hy=0.1,
+        hz=0.1,
+        cfg=newton.ModelBuilder.ShapeConfig(density=100000.0),
+    )
+    child = builder.add_link()
+    builder.add_shape_box(
+        child,
+        hx=0.2,
+        hy=0.1,
+        hz=0.1,
+        cfg=newton.ModelBuilder.ShapeConfig(density=1000.0),
+    )
+
+    free_joint = builder.add_joint_free(child=parent)
+    fixed_joint = builder.add_joint_fixed(
+        parent,
+        child,
+        parent_xform=wp.transform(wp.vec3(0.5, 0.0, 0.0), wp.quat_identity()),
+        child_xform=wp.transform(wp.vec3(-0.5, 0.0, 0.0), wp.quat_identity()),
+    )
+    builder.add_articulation([free_joint, fixed_joint])
+    model = builder.finalize(device=device)
+
+    axis = np.array([1.0, 2.0, 3.0])
+    axis /= np.linalg.norm(axis)
+    half_angle = 0.5
+    joint_q = model.joint_q.numpy()
+    joint_q[:7] = (
+        10.0,
+        10.0,
+        10.0,
+        axis[0] * np.sin(half_angle),
+        axis[1] * np.sin(half_angle),
+        axis[2] * np.sin(half_angle),
+        np.cos(half_angle),
+    )
+    model.joint_q.assign(joint_q)
+
+    initial_state = model.state()
+    newton.eval_fk(model, model.joint_q, model.joint_qd, initial_state)
+    # Exercise both linear and angular constraint corrections with nonzero relative motion.
+    initial_body_qd = initial_state.body_qd.numpy()
+    initial_body_qd[parent, :3] = (1.0, 2.0, 3.0)
+    initial_body_qd[child, :3] = (-1.0, -2.0, -3.0)
+    initial_body_qd[parent, 3:] = (4.0, 7.0, 10.0)
+    initial_body_qd[child, 3:] = (-4.0, -7.0, -10.0)
+    initial_state.body_qd.assign(initial_body_qd)
+
+    test.assertGreater(np.linalg.norm(initial_body_qd[parent, :3] - initial_body_qd[child, :3]), 1.0)
+    test.assertGreater(np.linalg.norm(initial_body_qd[parent, 3:] - initial_body_qd[child, 3:]), 1.0)
+
+    initial_body_q = initial_state.body_q.numpy().copy()
+    initial_body_qd = initial_state.body_qd.numpy().copy()
+    body_mass = model.body_mass.numpy()
+    initial_momentum = np.sum(body_mass[:, None] * initial_body_qd[:, :3], axis=0)
+
+    solver = newton.solvers.SolverXPBD(
+        model,
+        iterations=256,
+        joint_linear_relaxation=1.0,
+        joint_angular_relaxation=1.0,
+        angular_damping=0.0,
+    )
+    control = model.control()
+    contacts = model.contacts()
+
+    def run(iterations):
+        state_in = model.state()
+        state_out = model.state()
+        state_in.body_q.assign(initial_body_q)
+        state_in.body_qd.assign(initial_body_qd)
+        state_in.clear_forces()
+        solver.iterations = iterations
+        solver.step(state_in, state_out, control, contacts, 1.0e-3)
+        reaction = solver.joint_reaction_f.numpy()[fixed_joint]
+        final_body_qd = state_out.body_qd.numpy()
+        final_momentum = np.sum(body_mass[:, None] * final_body_qd[:, :3], axis=0)
+        return reaction, final_momentum
+
+    converged_reaction, converged_momentum = run(256)
+    extra_iteration_reaction, extra_iteration_momentum = run(512)
+
+    relative_change = np.linalg.norm(extra_iteration_reaction - converged_reaction) / np.linalg.norm(converged_reaction)
+    test.assertLess(relative_change, 1.0e-6)
+    np.testing.assert_allclose(converged_momentum, initial_momentum, rtol=1.0e-6, atol=1.0e-3)
+    np.testing.assert_allclose(extra_iteration_momentum, initial_momentum, rtol=1.0e-6, atol=1.0e-3)
 
 
 def test_xpbd_joint_reaction_f_includes_offset_tendon_torque(test, device):
@@ -1838,6 +2332,46 @@ add_function_test(
     TestSolverXPBD,
     "test_xpbd_joint_reaction_f_balances_centered_tendon_load",
     test_xpbd_joint_reaction_f_balances_centered_tendon_load,
+    devices=devices,
+    check_output=False,
+)
+
+add_function_test(
+    TestSolverXPBD,
+    "test_xpbd_compensated_delta_matches_stored_com",
+    test_xpbd_compensated_delta_matches_stored_com,
+    devices=devices,
+    check_output=False,
+)
+
+add_function_test(
+    TestSolverXPBD,
+    "test_xpbd_orientation_residual_survives_independent_rotation",
+    test_xpbd_orientation_residual_survives_independent_rotation,
+    devices=devices,
+    check_output=False,
+)
+
+add_function_test(
+    TestSolverXPBD,
+    "test_xpbd_joint_reaction_f_matches_offset_tendon_load_at_large_pose",
+    test_xpbd_joint_reaction_f_matches_offset_tendon_load_at_large_pose,
+    devices=devices,
+    check_output=False,
+)
+
+add_function_test(
+    TestSolverXPBD,
+    "test_xpbd_joint_reaction_f_stable_after_convergence",
+    test_xpbd_joint_reaction_f_stable_after_convergence,
+    devices=devices,
+    check_output=False,
+)
+
+add_function_test(
+    TestSolverXPBD,
+    "test_xpbd_dynamic_pair_reaction_stable_after_convergence",
+    test_xpbd_dynamic_pair_reaction_stable_after_convergence,
     devices=devices,
     check_output=False,
 )

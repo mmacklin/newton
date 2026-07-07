@@ -156,6 +156,11 @@ class SolverXPBD(TendonStateMixin, SolverBase):
         # helper variables to track constraint resolution vars
         self._particle_delta_counter = 0
         self._body_delta_counter = 0
+        self._joint_position_delta_residual = wp.zeros(model.body_count, dtype=wp.vec3, device=model.device)
+        self._joint_orientation_delta_residual = wp.zeros(model.body_count, dtype=wp.quat, device=model.device)
+        self._joint_orientation_delta_residual_reference = wp.zeros(
+            model.body_count, dtype=wp.quat, device=model.device
+        )
 
         # tendon state
         self._init_tendon_state(model)
@@ -235,6 +240,7 @@ class SolverXPBD(TendonStateMixin, SolverBase):
         body_deltas: wp.array,
         dt: float,
         rigid_contact_inv_weight: wp.array = None,
+        compensate_roundoff: bool = False,
     ):
         with wp.ScopedTimer("apply_body_deltas", False):
             if state_in.requires_grad:
@@ -256,6 +262,16 @@ class SolverXPBD(TendonStateMixin, SolverBase):
                     new_body_qd = state_out.body_qd
                 self._body_delta_counter = 1 - self._body_delta_counter
 
+            position_delta_residual = None
+            orientation_delta_residual = None
+            orientation_delta_residual_reference = None
+            if compensate_roundoff and not state_in.requires_grad:
+                # Tape needs immutable primals, while this numerical workspace is updated in place.
+                # Keep differentiable XPBD on its established uncompensated update path for now.
+                position_delta_residual = self._joint_position_delta_residual
+                orientation_delta_residual = self._joint_orientation_delta_residual
+                orientation_delta_residual_reference = self._joint_orientation_delta_residual_reference
+
             wp.launch(
                 kernel=apply_body_deltas,
                 dim=model.body_count,
@@ -269,10 +285,16 @@ class SolverXPBD(TendonStateMixin, SolverBase):
                     body_deltas,
                     rigid_contact_inv_weight,
                     dt,
+                    position_delta_residual,
+                    orientation_delta_residual,
+                    orientation_delta_residual_reference,
                 ],
                 outputs=[
                     new_body_q,
                     new_body_qd,
+                    position_delta_residual,
+                    orientation_delta_residual,
+                    orientation_delta_residual_reference,
                 ],
                 device=model.device,
             )
@@ -290,6 +312,11 @@ class SolverXPBD(TendonStateMixin, SolverBase):
         self._body_delta_counter = 0
 
         model = self.model
+
+        if model.joint_count and not state_in.requires_grad:
+            self._joint_position_delta_residual.zero_()
+            self._joint_orientation_delta_residual.zero_()
+            self._joint_orientation_delta_residual_reference.zero_()
 
         particle_q = None
         particle_qd = None
@@ -670,7 +697,9 @@ class SolverXPBD(TendonStateMixin, SolverBase):
                             device=model.device,
                         )
 
-                        body_q, body_qd = self._apply_body_deltas(model, state_in, state_out, body_deltas, dt)
+                        body_q, body_qd = self._apply_body_deltas(
+                            model, state_in, state_out, body_deltas, dt, compensate_roundoff=True
+                        )
 
                     # solve tendon segment distance constraints
                     if model.tendon_segment_count > 0 and body_q is not None:
