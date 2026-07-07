@@ -1,0 +1,8 @@
+﻿newton.InverseDynamics
+======================
+
+.. autoclass:: newton.InverseDynamics
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :member-order: groupwise
