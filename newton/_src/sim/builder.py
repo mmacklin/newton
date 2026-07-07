@@ -1084,6 +1084,7 @@ class ModelBuilder:
         self.joint_articulation: list[int] = []
         """Articulation indices accumulated for :attr:`Model.joint_articulation`."""
 
+        # elastic bodies
         self.elastic_body: list[int] = []
         """Body index for each reduced elastic body."""
         self.elastic_joint: list[int] = []
@@ -1098,6 +1099,14 @@ class ModelBuilder:
         """Reduced elastic modal stiffness values."""
         self.elastic_mode_damping: list[float] = []
         """Reduced elastic modal damping values."""
+        self.elastic_mode_coupling_linear: list[tuple[float, float, float]] = []
+        """Reduced elastic linear inertia coupling integrals S_i [kg]."""
+        self.elastic_mode_coupling_angular: list[tuple[float, float, float]] = []
+        """Reduced elastic angular inertia coupling integrals [kg m]."""
+        self.elastic_mode_coupling_centrifugal: list[wp.mat33] = []
+        """Reduced elastic centrifugal coupling integrals [kg m^2], row-major 3x3 per mode."""
+        self.elastic_mode_coupling_coriolis: list[tuple[float, float, float]] = []
+        """Reduced elastic Coriolis coupling integrals [kg m^2], row-major mode pairs per elastic body."""
         self.elastic_mode_shape_fn: list[Callable[[np.ndarray], Any] | None] = []
         """Builder-only mode-shape sampling callables for reduced elastic bodies."""
         self.modal_bases: list[ModalBasis] = []
@@ -3026,6 +3035,10 @@ class ModelBuilder:
             self.elastic_mode_mass.extend(builder.elastic_mode_mass)
             self.elastic_mode_stiffness.extend(builder.elastic_mode_stiffness)
             self.elastic_mode_damping.extend(builder.elastic_mode_damping)
+            self.elastic_mode_coupling_linear.extend(builder.elastic_mode_coupling_linear)
+            self.elastic_mode_coupling_angular.extend(builder.elastic_mode_coupling_angular)
+            self.elastic_mode_coupling_centrifugal.extend(builder.elastic_mode_coupling_centrifugal)
+            self.elastic_mode_coupling_coriolis.extend(builder.elastic_mode_coupling_coriolis)
             self.elastic_mode_shape_fn.extend(builder.elastic_mode_shape_fn)
             builder_elastic_basis = getattr(builder, "elastic_basis", [-1] * len(builder.elastic_body))
             self.elastic_basis.extend([modal_basis_map[idx] if idx >= 0 else -1 for idx in builder_elastic_basis])
@@ -3535,6 +3548,46 @@ class ModelBuilder:
             raise ValueError(f"{name} must have length {mode_count}, got {len(result)}")
         return result
 
+    @staticmethod
+    def _coerce_coupling_values(values: np.ndarray | None, mode_count: int) -> list[tuple[float, float, float]]:
+        if values is None:
+            return [(0.0, 0.0, 0.0)] * mode_count
+        rows = np.asarray(values, dtype=np.float32).reshape((mode_count, 3))
+        return [(float(r[0]), float(r[1]), float(r[2])) for r in rows]
+
+    @staticmethod
+    def _coerce_coupling_matrices(values: np.ndarray | None, mode_count: int) -> list[wp.mat33]:
+        """Return per-mode 3x3 coupling blocks, zeros when the basis has none."""
+        if values is None:
+            return [wp.mat33(0.0) for _ in range(mode_count)]
+        blocks = np.asarray(values, dtype=np.float32).reshape((mode_count, 9))
+        return [wp.mat33(*block.tolist()) for block in blocks]
+
+    @staticmethod
+    def _coerce_coupling_pairs(values: np.ndarray | None, mode_count: int) -> list[tuple[float, float, float]]:
+        """Return row-major mode-pair vec3 coupling rows, zeros when the basis has none."""
+        if values is None:
+            return [(0.0, 0.0, 0.0)] * (mode_count * mode_count)
+        rows = np.asarray(values, dtype=np.float32).reshape((mode_count * mode_count, 3))
+        return [(float(r[0]), float(r[1]), float(r[2])) for r in rows]
+
+    def _padded_coriolis_blocks(self) -> list[wp.vec3]:
+        """Pad each elastic body's row-major mode-pair Coriolis block to ``elastic_max_mode_count``."""
+        max_modes = self.elastic_max_mode_count
+        padded: list[wp.vec3] = []
+        offset = 0
+        for e in range(len(self.elastic_body)):
+            n = int(self.elastic_mode_count[e])
+            for i in range(max_modes):
+                for j in range(max_modes):
+                    if i < n and j < n:
+                        v = self.elastic_mode_coupling_coriolis[offset + i * n + j]
+                        padded.append(wp.vec3(float(v[0]), float(v[1]), float(v[2])))
+                    else:
+                        padded.append(wp.vec3(0.0))
+            offset += n * n
+        return padded
+
     def _register_modal_basis(self, basis: ModalBasis) -> int:
         basis_id = id(basis)
         basis_index = self._modal_basis_ids.get(basis_id)
@@ -3741,6 +3794,10 @@ class ModelBuilder:
             raise ValueError("modal_basis and mode_shape_fn are mutually exclusive")
 
         basis_index = -1
+        coupling_linear = None
+        coupling_angular = None
+        coupling_centrifugal = None
+        coupling_coriolis = None
         if modal_basis is not None:
             if mode_count == 0:
                 mode_count = modal_basis.mode_count
@@ -3755,6 +3812,10 @@ class ModelBuilder:
                 mode_stiffness = modal_basis.mode_stiffness
             if mode_damping is None:
                 mode_damping = modal_basis.mode_damping
+            coupling_linear = modal_basis.mode_coupling_linear
+            coupling_angular = modal_basis.mode_coupling_angular
+            coupling_centrifugal = modal_basis.mode_coupling_centrifugal
+            coupling_coriolis = modal_basis.mode_coupling_coriolis
 
         body_id = self.add_link(
             xform=xform,
@@ -3786,6 +3847,10 @@ class ModelBuilder:
         self.elastic_mode_mass.extend(self._coerce_mode_values(mode_mass, mode_count, 1.0, "mode_mass"))
         self.elastic_mode_stiffness.extend(self._coerce_mode_values(mode_stiffness, mode_count, 0.0, "mode_stiffness"))
         self.elastic_mode_damping.extend(self._coerce_mode_values(mode_damping, mode_count, 0.0, "mode_damping"))
+        self.elastic_mode_coupling_linear.extend(self._coerce_coupling_values(coupling_linear, mode_count))
+        self.elastic_mode_coupling_angular.extend(self._coerce_coupling_values(coupling_angular, mode_count))
+        self.elastic_mode_coupling_centrifugal.extend(self._coerce_coupling_matrices(coupling_centrifugal, mode_count))
+        self.elastic_mode_coupling_coriolis.extend(self._coerce_coupling_pairs(coupling_coriolis, mode_count))
         self.elastic_mode_shape_fn.append(mode_shape_fn)
         self.elastic_basis.append(basis_index)
         self.elastic_max_mode_count = max(self.elastic_max_mode_count, mode_count)
@@ -10868,6 +10933,18 @@ class ModelBuilder:
                 self.elastic_mode_stiffness, dtype=wp.float32, requires_grad=requires_grad
             )
             m.elastic_mode_damping = wp.array(self.elastic_mode_damping, dtype=wp.float32, requires_grad=requires_grad)
+            m.elastic_mode_coupling_linear = wp.array(
+                self.elastic_mode_coupling_linear, dtype=wp.vec3, requires_grad=requires_grad
+            )
+            m.elastic_mode_coupling_angular = wp.array(
+                self.elastic_mode_coupling_angular, dtype=wp.vec3, requires_grad=requires_grad
+            )
+            m.elastic_mode_coupling_centrifugal = wp.array(
+                self.elastic_mode_coupling_centrifugal, dtype=wp.mat33, requires_grad=requires_grad
+            )
+            m.elastic_mode_coupling_coriolis = wp.array(
+                self._padded_coriolis_blocks(), dtype=wp.vec3, requires_grad=requires_grad
+            )
             m.elastic_endpoint_joint = wp.array(self.elastic_endpoint_joint, dtype=wp.int32)
             m.elastic_endpoint_side = wp.array(self.elastic_endpoint_side, dtype=wp.int32)
             m.elastic_endpoint_body = wp.array(self.elastic_endpoint_body, dtype=wp.int32)
