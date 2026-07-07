@@ -72,17 +72,17 @@ ZOOM_EXAGGERATION = 300.0  # height exaggeration in zoom mode (applied to both
 RASTER_MARGIN = 0.008  # commanded pad-center distance from the sheet edge [m]
 # (the pad lags the PD target by a few mm under friction, so the command
 # overshoots slightly to keep the footprint covering the full sheet)
-RASTER_STRIPES = 21  # number of raster stripes
+RASTER_STRIPES = 25  # number of raster stripes
 K_WEAR = 2.0e-2  # wear rate coefficient [m removed per m slid]
 ORBITAL_SPEED = 0.15  # intrinsic abrasive speed of the (orbital) sander [m/s];
 # keeps removal going through raster turnarounds where the feed speed
 # passes through zero
-WEAR_CONTACT_THRESHOLD = 1.5e-4  # a texel wears only when its displaced
+WEAR_CONTACT_THRESHOLD = 5.0e-5  # a texel wears only when its displaced
 # surface point is within this distance of the pad's bottom face [m]:
-# effectively the compliance of a foam-backed abrasive pad. On the curved
-# panel the surface falls away from the flat face by the curvature sagitta
-# (~0.56 mm at the footprint edges), so this depth sets the width of the
-# abraded strip around the tangent line (~13 mm here).
+# the abrasive grit engagement depth. On the curved panel the surface
+# falls away from the flat face by the curvature sagitta, so this depth
+# also sets the width of the abraded strip around the tangent contact
+# line (~8 mm here); stripe spacing must stay below it.
 WEAR_FOOTPRINT_MARGIN = 1.0e-3  # mask margin around the pad extents [m]
 WEAR_WINDOW = 65  # wear kernel launch window [texels], covers the rotated footprint
 
@@ -604,10 +604,10 @@ class Example:
         self.fps = 60
         self.frame_dt = 1.0 / self.fps
         self.sim_time = 0.0
-        self.sim_substeps = 8
+        self.sim_substeps = 12
         self.sim_dt = self.frame_dt / self.sim_substeps
         self.frame_count = 0
-        self.num_frames = getattr(args, "num_frames", 1080) if args is not None else 1080
+        self.num_frames = getattr(args, "num_frames", 1200) if args is not None else 1200
 
         self.viewer = viewer
 
@@ -689,7 +689,23 @@ class Example:
         ) + n_start * (PAD_HALF_Z + 1.0e-4)
         q_start = wp.quat_from_axis_angle(wp.vec3(1.0, 0.0, 0.0), -float(np.arcsin(y_start / PANEL_RADIUS)))
         self.tool_body = builder.add_body(xform=wp.transform(p=wp.vec3(*p_start), q=q_start))
-        builder.add_shape_cylinder(body=self.tool_body, radius=PAD_RADIUS, half_height=PAD_HALF_Z, cfg=pad_cfg)
+        # the pad is a convex-hull disc (32-gon prism) rather than an analytic
+        # cylinder: cylinder-vs-mesh GJK/MPR contacts rest ~100 um separated
+        # (flat-face degeneracy), while vertex-support convex hulls rest tight
+        nseg = 24
+        ang = np.linspace(0.0, 2.0 * np.pi, nseg, endpoint=False)
+        disc_verts = []
+        for z in (-PAD_HALF_Z, PAD_HALF_Z):
+            for a in ang:
+                disc_verts.append([np.cos(a) * PAD_RADIUS, np.sin(a) * PAD_RADIUS, z])
+        disc_idx = []
+        for k in range(nseg):
+            k1 = (k + 1) % nseg
+            disc_idx += [k, k1, nseg + k1, k, nseg + k1, nseg + k]
+            if k >= 2:
+                disc_idx += [0, k1, k, nseg, nseg + k, nseg + k1]
+        pad_mesh = newton.Mesh(np.array(disc_verts, dtype=np.float32), np.array(disc_idx, dtype=np.int32))
+        builder.add_shape_convex_hull(body=self.tool_body, mesh=pad_mesh, cfg=pad_cfg)
 
         self.model = builder.finalize()
 
@@ -851,7 +867,7 @@ class Example:
             # base surface and would render inside the exaggerated microsurface
             if hasattr(self.viewer, "show_visual"):
                 self.viewer.show_visual = False
-            self.viewer.set_camera(pos=wp.vec3(-0.07, -0.2, 0.09), pitch=-28.0, yaw=90.0)
+            self.viewer.set_camera(pos=wp.vec3(0.03, -0.09, 0.035), pitch=-7.0, yaw=180.0)
         else:
             # frame both the physical sheet and the exaggerated inspection panel;
             # scene sits left of viewport center so the docked image window
@@ -1106,16 +1122,19 @@ class Example:
                 tx = self.history["tool_x"][-1]
                 ty = self.history["tool_y"][-1]
                 bz = float(np.sqrt(PANEL_RADIUS**2 - min(ty * ty, 0.99 * PANEL_RADIUS**2))) + self.panel_z_offset
+                # profile view aligned with the disc plane: look along the
+                # stripe axis so the disc's clearance vs the exaggerated
+                # peaks/valleys reads directly
                 self.viewer.set_camera(
-                    pos=wp.vec3(tx, ty - 0.13, bz + 0.065),
-                    pitch=-27.0,
-                    yaw=90.0,
+                    pos=wp.vec3(tx + 0.11, ty, bz + 0.02),
+                    pitch=-7.0,
+                    yaw=180.0,
                 )
             # pad proxy riding the exaggerated microsurface; the displayed
             # clearance is smoothed and clamped so stripe-transition spikes
             # don't launch the proxy visually
             ride_raw = self.history["ride"][-1] if self.history["ride"] else 0.0
-            self._ride_smooth = 0.8 * getattr(self, "_ride_smooth", 0.0) + 0.2 * min(max(ride_raw, 0.0), 2.5e-5)
+            self._ride_smooth = 0.8 * getattr(self, "_ride_smooth", 0.0) + 0.2 * min(max(ride_raw, 0.0), 5.0e-5)
             ride = self._ride_smooth
             wp.launch(
                 update_pad_proxy_kernel,
@@ -1391,8 +1410,10 @@ contact_point += h * n_smooth                               # body frame</pre>
   onto them. On the curved panel the surface falls away from the flat face by the curvature sagitta
   (~0.56&nbsp;mm at the footprint edges), so each pass abrades a finite strip around the tangent line &mdash;
   the faint stripe witness marks in the final surface are the physical signature of that contact
-  geometry, and a single coarse pass finishes to Ra&nbsp;&asymp;&nbsp;1&nbsp;&micro;m rather than the 0.2&nbsp;&micro;m
-  floor. Press force acts along the local surface normal and the pad orientation tracks the
+  geometry, and a single coarse peak-selective pass finishes to Ra&nbsp;&asymp;&nbsp;1&ndash;1.5&nbsp;&micro;m rather
+  than the 0.2&nbsp;&micro;m floor. The pad itself is a convex-hull disc: analytic cylinder-vs-mesh
+  GJK/MPR contacts rest ~100&nbsp;&micro;m separated (flat-face degeneracy), while vertex-support hulls
+  rest tight. Press force acts along the local surface normal and the pad orientation tracks the
   surface-aligned target (velocity-level steering &mdash; torque PD on the pad's tiny inertia is unstable
   under explicit substepping).
   </p>
@@ -1487,7 +1508,7 @@ if __name__ == "__main__":
         "microsurface (real shapes hidden; pad drawn with its clearance "
         "exaggerated consistently with the surface).",
     )
-    parser.set_defaults(num_frames=1080)
+    parser.set_defaults(num_frames=1200)
     viewer, args = newton.examples.init(parser)
 
     if args.capture:
