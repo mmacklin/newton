@@ -1765,6 +1765,79 @@ def test_motorized_pulley_updates_rest_in_first_step(test, device):
         )
 
 
+def _moving_rolling_route_material_error(solver_factory, mu, short_segment=None):
+    model, _ = build_kinematic_rolling_transport(mu=mu)
+    endpoint = int(model.tendon_link_body.numpy()[2])
+    start_angle = -0.2
+    body_q = model.body_q.numpy()
+    body_q[endpoint, :3] = np.array([0.4 * math.cos(start_angle), 0.4 * math.sin(start_angle), 0.0], dtype=np.float32)
+    model.body_q.assign(body_q)
+
+    solver = solver_factory(model)
+    if short_segment is not None:
+        rest = solver.tendon_seg_rest_length.numpy()
+        total_rest = float(np.sum(rest))
+        rest[short_segment] = 5.0e-3
+        rest[1 - short_segment] = total_rest - rest[short_segment]
+        solver.tendon_seg_rest_length.assign(rest)
+        solver._snapshot_tendon_step_state()
+
+    state_0, state_1 = model.state(), model.state()
+    control = model.control()
+    radius = float(model.tendon_link_radius.numpy()[1])
+    normal = model.tendon_link_axis.numpy()[1]
+
+    def material_length():
+        radial_l = solver.tendon_seg_attachment_r.numpy()[0]
+        radial_r = solver.tendon_seg_attachment_l.numpy()[1]
+        theta = abs(
+            math.atan2(
+                float(np.dot(np.cross(radial_l, radial_r), normal)),
+                float(np.dot(radial_l, radial_r)),
+            )
+        )
+        return float(np.sum(solver.tendon_seg_rest_length.numpy())) + theta * radius
+
+    expected_material = material_length()
+    max_material_error = 0.0
+    min_short_rest = math.inf
+    for angle in np.linspace(start_angle, 0.2, 21):
+        body_q = state_0.body_q.numpy()
+        body_q[endpoint, :3] = np.array([0.4 * math.cos(angle), 0.4 * math.sin(angle), 0.0], dtype=np.float32)
+        state_0.body_q.assign(body_q)
+        state_0.clear_forces()
+        solver.step(state_0, state_1, control, None, 1.0 / 60.0)
+        state_0, state_1 = state_1, state_0
+        max_material_error = max(max_material_error, abs(material_length() - expected_material))
+        if short_segment is not None:
+            min_short_rest = min(min_short_rest, float(solver.tendon_seg_rest_length.numpy()[short_segment]))
+    return max_material_error, min_short_rest
+
+
+def test_moving_rolling_route_conserves_material(test, device):
+    """Changing a rolling link's wrap angle should not change total cable material."""
+    with wp.ScopedDevice(device):
+
+        def solver_factory(model):
+            return newton.solvers.SolverXPBD(model, iterations=4)
+
+        for mu in (0.0, 0.2, 100.0):
+            with test.subTest(mu=mu):
+                error, _ = _moving_rolling_route_material_error(solver_factory, mu)
+                test.assertLess(error, 1.0e-4, f"Cable material drifted by {error} m for mu={mu}")
+
+        for short_segment in (0, 1):
+            with test.subTest(short_segment=short_segment):
+                error, min_rest = _moving_rolling_route_material_error(solver_factory, 100.0, short_segment)
+                test.assertLess(
+                    error,
+                    1.0e-4,
+                    f"Cable material drifted by {error} m when segment {short_segment} started near its minimum rest length",
+                )
+                if short_segment == 1:
+                    test.assertLess(min_rest, 1.1e-6, "The material-donor span should exercise the minimum-rest clamp")
+
+
 def test_kinematic_rolling_transfer_independent_of_iterations(test, device):
     """Prescribed pulley spin should transfer the same material for any XPBD iteration count."""
 
@@ -2222,6 +2295,12 @@ add_test(
     "motorized_pulley_updates_rest_in_first_step",
     devices,
     test_motorized_pulley_updates_rest_in_first_step,
+)
+add_test(
+    TestTendonCapstan,
+    "moving_rolling_route_conserves_material",
+    devices,
+    test_moving_rolling_route_conserves_material,
 )
 add_test(
     TestTendonCapstan,
