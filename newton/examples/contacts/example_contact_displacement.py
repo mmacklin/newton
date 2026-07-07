@@ -22,7 +22,7 @@
 # panel (a cylindrical arch -- the curved base geometry is exactly what the
 # mesh representation buys over a plain heightfield shape). The tool
 # orientation and press direction track the local surface normal. Surface
-# roughness (Rq), height under the tool, and removed volume are measured
+# roughness (Ra, plus Rq), height under the tool, and removed volume are measured
 # every frame. The micro-scale surface is visualized live on an exaggerated
 # inspection panel next to the physical scene, and an interactive HTML
 # report (plotly) is written at the end.
@@ -46,8 +46,9 @@ PANEL_RADIUS = 0.2  # cylinder radius of the curved panel (axis along x) [m]
 GRID_N = 129  # sheet mesh vertices per side (1.6 mm triangles keep the
 # faceting sagitta ~1.5 um, below the 4 um asperity scale)
 HF_RES = 256  # heightfield resolution (square)
-ROUGHNESS_RMS = 4.0e-6  # initial RMS roughness [m] (4 um)
-FLOOR_FRAC = 0.05  # residual roughness fraction (0.2 um)
+ROUGHNESS_RA = 4.0e-6  # initial Ra (arithmetic mean) roughness [m] (4 um);
+# surface-finish specs quote Ra, so the field is normalized to it
+FLOOR_FRAC = 0.05  # residual roughness fraction (0.2 um Ra)
 VIZ_EXAGGERATION = 2000.0  # vertical exaggeration of the inspection panel
 VIZ_OFFSET = wp.vec3(0.0, 0.35, 0.0)  # inspection panel offset from the sheet [m]
 
@@ -439,6 +440,17 @@ def measure_kernel(
 
 
 @wp.kernel
+def measure_deviation_kernel(
+    heightfield: wp.array2d[wp.float32],
+    mean: float,
+    stats: wp.array[wp.float32],  # [.., .., .., .., sum_abs_dev]
+):
+    """Second measurement pass: Ra needs the mean line from the first pass."""
+    i, j = wp.tid()
+    wp.atomic_add(stats, 4, wp.abs(heightfield[i, j] - mean))
+
+
+@wp.kernel
 def validate_interpolation_kernel(
     mesh_id: wp.uint64,
     uvs: wp.array[wp.vec2],
@@ -535,9 +547,11 @@ class Example:
         lp = np.exp(-(fx**2 + fy**2) / (2.0 * sigma_f**2))
         smooth = np.real(np.fft.ifft2(np.fft.fft2(noise) * lp))
         smooth -= smooth.mean()
-        # folded gaussian: h >= 0 asperity ridges with a small mean offset
+        # folded gaussian: h >= 0 asperity ridges with a small mean offset,
+        # normalized so Ra (mean absolute deviation from the mean line) = 4 um
         folded = np.abs(smooth)
-        h0 = (folded * (ROUGHNESS_RMS / folded.std())).astype(np.float32)  # RMS about mean = 4 um
+        ra_folded = np.abs(folded - folded.mean()).mean()
+        h0 = (folded * (ROUGHNESS_RA / ra_folded)).astype(np.float32)
 
         self.heightfield = wp.array(h0, dtype=wp.float32)  # 2D fp32 buffer, GPU-writable
         self.heightfield_floor = wp.array(h0 * FLOOR_FRAC, dtype=wp.float32)
@@ -611,7 +625,7 @@ class Example:
         self.raster_duration = RASTER_STRIPES * stripe_len / speed
 
         self.time_wp = wp.zeros(1, dtype=wp.float32)
-        self.stats_wp = wp.zeros(4, dtype=wp.float32)
+        self.stats_wp = wp.zeros(5, dtype=wp.float32)
         self.wear_stamp_radius = int(2.0 * WEAR_SIGMA_UV * (HF_RES - 1))
 
         # GUI-tunable controls, read live by kernels inside the captured graph
@@ -628,6 +642,7 @@ class Example:
         # measurement history (CPU side, observational only)
         self.history = {
             "t": [],
+            "ra": [],
             "rms": [],
             "max": [],
             "h_tool": [],
@@ -818,6 +833,7 @@ class Example:
 
         # overlay plots (no-op on non-GL viewers)
         h = self.history
+        self.viewer.log_scalar("Ra roughness [um]", h["ra"][-1] * 1.0e6)
         self.viewer.log_scalar("Rq roughness [um]", h["rms"][-1] * 1.0e6)
         self.viewer.log_scalar("Max asperity [um]", h["max"][-1] * 1.0e6)
         self.viewer.log_scalar("Height under tool [um]", h["h_tool"][-1] * 1.0e6)
@@ -842,12 +858,20 @@ class Example:
         s = self.stats_wp.numpy()
         count = HF_RES * HF_RES
         mean = s[0] / count
+        # second pass: Ra (arithmetic mean deviation) about the mean line
+        wp.launch(
+            measure_deviation_kernel,
+            dim=(HF_RES, HF_RES),
+            inputs=[self.heightfield, float(mean), self.stats_wp],
+        )
+        ra = float(self.stats_wp.numpy()[4]) / count
         rms = float(np.sqrt(max(s[1] / count - mean * mean, 0.0)))
         texel_area = (SHEET_SIZE / (HF_RES - 1)) ** 2
         removed = (self.initial_sum - float(s[0])) * texel_area
 
         tool_q = self.state_0.body_q.numpy()[self.tool_body]
         self.history["t"].append(self.sim_time)
+        self.history["ra"].append(ra)
         self.history["rms"].append(rms)
         self.history["max"].append(float(s[2]))
         self.history["h_tool"].append(float(s[3]))
@@ -920,8 +944,9 @@ class Example:
         """Custom side-panel (auto-registered by newton.examples.run)."""
         h = self.history
         if h["t"]:
+            ui.text(f"Ra:          {h['ra'][-1] * 1e6:7.3f} um")
             ui.text(f"Rq:          {h['rms'][-1] * 1e6:7.3f} um")
-            ui.text(f"target:      {ROUGHNESS_RMS * FLOOR_FRAC * 1e6:7.3f} um")
+            ui.text(f"target Ra:   {ROUGHNESS_RA * FLOOR_FRAC * 1e6:7.3f} um")
             ui.text(f"max asperity:{h['max'][-1] * 1e6:7.3f} um")
             ui.text(f"under tool:  {h['h_tool'][-1] * 1e6:7.3f} um")
             ui.text(f"removed:     {h['removed_volume'][-1] * 1e9:7.2f} mm3")
@@ -949,8 +974,8 @@ class Example:
 
     # ------------------------------------------------------------------
     def test_final(self):
-        rms0 = ROUGHNESS_RMS
-        rms = self.history["rms"][-1]
+        ra0 = ROUGHNESS_RA
+        ra = self.history["ra"][-1]
         removed = self.history["removed_volume"][-1]
         body_q = self.state_0.body_q.numpy()
         assert np.isfinite(body_q).all(), "NaN/Inf in body transforms"
@@ -960,7 +985,7 @@ class Example:
         assert -0.01 < z < 0.05, f"tool left the sheet: z={z:.4f}"
         # only expect global convergence if the raster actually finished
         if self.sim_time > self.raster_duration:
-            assert rms < 0.5 * rms0, f"roughness did not converge: rms={rms * 1e6:.3f} um"
+            assert ra < 0.5 * ra0, f"roughness did not converge: Ra={ra * 1e6:.3f} um"
 
     # ------------------------------------------------------------------
     def save_report(self, path):
@@ -971,14 +996,15 @@ class Example:
         um = 1.0e6
         data = {
             "t": [round(v, 4) for v in self.history["t"]],
+            "ra_um": [round(v * um, 5) for v in self.history["ra"]],
             "rms_um": [round(v * um, 5) for v in self.history["rms"]],
             "max_um": [round(v * um, 5) for v in self.history["max"]],
             "h_tool_um": [round(v * um, 5) for v in self.history["h_tool"]],
             "removed_mm3": [round(v * 1e9, 6) for v in self.history["removed_volume"]],
             "tool_x": [round(v, 5) for v in self.history["tool_x"]],
             "tool_y": [round(v, 5) for v in self.history["tool_y"]],
-            "target_um": ROUGHNESS_RMS * FLOOR_FRAC * um,
-            "initial_um": ROUGHNESS_RMS * um,
+            "target_um": ROUGHNESS_RA * FLOOR_FRAC * um,
+            "initial_um": ROUGHNESS_RA * um,
             "sheet_size": SHEET_SIZE,
             "snap_t": [round(v, 3) for v in self.snapshot_times],
             "snapshots_um": [np.round(s * um, 4).tolist() for s in self.snapshots],
@@ -1026,9 +1052,10 @@ const D = __DATA__;
 const dark = { paper_bgcolor: "#1a1a1e", plot_bgcolor: "#1a1a1e", font: { color: "#ccc" }, margin: { t: 40 } };
 
 Plotly.newPlot("rms", [
-  { x: D.t, y: D.rms_um, name: "Rq (RMS)", line: { color: "#4fc3f7" } },
+  { x: D.t, y: D.ra_um, name: "Ra", line: { color: "#4fc3f7" } },
+  { x: D.t, y: D.rms_um, name: "Rq (RMS)", line: { color: "#7986cb" } },
   { x: D.t, y: D.max_um, name: "max asperity", line: { color: "#ffb74d" } },
-  { x: [D.t[0], D.t[D.t.length-1]], y: [D.target_um, D.target_um], name: "target",
+  { x: [D.t[0], D.t[D.t.length-1]], y: [D.target_um, D.target_um], name: "target Ra",
     line: { color: "#81c784", dash: "dash" } }
 ], { ...dark, title: "Surface roughness [\\u00b5m]", yaxis: { type: "log" }, xaxis: { title: "time [s]" } });
 
