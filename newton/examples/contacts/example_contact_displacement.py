@@ -77,6 +77,11 @@ K_WEAR = 2.0e-2  # wear rate coefficient [m removed per m slid]
 ORBITAL_SPEED = 0.15  # intrinsic abrasive speed of the (orbital) sander [m/s];
 # keeps removal going through raster turnarounds where the feed speed
 # passes through zero
+CONTACT_DISPLAY_BIAS = 3.0e-5  # measured static rest offset of the
+# narrowphase for the hull-disc-vs-mesh contact (reported d=0 at ~30 um true
+# gap; a box measures -6 um, an analytic cylinder ~100 um). Subtracted ONLY
+# from the displayed clearance in the zoom view -- physics, wear, and all
+# plotted metrics use raw solver output. Upstream accuracy issue candidate.
 WEAR_CONTACT_THRESHOLD = 5.0e-5  # a texel wears only when its displaced
 # surface point is within this distance of the pad's bottom face [m]:
 # the abrasive grit engagement depth. On the curved panel the surface
@@ -1135,17 +1140,18 @@ class Example:
                     pitch=-7.0,
                     yaw=180.0,
                 )
-            # pad proxy pinned to the exaggerated support height (max displaced
-            # material under the footprint): the solver's um-scale contact noise
-            # (~+-30 um, at the narrowphase accuracy floor) would read as mm at
-            # x300, so only the *support height* is exaggerated; the physical
-            # clearance enters the offset unexaggerated. Plots show raw values.
+            # pad proxy at the SOLVER pose with the clearance exaggerated
+            # consistently with the surface. The only correction is the
+            # documented constant CONTACT_DISPLAY_BIAS (static narrowphase
+            # rest offset) plus light temporal smoothing; the ridge-riding
+            # dynamics shown are genuine solver output. Note the solver's
+            # contact-distance jitter (~+-30 um) is the same order as the
+            # microsurface itself, so some residual hover/bob is the true
+            # behavior, not a rendering artifact.
             ride_raw = self.history["ride"][-1] if self.history["ride"] else 0.0
-            h_sup_raw = self.history["h_support"][-1] if self.history["h_support"] else 0.0
-            self._hsup_smooth = 0.8 * getattr(self, "_hsup_smooth", 0.0) + 0.2 * h_sup_raw
-            # drawn face height above base = E * h_support; subtract the actual
-            # physical clearance so the offset cancels pose noise at x1
-            lift = self.lens_exaggeration * self._hsup_smooth - max(ride_raw, 0.0)
+            ride_corr = max(ride_raw - CONTACT_DISPLAY_BIAS, 0.0)
+            self._ride_smooth = 0.85 * getattr(self, "_ride_smooth", 0.0) + 0.15 * ride_corr
+            lift = (self.lens_exaggeration - 1.0) * self._ride_smooth
             wp.launch(
                 update_pad_proxy_kernel,
                 dim=len(self.proxy_points),
