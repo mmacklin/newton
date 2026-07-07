@@ -1030,6 +1030,13 @@ _REPORT_TEMPLATE = """<!DOCTYPE html>
  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
  .panel { background: #1a1a1e; border-radius: 8px; padding: 8px; }
  .wide { grid-column: 1 / -1; }
+ .prose { padding: 20px 28px; line-height: 1.55; max-width: 1100px; }
+ .prose h2 { color: #9fc9ff; font-size: 1.15em; margin-top: 1.4em; }
+ .prose code { background: #26262c; padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+ .prose pre { background: #101014; border: 1px solid #2a2a30; border-radius: 6px; padding: 14px;
+              overflow-x: auto; font-size: 0.85em; line-height: 1.45; }
+ .prose .flow { color: #ffd54f; font-family: monospace; background: #101014; display: block;
+                padding: 10px 14px; border-radius: 6px; border: 1px solid #2a2a30; }
 </style>
 </head>
 <body>
@@ -1038,6 +1045,70 @@ _REPORT_TEMPLATE = """<!DOCTYPE html>
  <div class="panel wide" id="video" style="display:none; text-align:center;">
   <video src="sanding.mp4" controls loop muted playsinline style="max-width:100%; border-radius:6px;"
          onloadeddata="document.getElementById('video').style.display='block'"></video>
+ </div>
+ <div class="panel wide prose">
+  <h2>Approach: heightfield-displaced contacts on a mesh, with zero engine changes</h2>
+  <p>
+  The workpiece is a plain <code>GeoType.MESH</code> shape &mdash; a cylindrical-arch sheet-metal panel
+  (R&nbsp;=&nbsp;0.2&nbsp;m, 129&sup2; grid, per-vertex UVs) &mdash; and the micro-scale surface state is a
+  user-owned <code>wp.array2d[float32]</code> heightfield (256&sup2;, asperity height in meters,
+  UV-parameterized). Newton's collision pipeline never sees the heightfield. Instead, the example
+  post-processes the <code>Contacts</code> structure between collision detection and the solver step:
+  </p>
+  <span class="flow">model.collide(state, contacts)
+  &rarr; displace_contacts_kernel(contacts, heightfield)   # user code
+  &rarr; apply_wear_kernel(contacts, heightfield)           # user code, writes heightfield in place
+  &rarr; solver.step(state, contacts)                       # unmodified XPBD</span>
+  <p>
+  All three stages are recorded into a single CUDA graph; there is no CPU synchronization anywhere in
+  the simulation loop.
+  </p>
+
+  <h2>Contact displacement kernel</h2>
+  <p>
+  <code>Contacts.rigid_contact_point0/1</code> are <em>body-frame</em> points, and Newton solvers
+  recompute the separation every substep as
+  <code>d = dot(n, p1<sub>w</sub> &minus; p0<sub>w</sub>) &minus; (margin0 + margin1)</code>. So shifting the
+  sheet-side contact point is sufficient to displace the effective surface &mdash; depth, contact position,
+  and friction anchors all follow, for <em>any</em> solver that consumes the pipeline contacts. Per contact:
+  </p>
+  <pre>face, u, v   = wp.mesh_query_point_no_sign(mesh_id, p_local, max_dist)   # base-mesh BVH
+uv           = u*uvs[i0] + v*uvs[i1] + (1-u-v)*uvs[i2]     # barycentric attribute interp
+n_smooth     = normalize(u*n[i0] + v*n[i1] + (1-u-v)*n[i2])
+h            = bilinear(heightfield, uv)                    # live fp32 buffer, [m]
+contact_point += h * n_smooth                               # body frame</pre>
+  <p>
+  The base-mesh BVH is built once and never refit: displacements (&le;&nbsp;tens of &micro;m) are far below
+  the contact-margin band, so candidate generation against the undisplaced mesh is conservative. The
+  barycentric convention (<code>u&middot;a0 + v&middot;a1 + (1&minus;u&minus;v)&middot;a2</code>) and the bilinear
+  sampler are validated at startup against <code>wp.mesh_eval_position</code> and a CPU reference, with
+  queries taken at mesh vertices offset along vertex normals (exact on the convex panel). Because the
+  heightfield is sampled at contact-generation time, writing the array from any kernel changes collision
+  on the next frame &mdash; no rebuild, no notification, no CPU round trip. One base mesh (one BVH, one
+  UV/normal table) can serve thousands of shapes with per-shape heightfields, e.g. RL environments.
+  </p>
+
+  <h2>Material removal (sanding)</h2>
+  <p>
+  An Archard-style wear kernel runs on the same contact list: for each active sheet contact
+  (displaced separation below a gate), it removes <code>dh = k&nbsp;&middot;&nbsp;|v<sub>slip</sub>|&nbsp;&middot;&nbsp;dt</code>,
+  stamped as a Gaussian footprint in UV space with <code>wp.atomic_add</code>, then clamps to a residual
+  floor field (5% of the initial asperities &rarr; Ra&nbsp;0.2&nbsp;&micro;m). Slip is the tangential velocity of the
+  tool at the contact point. Press force acts along the local surface normal and the pad orientation
+  tracks the surface-aligned target (velocity-level steering &mdash; torque PD on the pad's tiny inertia is
+  unstable under explicit substepping).
+  </p>
+
+  <h2>Measurement and capture</h2>
+  <p>
+  Roughness is measured per frame outside the captured graph: pass&nbsp;1 accumulates
+  <code>&Sigma;h, &Sigma;h&sup2;, max</code> (mean, Rq); pass&nbsp;2 accumulates <code>&Sigma;|h &minus; mean|</code>
+  for Ra, the metric finish specs are quoted in. The video is captured frame-accurately from the GL
+  framebuffer via <code>ViewerGL.get_frame(render_ui=True)</code> (PBO readback, CUDA&ndash;GL interop),
+  which bakes the imgui overlays into the frames. Source:
+  <code>newton/examples/contacts/example_contact_displacement.py</code>, branch
+  <code>horde/mesh-heightfield-shape</code>.
+  </p>
  </div>
  <div class="panel" id="rms"></div>
  <div class="panel" id="htool"></div>
