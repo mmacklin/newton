@@ -14,10 +14,12 @@ they are a checklist for future agentic work on this subsystem.
 - `ModalBasis` should be treated as sampled linear data: `phi[sample, mode]`.
   It should not depend on Python callables inside solver/render kernels.
 - Joint attachment samples come from existing joint parent/child transforms. The
-  builder flattens per-endpoint `phi` samples for the solver.
-- The current solver approximation is translational point attachments. It does
-  not directly project fixed/revolute angular moments into modes because endpoint
-  rotations/slopes are not represented yet.
+  builder flattens per-endpoint `phi` (translation) and `psi` (angular) samples
+  for the solver.
+- The solver projects both translational and rotational joint constraints into
+  modes. `phi[sample, mode]` is the translational mode shape; `psi[sample, mode]`
+  is the body-local rotation vector of the material frame per unit modal
+  coordinate.
 
 ## Modal Mass Notes
 
@@ -191,9 +193,6 @@ pass. Elastic-vs-elastic and barycentric face contact are follow-ups.
   POD modes from exemplar configurations.
 - Displacement coloring is only a visualization of `|u|`, not true strain. Do
   not interpret it as stress or strain without gradients.
-- A fixed joint at one point cannot transmit a clamp moment into modal bending
-  under the current point-attachment approximation. Use multiple translational
-  samples or add rotational endpoint data in a future implementation.
 
 ## Report And Video Hygiene
 
