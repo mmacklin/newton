@@ -1136,6 +1136,7 @@ def evaluate_joint_force_hessian(
     elastic_joint: wp.array(dtype=wp.int32),
     elastic_mode_count: wp.array(dtype=wp.int32),
     joint_q: wp.array(dtype=float),
+    joint_q_prev: wp.array(dtype=float),
     joint_q_start: wp.array(dtype=int),
     joint_parent_elastic_endpoint: wp.array(dtype=wp.int32),
     joint_child_elastic_endpoint: wp.array(dtype=wp.int32),
@@ -1232,6 +1233,38 @@ def evaluate_joint_force_hessian(
         elastic_endpoint_psi,
         elastic_max_mode_count,
     )
+    X_pj_prev = eval_elastic_endpoint_xform(
+        joint_index,
+        parent_index,
+        True,
+        joint_X_p[joint_index],
+        body_elastic_index,
+        elastic_joint,
+        elastic_mode_count,
+        joint_q_prev,
+        joint_q_start,
+        joint_parent_elastic_endpoint,
+        joint_child_elastic_endpoint,
+        elastic_endpoint_phi,
+        elastic_endpoint_psi,
+        elastic_max_mode_count,
+    )
+    X_cj_prev = eval_elastic_endpoint_xform(
+        joint_index,
+        child_index,
+        False,
+        joint_X_c[joint_index],
+        body_elastic_index,
+        elastic_joint,
+        elastic_mode_count,
+        joint_q_prev,
+        joint_q_start,
+        joint_parent_elastic_endpoint,
+        joint_child_elastic_endpoint,
+        elastic_endpoint_phi,
+        elastic_endpoint_psi,
+        elastic_max_mode_count,
+    )
 
     if parent_index >= 0:
         parent_pose = body_q[parent_index]
@@ -1251,8 +1284,8 @@ def evaluate_joint_force_hessian(
 
     X_wp = parent_pose * X_pj
     X_wc = child_pose * X_cj
-    X_wp_prev = parent_pose_prev * X_pj
-    X_wc_prev = child_pose_prev * X_cj
+    X_wp_prev = parent_pose_prev * X_pj_prev
+    X_wc_prev = child_pose_prev * X_cj_prev
     X_wp_rest = parent_pose_rest * joint_X_p[joint_index]
     X_wc_rest = child_pose_rest * joint_X_c[joint_index]
 
@@ -2843,6 +2876,7 @@ def solve_rigid_body(
     elastic_joint: wp.array(dtype=wp.int32),
     elastic_mode_count: wp.array(dtype=wp.int32),
     joint_q: wp.array(dtype=float),
+    joint_q_prev: wp.array(dtype=float),
     joint_q_start: wp.array(dtype=int),
     joint_parent_elastic_endpoint: wp.array(dtype=wp.int32),
     joint_child_elastic_endpoint: wp.array(dtype=wp.int32),
@@ -3024,6 +3058,7 @@ def solve_rigid_body(
             elastic_joint,
             elastic_mode_count,
             joint_q,
+            joint_q_prev,
             joint_q_start,
             joint_parent_elastic_endpoint,
             joint_child_elastic_endpoint,

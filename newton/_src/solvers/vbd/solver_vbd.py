@@ -2420,6 +2420,7 @@ class SolverVBD(SolverBase):
                     model.elastic_joint,
                     model.elastic_mode_count,
                     state_out.joint_q,
+                    state_in.joint_q,
                     model.joint_q_start,
                     model.joint_parent_elastic_endpoint,
                     model.joint_child_elastic_endpoint,
