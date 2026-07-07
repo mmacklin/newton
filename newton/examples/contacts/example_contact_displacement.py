@@ -52,9 +52,9 @@ FLOOR_FRAC = 0.05  # residual roughness fraction (0.2 um Ra)
 VIZ_EXAGGERATION = 2000.0  # vertical exaggeration of the inspection panel
 VIZ_OFFSET = wp.vec3(0.0, 0.35, 0.0)  # inspection panel offset from the sheet [m]
 
-PAD_HALF = 0.015  # sanding pad half extents (x, y) [m] (3 cm pad: chord
-# sagitta on the R=0.2 panel is ~0.6 mm, so the rigid pad conforms well)
-PAD_HALF_Z = 0.005  # sanding pad half thickness [m]
+PAD_RADIUS = 0.015  # sanding disc radius [m] (3 cm disc: chord sagitta on
+# the R=0.2 panel is ~0.6 mm, so the rigid disc conforms well)
+PAD_HALF_Z = 0.005  # sanding disc half thickness [m]
 PRESS_FORCE = 10.0  # press force along the surface normal [N]
 MAX_VZ = 0.08  # tool vertical speed clamp [m/s] (the sheet mesh is an open
 # surface with no thickness; this keeps force-press transients from
@@ -245,9 +245,10 @@ def wear_texel_query(
     base = wp.vec3(tx, ty, panel_height(ty, radius, z_offset))
     p_texel = wp.transform_point(X_ws, base)
 
-    # footprint mask in the tool frame
+    # disc footprint mask in the tool frame
     p_pad = wp.transform_point(wp.transform_inverse(X_tool), p_texel)
-    if wp.abs(p_pad[0]) > pad_half + footprint_margin or wp.abs(p_pad[1]) > pad_half + footprint_margin:
+    r_max = pad_half + footprint_margin
+    if p_pad[0] * p_pad[0] + p_pad[1] * p_pad[1] > r_max * r_max:
         return False, 0, 0, 0.0, wp.vec3(0.0, 0.0, 0.0), wp.vec3(0.0, 0.0, 1.0)
 
     # displaced surface point height in the tool frame
@@ -537,11 +538,13 @@ def measure_kernel(
         # This is the height of the asperity currently carrying the pad
         # (center-point clearance would instead measure friction-induced
         # tilt, which rises mm-scale via the 15 mm lever arm).
-        ride = 1.0e6
+        ride = float(1.0e6)
         for a in range(7):
             for b in range(7):
                 px = (wp.float32(a) / 3.0 - 1.0) * pad_half
                 py = (wp.float32(b) / 3.0 - 1.0) * pad_half
+                if px * px + py * py > pad_half * pad_half:
+                    continue
                 p_pad = wp.transform_point(X_tool, wp.vec3(px, py, -pad_half_z))
                 p_s = wp.transform_point(X_sw, p_pad)
                 base = wp.vec3(p_s[0], p_s[1], panel_height(p_s[1], radius, z_offset))
@@ -686,7 +689,7 @@ class Example:
         ) + n_start * (PAD_HALF_Z + 1.0e-4)
         q_start = wp.quat_from_axis_angle(wp.vec3(1.0, 0.0, 0.0), -float(np.arcsin(y_start / PANEL_RADIUS)))
         self.tool_body = builder.add_body(xform=wp.transform(p=wp.vec3(*p_start), q=q_start))
-        builder.add_shape_box(body=self.tool_body, hx=PAD_HALF, hy=PAD_HALF, hz=PAD_HALF_Z, cfg=pad_cfg)
+        builder.add_shape_cylinder(body=self.tool_body, radius=PAD_RADIUS, half_height=PAD_HALF_Z, cfg=pad_cfg)
 
         self.model = builder.finalize()
 
@@ -814,18 +817,30 @@ class Example:
         strip = anchors[idx] * (1.0 - frac) + anchors[idx + 1] * frac
         self.lens_texture = strip.astype(np.uint8).reshape(1, 256, 3)
 
-        # zoom-mode pad proxy: box drawn per-face (24 verts) for crisp normals
-        hx, hy, hz = PAD_HALF, PAD_HALF, PAD_HALF_Z
-        corners = np.array(
-            [[sx * hx, sy * hy, sz * hz] for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)], dtype=np.float32
-        )
-        quads = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+        # zoom-mode pad proxy: cylinder (disc) with shared side-ring verts for
+        # smooth sides and separate cap rings for crisp cap edges
+        nseg = 32
+        ang = np.linspace(0.0, 2.0 * np.pi, nseg, endpoint=False)
+        ring = np.stack([np.cos(ang) * PAD_RADIUS, np.sin(ang) * PAD_RADIUS], axis=-1)
         pverts: list = []
         pidx: list = []
-        for q in quads:
+        # side (shared bottom/top rings)
+        for z in (-PAD_HALF_Z, PAD_HALF_Z):
+            for x, y in ring:
+                pverts.append([x, y, z])
+        for k in range(nseg):
+            k1 = (k + 1) % nseg
+            pidx += [k, k1, nseg + k1, k, nseg + k1, nseg + k]
+        # caps (own rings + center verts)
+        for z, flip in ((-PAD_HALF_Z, True), (PAD_HALF_Z, False)):
             b = len(pverts)
-            pverts += [corners[k] for k in q]
-            pidx += [b, b + 1, b + 2, b, b + 2, b + 3]
+            for x, y in ring:
+                pverts.append([x, y, z])
+            pverts.append([0.0, 0.0, z])
+            c = b + nseg
+            for k in range(nseg):
+                k1 = (k + 1) % nseg
+                pidx += [b + k, c, b + k1] if flip else [b + k, b + k1, c]
         self.proxy_verts_local = wp.array(np.array(pverts, dtype=np.float32), dtype=wp.vec3)
         self.proxy_points = wp.zeros(len(pverts), dtype=wp.vec3)
         self.proxy_indices = wp.array(np.array(pidx, dtype=np.int32), dtype=wp.int32)
@@ -946,7 +961,7 @@ class Example:
                     SHEET_SIZE,
                     PANEL_RADIUS,
                     self.panel_z_offset,
-                    PAD_HALF,
+                    PAD_RADIUS,
                     PAD_HALF_Z,
                     WEAR_FOOTPRINT_MARGIN,
                     WEAR_CONTACT_THRESHOLD,
@@ -1023,7 +1038,7 @@ class Example:
                 SHEET_SIZE,
                 PANEL_RADIUS,
                 self.panel_z_offset,
-                PAD_HALF,
+                PAD_RADIUS,
                 PAD_HALF_Z,
                 self.stats_wp,
             ],
