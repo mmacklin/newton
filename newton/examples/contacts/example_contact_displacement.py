@@ -72,12 +72,17 @@ ZOOM_EXAGGERATION = 300.0  # height exaggeration in zoom mode (applied to both
 RASTER_MARGIN = 0.008  # commanded pad-center distance from the sheet edge [m]
 # (the pad lags the PD target by a few mm under friction, so the command
 # overshoots slightly to keep the footprint covering the full sheet)
-RASTER_STRIPES = 13  # number of raster stripes
-K_WEAR = 2.0e-3  # wear rate coefficient [m removed per m slid]
+RASTER_STRIPES = 21  # number of raster stripes
+K_WEAR = 2.0e-2  # wear rate coefficient [m removed per m slid]
 ORBITAL_SPEED = 0.15  # intrinsic abrasive speed of the (orbital) sander [m/s];
 # keeps removal going through raster turnarounds where the feed speed
 # passes through zero
-WEAR_GATE = 1.0e-3  # max contact separation that still causes wear [m]
+WEAR_CONTACT_THRESHOLD = 1.5e-4  # a texel wears only when its displaced
+# surface point is within this distance of the pad's bottom face [m]:
+# effectively the compliance of a foam-backed abrasive pad. On the curved
+# panel the surface falls away from the flat face by the curvature sagitta
+# (~0.56 mm at the footprint edges), so this depth sets the width of the
+# abraded strip around the tangent line (~13 mm here).
 WEAR_FOOTPRINT_MARGIN = 1.0e-3  # mask margin around the pad extents [m]
 WEAR_WINDOW = 65  # wear kernel launch window [texels], covers the rotated footprint
 
@@ -202,51 +207,54 @@ CTRL_WEAR_RATE = 1
 CTRL_WEAR_ENABLED = 2
 
 
-@wp.kernel
-def contact_gate_kernel(
-    contact_count: wp.array[wp.int32],
-    contact_shape0: wp.array[wp.int32],
-    contact_shape1: wp.array[wp.int32],
-    contact_point0: wp.array[wp.vec3],
-    contact_point1: wp.array[wp.vec3],
-    contact_normal: wp.array[wp.vec3],
-    contact_margin0: wp.array[wp.float32],
-    contact_margin1: wp.array[wp.float32],
-    body_q: wp.array[wp.transform],
-    sheet_shape: wp.int32,
-    tool_body: wp.int32,
-    min_separation: wp.array[wp.float32],
+@wp.func
+def wear_texel_query(
+    i: int,
+    j: int,
+    X_tool: wp.transform,
+    X_ws: wp.transform,
+    heightfield: wp.array2d[wp.float32],
+    sheet_size: float,
+    radius: float,
+    z_offset: float,
+    pad_half: float,
+    footprint_margin: float,
 ):
-    """Minimum displaced contact separation between pad and sheet -> gate for wear."""
-    tid = wp.tid()
-    if tid >= contact_count[0]:
-        return
+    """Map a wear-window thread to a texel under the pad footprint.
 
-    side = int(-1)
-    if contact_shape0[tid] == sheet_shape:
-        side = 0
-    elif contact_shape1[tid] == sheet_shape:
-        side = 1
-    else:
-        return
+    Returns (valid, rr, cc, z_pad, p_texel, n): texel indices, the height of
+    the texel's *displaced* surface point in the tool frame, its world-space
+    base position, and the local surface normal."""
+    nrow = heightfield.shape[0]
+    ncol = heightfield.shape[1]
+    p_c = wp.transform_point(wp.transform_inverse(X_ws), wp.transform_get_translation(X_tool))
+    c0 = wp.int32((wp.clamp(p_c[0] / sheet_size + 0.5, 0.0, 1.0)) * wp.float32(ncol - 1))
+    r0 = wp.int32((wp.clamp(p_c[1] / sheet_size + 0.5, 0.0, 1.0)) * wp.float32(nrow - 1))
 
-    # world positions of both contact points (sheet is static -> body frame == world)
-    X_tool = body_q[tool_body]
-    if side == 0:
-        p_sheet_w = contact_point0[tid]
-        p_other_w = wp.transform_point(X_tool, contact_point1[tid])
-        d = wp.dot(contact_normal[tid], p_other_w - p_sheet_w)
-    else:
-        p_sheet_w = contact_point1[tid]
-        p_other_w = wp.transform_point(X_tool, contact_point0[tid])
-        d = wp.dot(contact_normal[tid], p_sheet_w - p_other_w)
-    d = d - (contact_margin0[tid] + contact_margin1[tid])
-    wp.atomic_min(min_separation, 0, d)
+    half_w = 32  # window half extent [texels]; covers the rotated footprint
+    rr = r0 + i - half_w
+    cc = c0 + j - half_w
+    if rr < 0 or rr >= nrow or cc < 0 or cc >= ncol:
+        return False, 0, 0, 0.0, wp.vec3(0.0, 0.0, 0.0), wp.vec3(0.0, 0.0, 1.0)
 
+    du = 1.0 / wp.float32(ncol - 1)
+    dv = 1.0 / wp.float32(nrow - 1)
+    tx = (wp.float32(cc) * du - 0.5) * sheet_size
+    ty = (wp.float32(rr) * dv - 0.5) * sheet_size
+    n = panel_normal(ty, radius)
+    base = wp.vec3(tx, ty, panel_height(ty, radius, z_offset))
+    p_texel = wp.transform_point(X_ws, base)
 
-@wp.kernel
-def reset_gate_kernel(min_separation: wp.array[wp.float32]):
-    min_separation[0] = 1.0e6
+    # footprint mask in the tool frame
+    p_pad = wp.transform_point(wp.transform_inverse(X_tool), p_texel)
+    if wp.abs(p_pad[0]) > pad_half + footprint_margin or wp.abs(p_pad[1]) > pad_half + footprint_margin:
+        return False, 0, 0, 0.0, wp.vec3(0.0, 0.0, 0.0), wp.vec3(0.0, 0.0, 1.0)
+
+    # displaced surface point height in the tool frame
+    h = heightfield[rr, cc]
+    p_disp = wp.transform_point(X_ws, base + n * h)
+    z_pad = wp.transform_point(wp.transform_inverse(X_tool), p_disp)[2]
+    return True, rr, cc, z_pad, p_texel, n
 
 
 @wp.kernel
@@ -256,53 +264,37 @@ def apply_wear_kernel(
     tool_body: wp.int32,
     X_ws: wp.transform,
     heightfield: wp.array2d[wp.float32],
-    min_separation: wp.array[wp.float32],
     ctrl: wp.array[wp.float32],
-    gate: float,
     sheet_size: float,
     radius: float,
     z_offset: float,
     pad_half: float,
+    pad_half_z: float,
     footprint_margin: float,
+    contact_threshold: float,
     orbital_speed: float,
     dt: float,
 ):
-    """Archard-style material removal, one thread per texel in a window around
-    the pad: while the pad is in contact (min displaced separation below the
-    gate), every texel inside the pad footprint (tested in the tool frame, so
-    abrasion happens strictly under the pad) is worn by dh = k * |v_slip| * dt.
-    Runs entirely on GPU."""
-    if min_separation[0] > gate:
-        return
+    """Archard-style material removal restricted to contact regions.
 
-    i, j = wp.tid()  # window centered on the pad center uv
-    nrow = heightfield.shape[0]
-    ncol = heightfield.shape[1]
-
+    A texel is abraded only when its *displaced* surface point (base + n * h)
+    lies within `contact_threshold` of the pad's bottom face in the solved
+    pose -- the regions actually engaging the abrasive. High material cuts
+    first; valleys survive until the contact plane descends onto them. Runs
+    entirely on GPU."""
+    i, j = wp.tid()
     X_tool = body_q[tool_body]
-    p_c = wp.transform_point(wp.transform_inverse(X_ws), wp.transform_get_translation(X_tool))
-    c0 = wp.int32((wp.clamp(p_c[0] / sheet_size + 0.5, 0.0, 1.0)) * wp.float32(ncol - 1))
-    r0 = wp.int32((wp.clamp(p_c[1] / sheet_size + 0.5, 0.0, 1.0)) * wp.float32(nrow - 1))
-
-    half_w = 32  # window half extent [texels]; covers the rotated footprint
-    rr = r0 + i - half_w
-    cc = c0 + j - half_w
-    if rr < 0 or rr >= nrow or cc < 0 or cc >= ncol:
+    valid, rr, cc, z_pad, p_texel, n = wear_texel_query(
+        i, j, X_tool, X_ws, heightfield, sheet_size, radius, z_offset, pad_half, footprint_margin
+    )
+    if not valid:
         return
-
-    # footprint mask in the tool frame
-    du = 1.0 / wp.float32(ncol - 1)
-    dv = 1.0 / wp.float32(nrow - 1)
-    tx = (wp.float32(cc) * du - 0.5) * sheet_size
-    ty = (wp.float32(rr) * dv - 0.5) * sheet_size
-    p_texel = wp.transform_point(X_ws, wp.vec3(tx, ty, panel_height(ty, radius, z_offset)))
-    p_pad = wp.transform_point(wp.transform_inverse(X_tool), p_texel)
-    if wp.abs(p_pad[0]) > pad_half + footprint_margin or wp.abs(p_pad[1]) > pad_half + footprint_margin:
+    # contact test against the pad's bottom face (z = -hz in the tool frame)
+    if z_pad < -pad_half_z - contact_threshold:
         return
 
     # tangential slip speed of the pad at the texel; the orbital term is the
     # sander's intrinsic abrasive speed, independent of the feed motion
-    n = panel_normal(ty, radius)
     v_lin = wp.spatial_top(body_qd[tool_body])
     v_ang = wp.spatial_bottom(body_qd[tool_body])
     v_c = v_lin + wp.cross(v_ang, p_texel - wp.transform_get_translation(X_tool))
@@ -386,7 +378,7 @@ def drive_tool_kernel(
     # asymmetric: XPBD's positional projection re-emits penetration as upward
     # velocity, and an uncapped rebound sustains mm-scale porpoising that
     # buries the um-scale asperity response.
-    v = wp.vec3(v[0], v[1], wp.clamp(v[2], -max_vz, 0.25 * max_vz))
+    v = wp.vec3(v[0], v[1], wp.clamp(v[2], -max_vz, 0.1 * max_vz))
 
     # attitude steering toward the surface-aligned target orientation:
     # rotating the pad +z axis onto the panel normal is a rotation about x
@@ -410,7 +402,7 @@ def drive_tool_kernel(
         wp.vec3(
             kp * (tgt[0] - p[0]) - kd * v[0],
             kp * (tgt[1] - p[1]) - kd * v[1],
-            -60.0 * v[2],
+            -150.0 * v[2],
         )
         - n * ctrl[CTRL_PRESS]
     )
@@ -612,7 +604,7 @@ class Example:
         self.sim_substeps = 8
         self.sim_dt = self.frame_dt / self.sim_substeps
         self.frame_count = 0
-        self.num_frames = getattr(args, "num_frames", 900) if args is not None else 900
+        self.num_frames = getattr(args, "num_frames", 1080) if args is not None else 1080
 
         self.viewer = viewer
 
@@ -745,7 +737,6 @@ class Example:
 
         self.time_wp = wp.zeros(1, dtype=wp.float32)
         self.stats_wp = wp.zeros(6, dtype=wp.float32)
-        self.gate_wp = wp.full(1, 1.0e6, dtype=wp.float32)
 
         # GUI-tunable controls, read live by kernels inside the captured graph
         self.press_force = PRESS_FORCE
@@ -941,26 +932,7 @@ class Example:
                 ],
             )
 
-            # --- material removal under the pad (writes the heightfield in place) ---
-            wp.launch(reset_gate_kernel, dim=1, inputs=[self.gate_wp])
-            wp.launch(
-                contact_gate_kernel,
-                dim=self.contacts.rigid_contact_max,
-                inputs=[
-                    self.contacts.rigid_contact_count,
-                    self.contacts.rigid_contact_shape0,
-                    self.contacts.rigid_contact_shape1,
-                    self.contacts.rigid_contact_point0,
-                    self.contacts.rigid_contact_point1,
-                    self.contacts.rigid_contact_normal,
-                    self.contacts.rigid_contact_margin0,
-                    self.contacts.rigid_contact_margin1,
-                    self.state_0.body_q,
-                    self.sheet_shape,
-                    self.tool_body,
-                    self.gate_wp,
-                ],
-            )
+            # --- material removal in contact regions (writes the heightfield in place) ---
             wp.launch(
                 apply_wear_kernel,
                 dim=(WEAR_WINDOW, WEAR_WINDOW),
@@ -970,14 +942,14 @@ class Example:
                     self.tool_body,
                     self.X_ws,
                     self.heightfield,
-                    self.gate_wp,
                     self.ctrl_wp,
-                    WEAR_GATE,
                     SHEET_SIZE,
                     PANEL_RADIUS,
                     self.panel_z_offset,
                     PAD_HALF,
+                    PAD_HALF_Z,
                     WEAR_FOOTPRINT_MARGIN,
+                    WEAR_CONTACT_THRESHOLD,
                     ORBITAL_SPEED,
                     self.sim_dt,
                 ],
@@ -1009,8 +981,8 @@ class Example:
                     PANEL_RADIUS,
                     3000.0,  # kp
                     40.0,  # kd
-                    10.0,  # align_rate [1/s]
-                    0.3,  # align_blend per substep
+                    40.0,  # align_rate [1/s]
+                    0.5,  # align_blend per substep
                     MAX_VZ,
                     self.sim_dt,
                 ],
@@ -1389,14 +1361,19 @@ contact_point += h * n_smooth                               # body frame</pre>
 
   <h2>Material removal (sanding)</h2>
   <p>
-  An Archard-style wear kernel runs on the same contact list: for each active sheet contact
-  (displaced separation below a gate), it removes <code>dh = k&nbsp;&middot;&nbsp;|v<sub>slip</sub>|&nbsp;&middot;&nbsp;dt</code>,
-  stamped in UV space with a Gaussian falloff and masked to the pad footprint (each texel is tested in
-  the tool frame, so abrasion happens strictly under the pad) via <code>wp.atomic_add</code>, then clamps to a residual
-  floor field (5% of the initial asperities &rarr; Ra&nbsp;0.2&nbsp;&micro;m). Slip is the tangential velocity of the
-  tool at the contact point. Press force acts along the local surface normal and the pad orientation
-  tracks the surface-aligned target (velocity-level steering &mdash; torque PD on the pad's tiny inertia is
-  unstable under explicit substepping).
+  An Archard-style wear kernel runs one thread per texel in a window around the pad. Abrasion is
+  restricted to <em>contact regions</em>: a texel wears only when its displaced surface point
+  <code>base + n&middot;h</code> lies within a compliance depth (0.15&nbsp;mm, a foam-backed pad) of the pad's
+  bottom face in the solved pose, tested in the tool frame together with an exact footprint mask.
+  Removal is <code>dh = k&nbsp;&middot;&nbsp;(|v<sub>slip</sub>| + v<sub>orbital</sub>)&nbsp;&middot;&nbsp;dt</code>, clamped to a
+  residual floor field. High material cuts first and valleys survive until the contact plane descends
+  onto them. On the curved panel the surface falls away from the flat face by the curvature sagitta
+  (~0.56&nbsp;mm at the footprint edges), so each pass abrades a finite strip around the tangent line &mdash;
+  the faint stripe witness marks in the final surface are the physical signature of that contact
+  geometry, and a single coarse pass finishes to Ra&nbsp;&asymp;&nbsp;1&nbsp;&micro;m rather than the 0.2&nbsp;&micro;m
+  floor. Press force acts along the local surface normal and the pad orientation tracks the
+  surface-aligned target (velocity-level steering &mdash; torque PD on the pad's tiny inertia is unstable
+  under explicit substepping).
   </p>
 
   <h2>Measurement and capture</h2>
@@ -1489,7 +1466,7 @@ if __name__ == "__main__":
         "microsurface (real shapes hidden; pad drawn with its clearance "
         "exaggerated consistently with the surface).",
     )
-    parser.set_defaults(num_frames=900)
+    parser.set_defaults(num_frames=1080)
     viewer, args = newton.examples.init(parser)
 
     if args.capture:
