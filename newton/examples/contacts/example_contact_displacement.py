@@ -481,20 +481,18 @@ def update_pad_proxy_kernel(
     tool_body: wp.int32,
     X_ws: wp.transform,
     radius: float,
-    exaggeration: float,
-    ride_height: float,
+    lift: float,
     verts_local: wp.array[wp.vec3],
     points: wp.array[wp.vec3],
 ):
-    """Zoom-mode pad proxy: the pad drawn at true size but rigidly lifted by
-    the exaggerated clearance, so it rides the exaggerated microsurface
-    consistently (the physical clearance is um-scale and invisible)."""
+    """Zoom-mode pad proxy: the pad drawn at true size, rigidly offset along
+    the local surface normal so its face sits at the exaggerated support
+    height of the microsurface (see render() for the offset derivation)."""
     tid = wp.tid()
     X_tool = body_q[tool_body]
     p_w = wp.transform_point(X_tool, verts_local[tid])
     p_c = wp.transform_point(wp.transform_inverse(X_ws), wp.transform_get_translation(X_tool))
     n = panel_normal(p_c[1], radius)
-    lift = (exaggeration - 1.0) * wp.max(ride_height, 0.0)
     points[tid] = p_w + wp.transform_vector(X_ws, n) * lift
 
 
@@ -519,7 +517,7 @@ def measure_kernel(
     z_offset: float,
     pad_half: float,
     pad_half_z: float,
-    stats: wp.array[wp.float32],  # [sum, sum_sq, max, h_under_tool, sum_abs_dev, ride_height]
+    stats: wp.array[wp.float32],  # [sum, sum_sq, max, h_under_tool, sum_abs_dev, ride_height, h_support]
 ):
     i, j = wp.tid()
     h = heightfield[i, j]
@@ -539,6 +537,7 @@ def measure_kernel(
         # (center-point clearance would instead measure friction-induced
         # tilt, which rises mm-scale via the 15 mm lever arm).
         ride = float(1.0e6)
+        h_sup = float(0.0)
         for a in range(7):
             for b in range(7):
                 px = (wp.float32(a) / 3.0 - 1.0) * pad_half
@@ -550,7 +549,11 @@ def measure_kernel(
                 base = wp.vec3(p_s[0], p_s[1], panel_height(p_s[1], radius, z_offset))
                 n = panel_normal(p_s[1], radius)
                 ride = wp.min(ride, wp.dot(n, p_s - base))
+                h_sup = wp.max(
+                    h_sup, sample_height_bilinear(heightfield, p_s[0] / sheet_size + 0.5, p_s[1] / sheet_size + 0.5)
+                )
         stats[5] = ride
+        stats[6] = h_sup
 
 
 @wp.kernel
@@ -755,7 +758,7 @@ class Example:
         self.raster_duration = RASTER_STRIPES * stripe_len / speed
 
         self.time_wp = wp.zeros(1, dtype=wp.float32)
-        self.stats_wp = wp.zeros(6, dtype=wp.float32)
+        self.stats_wp = wp.zeros(7, dtype=wp.float32)
 
         # GUI-tunable controls, read live by kernels inside the captured graph
         self.press_force = PRESS_FORCE
@@ -776,6 +779,7 @@ class Example:
             "max": [],
             "h_tool": [],
             "ride": [],
+            "h_support": [],
             "removed_volume": [],
             "tool_x": [],
             "tool_y": [],
@@ -1080,6 +1084,7 @@ class Example:
         self.history["max"].append(float(s[2]))
         self.history["h_tool"].append(float(s[3]))
         self.history["ride"].append(float(s[5]))
+        self.history["h_support"].append(float(s[6]))
         self.history["removed_volume"].append(removed)
         self.history["tool_x"].append(float(tool_q[0]))
         self.history["tool_y"].append(float(tool_q[1]))
@@ -1130,12 +1135,17 @@ class Example:
                     pitch=-7.0,
                     yaw=180.0,
                 )
-            # pad proxy riding the exaggerated microsurface; the displayed
-            # clearance is smoothed and clamped so stripe-transition spikes
-            # don't launch the proxy visually
+            # pad proxy pinned to the exaggerated support height (max displaced
+            # material under the footprint): the solver's um-scale contact noise
+            # (~+-30 um, at the narrowphase accuracy floor) would read as mm at
+            # x300, so only the *support height* is exaggerated; the physical
+            # clearance enters the offset unexaggerated. Plots show raw values.
             ride_raw = self.history["ride"][-1] if self.history["ride"] else 0.0
-            self._ride_smooth = 0.8 * getattr(self, "_ride_smooth", 0.0) + 0.2 * min(max(ride_raw, 0.0), 5.0e-5)
-            ride = self._ride_smooth
+            h_sup_raw = self.history["h_support"][-1] if self.history["h_support"] else 0.0
+            self._hsup_smooth = 0.8 * getattr(self, "_hsup_smooth", 0.0) + 0.2 * h_sup_raw
+            # drawn face height above base = E * h_support; subtract the actual
+            # physical clearance so the offset cancels pose noise at x1
+            lift = self.lens_exaggeration * self._hsup_smooth - max(ride_raw, 0.0)
             wp.launch(
                 update_pad_proxy_kernel,
                 dim=len(self.proxy_points),
@@ -1144,8 +1154,7 @@ class Example:
                     self.tool_body,
                     self.X_ws,
                     PANEL_RADIUS,
-                    self.lens_exaggeration,
-                    float(ride),
+                    float(lift),
                     self.proxy_verts_local,
                     self.proxy_points,
                 ],
