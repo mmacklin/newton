@@ -60,18 +60,26 @@ MAX_VZ = 0.08  # tool vertical speed clamp [m/s] (the sheet mesh is an open
 # surface with no thickness; this keeps force-press transients from
 # tunneling the pad through it in a single frame)
 
-LENS_RES = 96  # displacement-lens grid resolution
+LENS_RES = 128  # displacement-lens grid resolution
 LENS_SIZE = 0.06  # displacement-lens patch size [m]
 LENS_EXAGGERATION = 500.0  # default lens height exaggeration
 LENS_LIFT = 5.0e-4  # lens offset along the surface normal to avoid z-fighting [m]
 
-RASTER_MARGIN = 0.015  # keep the pad center this far from the sheet edge [m]
-RASTER_STRIPES = 12  # number of raster stripes
-K_WEAR = 3.5e-3  # wear rate coefficient [m removed per m slid] (on the curved
-# panel the rigid pad contacts along a tangent line rather than its full
-# face, so fewer contact stamps contribute per pass than on a flat sheet)
-WEAR_SIGMA_UV = 0.05  # gaussian stamp sigma in UV space (~pad half width)
+ZOOM_PATCH_SIZE = 0.08  # microsurface patch size in zoom mode [m]
+ZOOM_EXAGGERATION = 300.0  # height exaggeration in zoom mode (applied to both
+# the microsurface and the pad's clearance, so the pad visibly rides the bumps)
+
+RASTER_MARGIN = 0.008  # commanded pad-center distance from the sheet edge [m]
+# (the pad lags the PD target by a few mm under friction, so the command
+# overshoots slightly to keep the footprint covering the full sheet)
+RASTER_STRIPES = 13  # number of raster stripes
+K_WEAR = 2.0e-3  # wear rate coefficient [m removed per m slid]
+ORBITAL_SPEED = 0.15  # intrinsic abrasive speed of the (orbital) sander [m/s];
+# keeps removal going through raster turnarounds where the feed speed
+# passes through zero
 WEAR_GATE = 1.0e-3  # max contact separation that still causes wear [m]
+WEAR_FOOTPRINT_MARGIN = 1.0e-3  # mask margin around the pad extents [m]
+WEAR_WINDOW = 65  # wear kernel launch window [texels], covers the rotated footprint
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +203,7 @@ CTRL_WEAR_ENABLED = 2
 
 
 @wp.kernel
-def apply_wear_kernel(
+def contact_gate_kernel(
     contact_count: wp.array[wp.int32],
     contact_shape0: wp.array[wp.int32],
     contact_shape1: wp.array[wp.int32],
@@ -205,23 +213,11 @@ def apply_wear_kernel(
     contact_margin0: wp.array[wp.float32],
     contact_margin1: wp.array[wp.float32],
     body_q: wp.array[wp.transform],
-    body_qd: wp.array[wp.spatial_vector],
     sheet_shape: wp.int32,
     tool_body: wp.int32,
-    X_ws: wp.transform,
-    mesh_id: wp.uint64,
-    uvs: wp.array[wp.vec2],
-    normals: wp.array[wp.vec3],
-    heightfield: wp.array2d[wp.float32],
-    max_query_dist: float,
-    ctrl: wp.array[wp.float32],
-    sigma_uv: float,
-    stamp_radius: wp.int32,
-    gate: float,
-    dt: float,
+    min_separation: wp.array[wp.float32],
 ):
-    """Archard-style material removal: dh ~ k * slip_speed * dt, stamped with a
-    gaussian footprint around each active sheet contact. Runs entirely on GPU."""
+    """Minimum displaced contact separation between pad and sheet -> gate for wear."""
     tid = wp.tid()
     if tid >= contact_count[0]:
         return
@@ -245,47 +241,76 @@ def apply_wear_kernel(
         p_other_w = wp.transform_point(X_tool, contact_point0[tid])
         d = wp.dot(contact_normal[tid], p_sheet_w - p_other_w)
     d = d - (contact_margin0[tid] + contact_margin1[tid])
-    if d > gate:
+    wp.atomic_min(min_separation, 0, d)
+
+
+@wp.kernel
+def reset_gate_kernel(min_separation: wp.array[wp.float32]):
+    min_separation[0] = 1.0e6
+
+
+@wp.kernel
+def apply_wear_kernel(
+    body_q: wp.array[wp.transform],
+    body_qd: wp.array[wp.spatial_vector],
+    tool_body: wp.int32,
+    X_ws: wp.transform,
+    heightfield: wp.array2d[wp.float32],
+    min_separation: wp.array[wp.float32],
+    ctrl: wp.array[wp.float32],
+    gate: float,
+    sheet_size: float,
+    radius: float,
+    z_offset: float,
+    pad_half: float,
+    footprint_margin: float,
+    orbital_speed: float,
+    dt: float,
+):
+    """Archard-style material removal, one thread per texel in a window around
+    the pad: while the pad is in contact (min displaced separation below the
+    gate), every texel inside the pad footprint (tested in the tool frame, so
+    abrasion happens strictly under the pad) is worn by dh = k * |v_slip| * dt.
+    Runs entirely on GPU."""
+    if min_separation[0] > gate:
         return
 
-    # tangential slip speed of the tool at the contact
-    n = contact_normal[tid]
-    v_lin = wp.spatial_top(body_qd[tool_body])
-    v_ang = wp.spatial_bottom(body_qd[tool_body])
-    r = p_sheet_w - wp.transform_get_translation(X_tool)
-    v_c = v_lin + wp.cross(v_ang, r)
-    v_t = v_c - n * wp.dot(n, v_c)
-    slip = wp.length(v_t)
-    if slip < 1.0e-6:
-        return
-
-    # contact UV
-    p_local = wp.transform_point(wp.transform_inverse(X_ws), p_sheet_w)
-    hit, uv, _n_local = query_sheet_uv_normal(mesh_id, uvs, normals, p_local, max_query_dist)
-    if not hit:
-        return
-
+    i, j = wp.tid()  # window centered on the pad center uv
     nrow = heightfield.shape[0]
     ncol = heightfield.shape[1]
-    c0 = wp.int32(wp.clamp(uv[0], 0.0, 1.0) * wp.float32(ncol - 1))
-    r0 = wp.int32(wp.clamp(uv[1], 0.0, 1.0) * wp.float32(nrow - 1))
 
-    dh0 = ctrl[CTRL_WEAR_RATE] * ctrl[CTRL_WEAR_ENABLED] * slip * dt
-    if dh0 == 0.0:
+    X_tool = body_q[tool_body]
+    p_c = wp.transform_point(wp.transform_inverse(X_ws), wp.transform_get_translation(X_tool))
+    c0 = wp.int32((wp.clamp(p_c[0] / sheet_size + 0.5, 0.0, 1.0)) * wp.float32(ncol - 1))
+    r0 = wp.int32((wp.clamp(p_c[1] / sheet_size + 0.5, 0.0, 1.0)) * wp.float32(nrow - 1))
+
+    half_w = 32  # window half extent [texels]; covers the rotated footprint
+    rr = r0 + i - half_w
+    cc = c0 + j - half_w
+    if rr < 0 or rr >= nrow or cc < 0 or cc >= ncol:
         return
-    inv_2s2 = 1.0 / (2.0 * sigma_uv * sigma_uv)
+
+    # footprint mask in the tool frame
     du = 1.0 / wp.float32(ncol - 1)
     dv = 1.0 / wp.float32(nrow - 1)
+    tx = (wp.float32(cc) * du - 0.5) * sheet_size
+    ty = (wp.float32(rr) * dv - 0.5) * sheet_size
+    p_texel = wp.transform_point(X_ws, wp.vec3(tx, ty, panel_height(ty, radius, z_offset)))
+    p_pad = wp.transform_point(wp.transform_inverse(X_tool), p_texel)
+    if wp.abs(p_pad[0]) > pad_half + footprint_margin or wp.abs(p_pad[1]) > pad_half + footprint_margin:
+        return
 
-    for i in range(-stamp_radius, stamp_radius + 1):
-        for j in range(-stamp_radius, stamp_radius + 1):
-            rr = r0 + i
-            cc = c0 + j
-            if rr < 0 or rr >= nrow or cc < 0 or cc >= ncol:
-                continue
-            r2 = (wp.float32(i) * dv) * (wp.float32(i) * dv) + (wp.float32(j) * du) * (wp.float32(j) * du)
-            w = wp.exp(-r2 * inv_2s2)
-            wp.atomic_add(heightfield, rr, cc, -dh0 * w)
+    # tangential slip speed of the pad at the texel; the orbital term is the
+    # sander's intrinsic abrasive speed, independent of the feed motion
+    n = panel_normal(ty, radius)
+    v_lin = wp.spatial_top(body_qd[tool_body])
+    v_ang = wp.spatial_bottom(body_qd[tool_body])
+    v_c = v_lin + wp.cross(v_ang, p_texel - wp.transform_get_translation(X_tool))
+    v_t = v_c - n * wp.dot(n, v_c)
+    slip = wp.length(v_t) + orbital_speed
+
+    dh = ctrl[CTRL_WEAR_RATE] * ctrl[CTRL_WEAR_ENABLED] * slip * dt
+    heightfield[rr, cc] = heightfield[rr, cc] - dh
 
 
 @wp.kernel
@@ -455,6 +480,29 @@ def update_lens_kernel(
     # colormap strip lookup by normalized height (inset to avoid edge bleed)
     u_tex = wp.clamp(h * inv_h_scale, 0.0, 1.0) * 0.99 + 0.005
     uvs_out[i * res + j] = wp.vec2(u_tex, 0.5)
+
+
+@wp.kernel
+def update_pad_proxy_kernel(
+    body_q: wp.array[wp.transform],
+    tool_body: wp.int32,
+    X_ws: wp.transform,
+    radius: float,
+    exaggeration: float,
+    ride_height: float,
+    verts_local: wp.array[wp.vec3],
+    points: wp.array[wp.vec3],
+):
+    """Zoom-mode pad proxy: the pad drawn at true size but rigidly lifted by
+    the exaggerated clearance, so it rides the exaggerated microsurface
+    consistently (the physical clearance is um-scale and invisible)."""
+    tid = wp.tid()
+    X_tool = body_q[tool_body]
+    p_w = wp.transform_point(X_tool, verts_local[tid])
+    p_c = wp.transform_point(wp.transform_inverse(X_ws), wp.transform_get_translation(X_tool))
+    n = panel_normal(p_c[1], radius)
+    lift = (exaggeration - 1.0) * wp.max(ride_height, 0.0)
+    points[tid] = p_w + wp.transform_vector(X_ws, n) * lift
 
 
 @wp.kernel
@@ -697,7 +745,7 @@ class Example:
 
         self.time_wp = wp.zeros(1, dtype=wp.float32)
         self.stats_wp = wp.zeros(6, dtype=wp.float32)
-        self.wear_stamp_radius = int(2.0 * WEAR_SIGMA_UV * (HF_RES - 1))
+        self.gate_wp = wp.full(1, 1.0e6, dtype=wp.float32)
 
         # GUI-tunable controls, read live by kernels inside the captured graph
         self.press_force = PRESS_FORCE
@@ -740,9 +788,20 @@ class Example:
         self.viz_indices = wp.array(viz_idx.flatten(), dtype=wp.int32)
 
         # displacement lens: patch following the pad, showing the displaced
-        # collision surface (base + n * h) with adjustable exaggeration
-        self.lens_enabled = True
-        self.lens_exaggeration = LENS_EXAGGERATION
+        # collision surface (base + n * h) with adjustable exaggeration.
+        # In zoom mode it becomes the primary microsurface view; in the
+        # default view it is off (toggle in the GUI panel).
+        self.zoom_mode = bool(getattr(args, "zoom", False)) if args is not None else False
+        if self.zoom_mode:
+            self.lens_enabled = True
+            self.lens_exaggeration = ZOOM_EXAGGERATION
+            self.lens_size = ZOOM_PATCH_SIZE
+            self.lens_lift = 0.0
+        else:
+            self.lens_enabled = False
+            self.lens_exaggeration = LENS_EXAGGERATION
+            self.lens_size = LENS_SIZE
+            self.lens_lift = LENS_LIFT
         self.lens_points = wp.zeros(LENS_RES * LENS_RES, dtype=wp.vec3)
         self.lens_uvs = wp.zeros(LENS_RES * LENS_RES, dtype=wp.vec2)
         li, lj = np.meshgrid(np.arange(LENS_RES - 1), np.arange(LENS_RES - 1), indexing="ij")
@@ -764,11 +823,34 @@ class Example:
         strip = anchors[idx] * (1.0 - frac) + anchors[idx + 1] * frac
         self.lens_texture = strip.astype(np.uint8).reshape(1, 256, 3)
 
+        # zoom-mode pad proxy: box drawn per-face (24 verts) for crisp normals
+        hx, hy, hz = PAD_HALF, PAD_HALF, PAD_HALF_Z
+        corners = np.array(
+            [[sx * hx, sy * hy, sz * hz] for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)], dtype=np.float32
+        )
+        quads = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+        pverts: list = []
+        pidx: list = []
+        for q in quads:
+            b = len(pverts)
+            pverts += [corners[k] for k in q]
+            pidx += [b, b + 1, b + 2, b, b + 2, b + 3]
+        self.proxy_verts_local = wp.array(np.array(pverts, dtype=np.float32), dtype=wp.vec3)
+        self.proxy_points = wp.zeros(len(pverts), dtype=wp.vec3)
+        self.proxy_indices = wp.array(np.array(pidx, dtype=np.int32), dtype=wp.int32)
+
         self.viewer.set_model(self.model)
-        # frame both the physical sheet and the exaggerated inspection panel
-        # scene sits left of viewport center so the docked image window
-        # (which auto-centers) does not occlude the pad's raster path
-        self.viewer.set_camera(pos=wp.vec3(0.14, -0.42, 0.3), pitch=-28.0, yaw=90.0)
+        if self.zoom_mode:
+            # hide the real model shapes: the physical pad sits um above the
+            # base surface and would render inside the exaggerated microsurface
+            if hasattr(self.viewer, "show_visual"):
+                self.viewer.show_visual = False
+            self.viewer.set_camera(pos=wp.vec3(-0.07, -0.2, 0.09), pitch=-28.0, yaw=90.0)
+        else:
+            # frame both the physical sheet and the exaggerated inspection panel;
+            # scene sits left of viewport center so the docked image window
+            # (which auto-centers) does not occlude the pad's raster path
+            self.viewer.set_camera(pos=wp.vec3(0.14, -0.42, 0.3), pitch=-28.0, yaw=90.0)
 
         self._validate_conventions()
         self.capture()
@@ -860,8 +942,9 @@ class Example:
             )
 
             # --- material removal under the pad (writes the heightfield in place) ---
+            wp.launch(reset_gate_kernel, dim=1, inputs=[self.gate_wp])
             wp.launch(
-                apply_wear_kernel,
+                contact_gate_kernel,
                 dim=self.contacts.rigid_contact_max,
                 inputs=[
                     self.contacts.rigid_contact_count,
@@ -873,19 +956,29 @@ class Example:
                     self.contacts.rigid_contact_margin0,
                     self.contacts.rigid_contact_margin1,
                     self.state_0.body_q,
-                    self.state_0.body_qd,
                     self.sheet_shape,
                     self.tool_body,
+                    self.gate_wp,
+                ],
+            )
+            wp.launch(
+                apply_wear_kernel,
+                dim=(WEAR_WINDOW, WEAR_WINDOW),
+                inputs=[
+                    self.state_0.body_q,
+                    self.state_0.body_qd,
+                    self.tool_body,
                     self.X_ws,
-                    self.sheet_mesh_id,
-                    self.sheet_uvs,
-                    self.sheet_normals,
                     self.heightfield,
-                    self.max_query_dist,
+                    self.gate_wp,
                     self.ctrl_wp,
-                    WEAR_SIGMA_UV,
-                    self.wear_stamp_radius,
                     WEAR_GATE,
+                    SHEET_SIZE,
+                    PANEL_RADIUS,
+                    self.panel_z_offset,
+                    PAD_HALF,
+                    WEAR_FOOTPRINT_MARGIN,
+                    ORBITAL_SPEED,
                     self.sim_dt,
                 ],
             )
@@ -996,29 +1089,70 @@ class Example:
     def render(self):
         self.viewer.begin_frame(self.sim_time)
         self.viewer.log_state(self.state_0)
-        self.viewer.log_contacts(self.contacts, self.state_0)
-        wp.launch(
-            update_surface_points_kernel,
-            dim=(HF_RES, HF_RES),
-            inputs=[
-                self.heightfield,
-                self.viz_origin,
-                SHEET_SIZE,
-                PANEL_RADIUS,
-                self.panel_z_offset,
-                self.viz_exaggeration,
+        if not self.zoom_mode:
+            self.viewer.log_contacts(self.contacts, self.state_0)
+            wp.launch(
+                update_surface_points_kernel,
+                dim=(HF_RES, HF_RES),
+                inputs=[
+                    self.heightfield,
+                    self.viz_origin,
+                    SHEET_SIZE,
+                    PANEL_RADIUS,
+                    self.panel_z_offset,
+                    self.viz_exaggeration,
+                    self.viz_points,
+                ],
+            )
+            self.viewer.log_mesh(
+                "/surface_inspection",
                 self.viz_points,
-            ],
-        )
-        self.viewer.log_mesh(
-            "/surface_inspection",
-            self.viz_points,
-            self.viz_indices,
-            color=(0.72, 0.75, 0.79),
-            roughness=0.35,
-            metallic=0.9,
-            backface_culling=False,
-        )
+                self.viz_indices,
+                color=(0.72, 0.75, 0.79),
+                roughness=0.35,
+                metallic=0.9,
+                backface_culling=False,
+            )
+        else:
+            # zoom mode: follow the pad closely from behind the raster
+            if self.history["t"]:
+                tx = self.history["tool_x"][-1]
+                ty = self.history["tool_y"][-1]
+                bz = float(np.sqrt(PANEL_RADIUS**2 - min(ty * ty, 0.99 * PANEL_RADIUS**2))) + self.panel_z_offset
+                self.viewer.set_camera(
+                    pos=wp.vec3(tx, ty - 0.13, bz + 0.065),
+                    pitch=-27.0,
+                    yaw=90.0,
+                )
+            # pad proxy riding the exaggerated microsurface; the displayed
+            # clearance is smoothed and clamped so stripe-transition spikes
+            # don't launch the proxy visually
+            ride_raw = self.history["ride"][-1] if self.history["ride"] else 0.0
+            self._ride_smooth = 0.8 * getattr(self, "_ride_smooth", 0.0) + 0.2 * min(max(ride_raw, 0.0), 2.5e-5)
+            ride = self._ride_smooth
+            wp.launch(
+                update_pad_proxy_kernel,
+                dim=len(self.proxy_points),
+                inputs=[
+                    self.state_0.body_q,
+                    self.tool_body,
+                    self.X_ws,
+                    PANEL_RADIUS,
+                    self.lens_exaggeration,
+                    float(ride),
+                    self.proxy_verts_local,
+                    self.proxy_points,
+                ],
+            )
+            self.viewer.log_mesh(
+                "/pad_proxy",
+                self.proxy_points,
+                self.proxy_indices,
+                color=(0.55, 0.8, 0.95),
+                roughness=0.35,
+                metallic=0.2,
+                backface_culling=False,
+            )
         # displacement lens: displaced collision surface under the pad
         if self.lens_enabled:
             wp.launch(
@@ -1033,9 +1167,9 @@ class Example:
                     PANEL_RADIUS,
                     self.panel_z_offset,
                     LENS_RES,
-                    LENS_SIZE,
+                    self.lens_size,
                     self.lens_exaggeration,
-                    LENS_LIFT,
+                    self.lens_lift,
                     self.hf_image_inv_scale,
                     self.lens_points,
                     self.lens_uvs,
@@ -1059,13 +1193,15 @@ class Example:
         if lens_obj is not None and hasattr(lens_obj, "material"):
             r, m, c, _t = lens_obj.material
             lens_obj.material = (r, m, c, 1.0)
-        # live heightfield image window (GL only)
-        wp.launch(
-            heightfield_to_image_kernel,
-            dim=(HF_RES, HF_RES),
-            inputs=[self.heightfield, self.hf_image_inv_scale, self.hf_image],
-        )
-        self.viewer.log_image("heightfield", self.hf_image)
+        # live heightfield image window (GL only; skipped in zoom mode where
+        # it would occlude the close-up)
+        if not self.zoom_mode:
+            wp.launch(
+                heightfield_to_image_kernel,
+                dim=(HF_RES, HF_RES),
+                inputs=[self.heightfield, self.hf_image_inv_scale, self.hf_image],
+            )
+            self.viewer.log_image("heightfield", self.hf_image)
         self.viewer.end_frame()
 
         # frame-accurate mp4 capture from the GL framebuffer (PBO readback);
@@ -1199,6 +1335,12 @@ _REPORT_TEMPLATE = """<!DOCTYPE html>
   <video src="sanding.mp4" controls loop muted playsinline style="max-width:100%; border-radius:6px;"
          onloadeddata="document.getElementById('video').style.display='block'"></video>
  </div>
+ <div class="panel wide" id="videozoom" style="display:none; text-align:center;">
+  <p style="color:#888; margin:4px;">Close-up: pad riding the displaced microsurface
+  (heights and pad clearance exaggerated &times;300, run with <code>--zoom</code>)</p>
+  <video src="sanding-zoom.mp4" controls loop muted playsinline style="max-width:100%; border-radius:6px;"
+         onloadeddata="document.getElementById('videozoom').style.display='block'"></video>
+ </div>
  <div class="panel wide prose">
   <h2>Approach: heightfield-displaced contacts on a mesh, with zero engine changes</h2>
   <p>
@@ -1249,7 +1391,8 @@ contact_point += h * n_smooth                               # body frame</pre>
   <p>
   An Archard-style wear kernel runs on the same contact list: for each active sheet contact
   (displaced separation below a gate), it removes <code>dh = k&nbsp;&middot;&nbsp;|v<sub>slip</sub>|&nbsp;&middot;&nbsp;dt</code>,
-  stamped as a Gaussian footprint in UV space with <code>wp.atomic_add</code>, then clamps to a residual
+  stamped in UV space with a Gaussian falloff and masked to the pad footprint (each texel is tested in
+  the tool frame, so abrasion happens strictly under the pad) via <code>wp.atomic_add</code>, then clamps to a residual
   floor field (5% of the initial asperities &rarr; Ra&nbsp;0.2&nbsp;&micro;m). Slip is the tangential velocity of the
   tool at the contact point. Press force acts along the local surface normal and the pad orientation
   tracks the surface-aligned target (velocity-level steering &mdash; torque PD on the pad's tiny inertia is
@@ -1338,6 +1481,13 @@ if __name__ == "__main__":
         default=None,
         help="Capture an mp4 of the run via ViewerGL.get_frame() (requires imageio; "
         "includes the imgui overlays when the viewer is not headless).",
+    )
+    parser.add_argument(
+        "--zoom",
+        action="store_true",
+        help="Close-up mode: follow-cam on the pad riding the exaggerated "
+        "microsurface (real shapes hidden; pad drawn with its clearance "
+        "exaggerated consistently with the surface).",
     )
     parser.set_defaults(num_frames=900)
     viewer, args = newton.examples.init(parser)
