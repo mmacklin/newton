@@ -1273,6 +1273,12 @@ class Example:
             "surface_final_um": np.round(self.heightfield.numpy()[::2, ::2] * um, 4).tolist(),
         }
         html = _REPORT_TEMPLATE.replace("__DATA__", json.dumps(data))
+        # cache-bust the video links with the mp4 mtimes so browsers/CDN
+        # pick up regenerated captures
+        for vid in ("sanding.mp4", "sanding-zoom.mp4"):
+            vp = os.path.join(path, vid)
+            if os.path.exists(vp):
+                html = html.replace(f'src="{vid}"', f'src="{vid}?v={int(os.path.getmtime(vp))}"')
         out = os.path.join(path, "index.html")
         with open(out, "w") as f:
             f.write(html)
