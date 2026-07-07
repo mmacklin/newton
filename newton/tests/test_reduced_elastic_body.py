@@ -2177,6 +2177,84 @@ def test_elastic_frame_coupling_conserves_spinning_momentum(test, device):
     test.assertLess(max_com_drift, 0.05)
 
 
+def test_elastic_joint_damping_conserves_momentum(test, device):
+    total_mass = 1.0
+    loader_mass = 0.5
+    stiffness = 50.0
+    deflection = 0.1
+    n = 21
+    length = 1.0
+    xs = np.linspace(-0.5 * length, 0.5 * length, n, dtype=np.float32)
+    sample_points = np.column_stack([xs, np.zeros(n), np.zeros(n)]).astype(np.float32)
+    sample_phi = np.zeros((n, 1, 3), dtype=np.float32)
+    sample_phi[:, 0, 2] = 1.0 - (2.0 * xs / length) ** 2
+    basis = newton.ModalBasis(
+        sample_points=sample_points,
+        sample_phi=sample_phi,
+        sample_mass=np.full(n, total_mass / n, dtype=np.float32),
+        mode_stiffness=[stiffness],
+        mode_damping=[0.0],
+    )
+    com_factor = float(basis.mode_coupling_linear[0][2]) / total_mass
+    builder = newton.ModelBuilder(gravity=0.0)
+    beam = builder.add_body_elastic(
+        xform=wp.transform_identity(),
+        com=wp.vec3(0.0, 0.0, 0.0),
+        mass=total_mass,
+        inertia=_identity_inertia(),
+        mode_q=[deflection],
+        modal_basis=basis,
+    )
+    loader = builder.add_body(
+        xform=wp.transform(wp.vec3(0.0, 0.0, deflection), wp.quat_identity()),
+        mass=loader_mass,
+        inertia=_identity_inertia(),
+    )
+    builder.add_joint_fixed(
+        parent=beam,
+        child=loader,
+        parent_xform=wp.transform(wp.vec3(0.0, 0.0, 0.0), wp.quat_identity()),
+        child_xform=wp.transform_identity(),
+    )
+    builder.color()
+    model = builder.finalize(device=device)
+    state_0 = model.state()
+    state_1 = model.state()
+    control = model.control()
+    q_start, _ = _elastic_free_joint_starts(model, beam)
+    frame_z_index = q_start + 2
+    mode_index = q_start + 7
+
+    solver = newton.solvers.SolverVBD(
+        model,
+        iterations=24,
+        rigid_joint_adaptive_stiffness=False,
+        rigid_joint_linear_ke=1.0e4,
+        rigid_joint_linear_kd=0.2,
+    )
+    dt = 1.0 / 240.0
+    total = total_mass + loader_mass
+
+    def system_com_z():
+        jq = state_0.joint_q.numpy()
+        beam_com = float(jq[frame_z_index]) + com_factor * float(jq[mode_index])
+        loader_z = float(state_0.body_q.numpy()[loader][2])
+        return (total_mass * beam_com + loader_mass * loader_z) / total
+
+    com0 = system_com_z()
+    z0 = float(state_0.body_q.numpy()[loader][2])
+    max_com_drift = 0.0
+    max_loader_move = 0.0
+    for _ in range(150):
+        solver.step(state_0, state_1, control, None, dt)
+        state_0, state_1 = state_1, state_0
+        max_com_drift = max(max_com_drift, abs(system_com_z() - com0))
+        max_loader_move = max(max_loader_move, abs(float(state_0.body_q.numpy()[loader][2]) - z0))
+
+    test.assertGreater(max_loader_move, 0.02)
+    test.assertLess(max_com_drift, 0.2 * max_loader_move)
+
+
 def test_vbd_revolute_uses_elastic_endpoint(test, device):
     eta = 0.2
     rest_anchor = -0.5
@@ -2890,6 +2968,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_elastic_frame_coupling_conserves_spinning_momentum",
         test_elastic_frame_coupling_conserves_spinning_momentum,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_elastic_joint_damping_conserves_momentum",
+        test_elastic_joint_damping_conserves_momentum,
         devices=[device],
     )
     add_function_test(TestReducedElasticBody, "test_elastic_link_layout", test_elastic_link_layout, devices=[device])
