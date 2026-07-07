@@ -40,17 +40,8 @@ class TendonLinkType(IntEnum):
     """
 
 
-class TendonLinkState(IntEnum):
-    """Internal route state for a tendon link."""
+class TendonLinkFlags(IntEnum):
+    """Flags controlling tendon link routing."""
 
-    INACTIVE = 0
-    """Link is dynamically routed and currently bypassed."""
-
-    ACTIVE = 1
-    """Link is dynamically routed and currently active."""
-
-    DYNAMIC = 2
-    """Link is dynamically routed and its initial state has not been resolved."""
-
-    FIXED = 3
-    """Link is permanently active and excluded from dynamic routing."""
+    DYNAMIC = 1 << 0
+    """Link activity is updated from the current route geometry."""

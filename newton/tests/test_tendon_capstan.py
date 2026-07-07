@@ -17,7 +17,7 @@ import warp as wp
 
 import newton
 from newton._src.sim.builder import Axis
-from newton._src.sim.tendon import TendonLinkState, TendonLinkType
+from newton._src.sim.tendon import TendonLinkFlags, TendonLinkType
 from newton.examples.cable.cable import get_tendon_cable_lines
 from newton.examples.cable.example_tendon_capstan_friction import Example as DynamicCapstanExample
 from newton.examples.cable.example_tendon_mujoco_switch import Example as MujocoSwitchExample
@@ -1015,7 +1015,7 @@ def _loaded_route_material_length(solver, model):
     material_length = float(np.sum(solver.tendon_seg_rest_length.numpy()[active_segments]))
     link_active = solver.tendon_link_active.numpy()
     for link_idx in (1, 2):
-        if link_active[link_idx] != int(TendonLinkState.INACTIVE):
+        if link_active[link_idx]:
             material_length += _loaded_route_arc_length(solver, model, link_idx)
     return material_length
 
@@ -1062,9 +1062,12 @@ def test_loaded_dynamic_route_matches_fixed_route(test, device):
     dynamic_model, dynamic_solver, candidate, dynamic_material_before, dynamic_material_after, dynamic_tension = (
         _run_loaded_dynamic_route(True, device)
     )
-    test.assertEqual(int(fixed_model.tendon_link_active.numpy()[candidate]), int(TendonLinkState.FIXED))
-    test.assertEqual(int(dynamic_model.tendon_link_active.numpy()[candidate]), int(TendonLinkState.DYNAMIC))
-    test.assertEqual(int(dynamic_solver.tendon_link_active.numpy()[candidate]), int(TendonLinkState.ACTIVE))
+    test.assertEqual(int(fixed_model.tendon_link_flags.numpy()[candidate]) & int(TendonLinkFlags.DYNAMIC), 0)
+    test.assertNotEqual(
+        int(dynamic_model.tendon_link_flags.numpy()[candidate]) & int(TendonLinkFlags.DYNAMIC),
+        0,
+    )
+    test.assertTrue(dynamic_solver.tendon_link_active.numpy()[candidate])
     test.assertAlmostEqual(dynamic_material_before, fixed_material_before, delta=5.0e-5)
     test.assertAlmostEqual(
         dynamic_material_after - dynamic_material_before,
@@ -1139,15 +1142,15 @@ def test_mujoco_wrap_straight_bypass_activates_and_deactivates(test, device):
 
         active_history = np.array(example._active_history, dtype=np.int32)
         link_type = example.model.tendon_link_type.numpy()[example.candidate_link_indices]
-        authored_state = example.model.tendon_link_active.numpy()[example.candidate_link_indices]
+        authored_flags = example.model.tendon_link_flags.numpy()[example.candidate_link_indices]
         test.assertEqual(example.candidate_count, 3, "MuJoCo-style wrap example should use three candidates")
         test.assertTrue(
             np.all(link_type == int(newton.TendonLinkType.ROLLING)),
             f"Dynamic wrap candidates should remain authored as rolling links: {link_type}",
         )
         test.assertTrue(
-            np.all(authored_state == int(TendonLinkState.DYNAMIC)),
-            f"Dynamic wrap candidates should be marked for automatic routing: {authored_state}",
+            np.all((authored_flags & int(TendonLinkFlags.DYNAMIC)) != 0),
+            f"Dynamic wrap candidates should be marked for automatic routing: {authored_flags}",
         )
         test.assertTrue(np.all(active_history[0] == 0), f"Route should start inactive: {active_history[:8]}")
         test.assertTrue(np.all(active_history[-1] == 0), f"Route should end inactive: {active_history[-8:]}")
@@ -1252,10 +1255,16 @@ def test_dynamic_route_initial_state_matches_geometry(test, device):
         active_model, _, _, active_link = build_loaded_dynamic_route(True, device)
         active_solver = newton.solvers.SolverXPBD(active_model, iterations=8, joint_linear_relaxation=1.0)
 
-        test.assertEqual(int(inactive_model.tendon_link_active.numpy()[inactive_link]), int(TendonLinkState.DYNAMIC))
-        test.assertEqual(int(inactive_solver.tendon_link_active.numpy()[inactive_link]), int(TendonLinkState.INACTIVE))
-        test.assertEqual(int(active_model.tendon_link_active.numpy()[active_link]), int(TendonLinkState.DYNAMIC))
-        test.assertEqual(int(active_solver.tendon_link_active.numpy()[active_link]), int(TendonLinkState.ACTIVE))
+        test.assertNotEqual(
+            int(inactive_model.tendon_link_flags.numpy()[inactive_link]) & int(TendonLinkFlags.DYNAMIC),
+            0,
+        )
+        test.assertFalse(inactive_solver.tendon_link_active.numpy()[inactive_link])
+        test.assertNotEqual(
+            int(active_model.tendon_link_flags.numpy()[active_link]) & int(TendonLinkFlags.DYNAMIC),
+            0,
+        )
+        test.assertTrue(active_solver.tendon_link_active.numpy()[active_link])
 
 
 def test_fixed_route_state_is_preserved(test, device):
@@ -1268,14 +1277,13 @@ def test_fixed_route_state_is_preserved(test, device):
         newton.eval_fk(model, model.joint_q, model.joint_qd, state_0)
         fixed_link = candidate_link - 1
 
-        test.assertEqual(int(solver.tendon_link_active.numpy()[fixed_link]), int(TendonLinkState.FIXED))
-        for attempted_state in (TendonLinkState.INACTIVE, TendonLinkState.ACTIVE):
-            link_active = solver.tendon_link_active.numpy()
-            link_active[fixed_link] = int(attempted_state)
-            solver.tendon_link_active.assign(link_active)
-            solver.step(state_0, state_1, control, None, 1.0 / 120.0)
-            state_0, state_1 = state_1, state_0
-            test.assertEqual(int(solver.tendon_link_active.numpy()[fixed_link]), int(TendonLinkState.FIXED))
+        test.assertEqual(int(model.tendon_link_flags.numpy()[fixed_link]) & int(TendonLinkFlags.DYNAMIC), 0)
+        test.assertTrue(solver.tendon_link_active.numpy()[fixed_link])
+        link_active = solver.tendon_link_active.numpy()
+        link_active[fixed_link] = False
+        solver.tendon_link_active.assign(link_active)
+        solver.step(state_0, state_1, control, None, 1.0 / 120.0)
+        test.assertTrue(solver.tendon_link_active.numpy()[fixed_link])
 
 
 def test_dynamic_route_cuda_graph_capture(test, device):
@@ -1351,11 +1359,11 @@ def test_mujoco_switch_optional_middle_capstan_activates(test, device):
 
         active_history = np.array(example._active_history, dtype=np.int32)
         link_type = example.model.tendon_link_type.numpy()
-        authored_state = example.model.tendon_link_active.numpy()
+        authored_flags = example.model.tendon_link_flags.numpy()
         test.assertEqual(link_type[example.lower_link], int(newton.TendonLinkType.ROLLING))
         test.assertEqual(link_type[example.middle_link], int(newton.TendonLinkType.ROLLING))
-        test.assertEqual(authored_state[example.lower_link], int(TendonLinkState.FIXED))
-        test.assertEqual(authored_state[example.middle_link], int(TendonLinkState.DYNAMIC))
+        test.assertEqual(int(authored_flags[example.lower_link]) & int(TendonLinkFlags.DYNAMIC), 0)
+        test.assertNotEqual(int(authored_flags[example.middle_link]) & int(TendonLinkFlags.DYNAMIC), 0)
         test.assertEqual(active_history[0], 0, f"Switch route should start on lower-guide-only path: {active_history}")
         test.assertEqual(active_history[-1], 0, f"Switch route should end on lower-guide-only path: {active_history}")
         test.assertEqual(int(np.max(active_history)), 1, f"Middle capstan should activate: {active_history}")

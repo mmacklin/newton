@@ -682,6 +682,7 @@ class SolverXPBD(TendonStateMixin, SolverBase):
                                 model.tendon_start,
                                 model.tendon_link_body,
                                 model.tendon_link_type,
+                                model.tendon_link_flags,
                                 model.tendon_link_radius,
                                 model.tendon_link_orientation,
                                 model.tendon_link_mu,

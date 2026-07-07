@@ -14,7 +14,7 @@ import numpy as np
 import warp as wp
 
 from ..sim import Model
-from ..sim.tendon import TendonLinkState, TendonLinkType
+from ..sim.tendon import TendonLinkFlags, TendonLinkType
 from .tendon_kernels import snapshot_tendon_link_active, update_tendon_attachments, update_tendon_link_active
 
 
@@ -162,12 +162,8 @@ class TendonStateMixin:
             self.tendon_seg_active_damping = wp.array(
                 model.tendon_seg_damping.numpy().copy(), dtype=float, device=model.device
             )
-            self.tendon_link_active = wp.array(
-                model.tendon_link_active.numpy().copy(), dtype=wp.int32, device=model.device
-            )
-            self.tendon_link_active_step = wp.array(
-                model.tendon_link_active.numpy().copy(), dtype=wp.int32, device=model.device
-            )
+            self.tendon_link_active = wp.ones(model.tendon_link_count, dtype=bool)
+            self.tendon_link_active_step = wp.ones(model.tendon_link_count, dtype=bool)
             self.tendon_link_route_rest_length = wp.zeros(model.tendon_link_count, dtype=float)
             self.tendon_total_cable = wp.zeros(model.tendon_count, dtype=float)
 
@@ -201,9 +197,12 @@ class TendonStateMixin:
             self.tendon_seg_stretch = wp.zeros_like(self.tendon_seg_rest_length)
 
             link_type_np = model.tendon_link_type.numpy()
-            link_state_np = model.tendon_link_active.numpy()
+            link_flags_np = model.tendon_link_flags.numpy()
             self._has_dynamic_tendon_links = bool(
-                np.any((link_type_np == int(TendonLinkType.ROLLING)) & (link_state_np == int(TendonLinkState.DYNAMIC)))
+                np.any(
+                    (link_type_np == int(TendonLinkType.ROLLING))
+                    & ((link_flags_np & int(TendonLinkFlags.DYNAMIC)) != 0)
+                )
             )
             if self._has_dynamic_tendon_links and model.body_q is not None:
                 # Resolve the initial topology before measuring its free-span rest lengths.
@@ -227,7 +226,7 @@ class TendonStateMixin:
             wp.launch(
                 kernel=snapshot_tendon_link_active,
                 dim=self.tendon_link_active.shape[0],
-                inputs=[self.tendon_link_active, self.tendon_link_active_step],
+                inputs=[self.tendon_link_active, self.tendon_link_active_step, self.model.tendon_link_flags],
                 device=self.tendon_link_active.device,
             )
 
@@ -244,6 +243,7 @@ class TendonStateMixin:
                 model.tendon_start,
                 model.tendon_link_body,
                 model.tendon_link_type,
+                model.tendon_link_flags,
                 model.tendon_link_radius,
                 model.tendon_link_orientation,
                 model.tendon_link_offset,
@@ -266,6 +266,7 @@ class TendonStateMixin:
         link_type = model.tendon_link_type.numpy()
         link_radius = model.tendon_link_radius.numpy()
         link_orientation = model.tendon_link_orientation.numpy()
+        link_flags = model.tendon_link_flags.numpy()
         link_active = self.tendon_link_active.numpy()
         link_offset = model.tendon_link_offset.numpy()
         link_axis = model.tendon_link_axis.numpy()
@@ -276,12 +277,12 @@ class TendonStateMixin:
             start = tendon_start[t]
             end = tendon_start[t + 1]
             for i in range(start + 1, end - 1):
-                if link_type[i] != int(TendonLinkType.ROLLING) or link_active[i] == int(TendonLinkState.FIXED):
+                if link_type[i] != int(TendonLinkType.ROLLING) or (link_flags[i] & int(TendonLinkFlags.DYNAMIC)) == 0:
                     continue
 
                 left_seg = seg_base + (i - start) - 1
                 right_seg = left_seg + 1
-                if link_active[i] == int(TendonLinkState.INACTIVE):
+                if not link_active[i]:
                     route_seg_mask[left_seg] = True
                     route_seg_mask[right_seg] = True
 
@@ -356,6 +357,7 @@ class TendonStateMixin:
                 model.tendon_start,
                 model.tendon_link_body,
                 model.tendon_link_type,
+                model.tendon_link_flags,
                 model.tendon_link_radius,
                 model.tendon_link_orientation,
                 model.tendon_link_mu,
@@ -423,7 +425,7 @@ class TendonStateMixin:
                     cable_len += rest_np[seg_base + s]
             for i in range(start + 1, end - 1):
                 if link_type_np[i] == int(TendonLinkType.ROLLING):
-                    if link_active_np[i] == int(TendonLinkState.INACTIVE):
+                    if not link_active_np[i]:
                         continue
                     body_idx = link_body_np[i]
                     q = body_q_np[body_idx]
