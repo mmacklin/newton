@@ -60,6 +60,11 @@ MAX_VZ = 0.08  # tool vertical speed clamp [m/s] (the sheet mesh is an open
 # surface with no thickness; this keeps force-press transients from
 # tunneling the pad through it in a single frame)
 
+LENS_RES = 96  # displacement-lens grid resolution
+LENS_SIZE = 0.06  # displacement-lens patch size [m]
+LENS_EXAGGERATION = 500.0  # default lens height exaggeration
+LENS_LIFT = 5.0e-4  # lens offset along the surface normal to avoid z-fighting [m]
+
 RASTER_MARGIN = 0.015  # keep the pad center this far from the sheet edge [m]
 RASTER_STRIPES = 12  # number of raster stripes
 K_WEAR = 3.5e-3  # wear rate coefficient [m removed per m slid] (on the curved
@@ -352,8 +357,11 @@ def drive_tool_kernel(
     omega = wp.spatial_bottom(body_qd[tool_body])
 
     # clamp vertical speed so press transients cannot tunnel through the
-    # (zero-thickness) sheet mesh within a single collision frame
-    v = wp.vec3(v[0], v[1], wp.clamp(v[2], -max_vz, max_vz))
+    # (zero-thickness) sheet mesh in a single collision frame. The clamp is
+    # asymmetric: XPBD's positional projection re-emits penetration as upward
+    # velocity, and an uncapped rebound sustains mm-scale porpoising that
+    # buries the um-scale asperity response.
+    v = wp.vec3(v[0], v[1], wp.clamp(v[2], -max_vz, 0.25 * max_vz))
 
     # attitude steering toward the surface-aligned target orientation:
     # rotating the pad +z axis onto the panel normal is a rotation about x
@@ -370,13 +378,14 @@ def drive_tool_kernel(
 
     body_qd[tool_body] = wp.spatial_vector(v, omega)
 
-    # press along the local surface normal of the curved panel
+    # press along the local surface normal of the curved panel; strong
+    # vertical damping removes residual bounce energy
     n = panel_normal(tgt[1], radius)
     f = (
         wp.vec3(
             kp * (tgt[0] - p[0]) - kd * v[0],
             kp * (tgt[1] - p[1]) - kd * v[1],
-            0.0,
+            -60.0 * v[2],
         )
         - n * ctrl[CTRL_PRESS]
     )
@@ -408,6 +417,47 @@ def update_surface_points_kernel(
 
 
 @wp.kernel
+def update_lens_kernel(
+    heightfield: wp.array2d[wp.float32],
+    body_q: wp.array[wp.transform],
+    tool_body: wp.int32,
+    X_ws: wp.transform,
+    sheet_size: float,
+    radius: float,
+    z_offset: float,
+    res: wp.int32,
+    lens_size: float,
+    exaggeration: float,
+    lift: float,
+    inv_h_scale: float,
+    points: wp.array[wp.vec3],
+    uvs_out: wp.array[wp.vec2],
+):
+    """Displacement lens: a patch following the pad that renders the displaced
+    collision surface base(x, y) + n * h(uv) with adjustable exaggeration.
+    Vertex UVs index a 1D colormap strip by normalized height."""
+    i, j = wp.tid()  # i -> y, j -> x
+
+    p_tool = wp.transform_point(wp.transform_inverse(X_ws), wp.transform_get_translation(body_q[tool_body]))
+    half = 0.5 * lens_size
+    # bias the window ahead of the raster (+y) so it spans both the freshly
+    # sanded trail under the pad and the approaching unsanded asperities
+    cx = wp.clamp(p_tool[0], -0.5 * sheet_size + half, 0.5 * sheet_size - half)
+    cy = wp.clamp(p_tool[1] + 0.3 * lens_size, -0.5 * sheet_size + half, 0.5 * sheet_size - half)
+
+    x = cx + lens_size * (wp.float32(j) / wp.float32(res - 1) - 0.5)
+    y = cy + lens_size * (wp.float32(i) / wp.float32(res - 1) - 0.5)
+    h = sample_height_bilinear(heightfield, x / sheet_size + 0.5, y / sheet_size + 0.5)
+
+    base = wp.vec3(x, y, panel_height(y, radius, z_offset))
+    n = panel_normal(y, radius)
+    points[i * res + j] = wp.transform_point(X_ws, base + n * (h * exaggeration + lift))
+    # colormap strip lookup by normalized height (inset to avoid edge bleed)
+    u_tex = wp.clamp(h * inv_h_scale, 0.0, 1.0) * 0.99 + 0.005
+    uvs_out[i * res + j] = wp.vec2(u_tex, 0.5)
+
+
+@wp.kernel
 def heightfield_to_image_kernel(
     heightfield: wp.array2d[wp.float32],
     inv_scale: float,
@@ -424,7 +474,11 @@ def measure_kernel(
     tool_body: wp.int32,
     X_ws: wp.transform,
     sheet_size: float,
-    stats: wp.array[wp.float32],  # [sum, sum_sq, max, h_under_tool]
+    radius: float,
+    z_offset: float,
+    pad_half: float,
+    pad_half_z: float,
+    stats: wp.array[wp.float32],  # [sum, sum_sq, max, h_under_tool, sum_abs_dev, ride_height]
 ):
     i, j = wp.tid()
     h = heightfield[i, j]
@@ -432,18 +486,35 @@ def measure_kernel(
     wp.atomic_add(stats, 1, h * h)
     wp.atomic_max(stats, 2, h)
     if i == 0 and j == 0:
-        p_tool = wp.transform_get_translation(body_q[tool_body])
-        p_local = wp.transform_point(wp.transform_inverse(X_ws), p_tool)
+        X_tool = body_q[tool_body]
+        X_sw = wp.transform_inverse(X_ws)
+        p_local = wp.transform_point(X_sw, wp.transform_get_translation(X_tool))
         u = p_local[0] / sheet_size + 0.5
         v = p_local[1] / sheet_size + 0.5
         stats[3] = sample_height_bilinear(heightfield, u, v)
+        # pad ride height: minimum normal clearance of the pad's bottom face
+        # above the undisplaced base surface, sampled over the footprint.
+        # This is the height of the asperity currently carrying the pad
+        # (center-point clearance would instead measure friction-induced
+        # tilt, which rises mm-scale via the 15 mm lever arm).
+        ride = 1.0e6
+        for a in range(7):
+            for b in range(7):
+                px = (wp.float32(a) / 3.0 - 1.0) * pad_half
+                py = (wp.float32(b) / 3.0 - 1.0) * pad_half
+                p_pad = wp.transform_point(X_tool, wp.vec3(px, py, -pad_half_z))
+                p_s = wp.transform_point(X_sw, p_pad)
+                base = wp.vec3(p_s[0], p_s[1], panel_height(p_s[1], radius, z_offset))
+                n = panel_normal(p_s[1], radius)
+                ride = wp.min(ride, wp.dot(n, p_s - base))
+        stats[5] = ride
 
 
 @wp.kernel
 def measure_deviation_kernel(
     heightfield: wp.array2d[wp.float32],
     mean: float,
-    stats: wp.array[wp.float32],  # [.., .., .., .., sum_abs_dev]
+    stats: wp.array[wp.float32],  # [.., .., .., .., sum_abs_dev, ..]
 ):
     """Second measurement pass: Ra needs the mean line from the first pass."""
     i, j = wp.tid()
@@ -625,7 +696,7 @@ class Example:
         self.raster_duration = RASTER_STRIPES * stripe_len / speed
 
         self.time_wp = wp.zeros(1, dtype=wp.float32)
-        self.stats_wp = wp.zeros(5, dtype=wp.float32)
+        self.stats_wp = wp.zeros(6, dtype=wp.float32)
         self.wear_stamp_radius = int(2.0 * WEAR_SIGMA_UV * (HF_RES - 1))
 
         # GUI-tunable controls, read live by kernels inside the captured graph
@@ -646,6 +717,7 @@ class Example:
             "rms": [],
             "max": [],
             "h_tool": [],
+            "ride": [],
             "removed_volume": [],
             "tool_x": [],
             "tool_y": [],
@@ -667,9 +739,36 @@ class Example:
         ).astype(np.int32)
         self.viz_indices = wp.array(viz_idx.flatten(), dtype=wp.int32)
 
+        # displacement lens: patch following the pad, showing the displaced
+        # collision surface (base + n * h) with adjustable exaggeration
+        self.lens_enabled = True
+        self.lens_exaggeration = LENS_EXAGGERATION
+        self.lens_points = wp.zeros(LENS_RES * LENS_RES, dtype=wp.vec3)
+        self.lens_uvs = wp.zeros(LENS_RES * LENS_RES, dtype=wp.vec2)
+        li, lj = np.meshgrid(np.arange(LENS_RES - 1), np.arange(LENS_RES - 1), indexing="ij")
+        l00 = (li * LENS_RES + lj).ravel()
+        l01 = l00 + 1
+        l10 = l00 + LENS_RES
+        l11 = l10 + 1
+        lens_idx = np.concatenate(
+            [np.stack([l00, l01, l11], axis=-1), np.stack([l00, l11, l10], axis=-1)], axis=0
+        ).astype(np.int32)
+        self.lens_indices = wp.array(lens_idx.flatten(), dtype=wp.int32)
+        # 1D colormap strip (viridis-like), indexed by normalized height via UVs
+        anchors = np.array(
+            [[68, 1, 84], [59, 82, 139], [33, 145, 140], [94, 201, 98], [253, 231, 37]], dtype=np.float32
+        )
+        t = np.linspace(0.0, 1.0, 256) * (len(anchors) - 1)
+        idx = np.minimum(t.astype(int), len(anchors) - 2)
+        frac = (t - idx)[:, None]
+        strip = anchors[idx] * (1.0 - frac) + anchors[idx + 1] * frac
+        self.lens_texture = strip.astype(np.uint8).reshape(1, 256, 3)
+
         self.viewer.set_model(self.model)
         # frame both the physical sheet and the exaggerated inspection panel
-        self.viewer.set_camera(pos=wp.vec3(0.0, -0.42, 0.3), pitch=-28.0, yaw=90.0)
+        # scene sits left of viewport center so the docked image window
+        # (which auto-centers) does not occlude the pad's raster path
+        self.viewer.set_camera(pos=wp.vec3(0.14, -0.42, 0.3), pitch=-28.0, yaw=90.0)
 
         self._validate_conventions()
         self.capture()
@@ -733,65 +832,69 @@ class Example:
             self.graph = None
 
     def simulate(self):
-        self.model.collide(self.state_0, self.contacts)
-
-        # --- user-side contact displacement: sample the live GPU heightfield ---
-        wp.launch(
-            displace_contacts_kernel,
-            dim=self.contacts.rigid_contact_max,
-            inputs=[
-                self.contacts.rigid_contact_count,
-                self.contacts.rigid_contact_shape0,
-                self.contacts.rigid_contact_shape1,
-                self.contacts.rigid_contact_point0,
-                self.contacts.rigid_contact_point1,
-                self.sheet_shape,
-                self.X_ws,
-                self.sheet_mesh_id,
-                self.sheet_uvs,
-                self.sheet_normals,
-                self.heightfield,
-                self.max_query_dist,
-            ],
-        )
-
-        # --- material removal under the pad (writes the heightfield in place) ---
-        wp.launch(
-            apply_wear_kernel,
-            dim=self.contacts.rigid_contact_max,
-            inputs=[
-                self.contacts.rigid_contact_count,
-                self.contacts.rigid_contact_shape0,
-                self.contacts.rigid_contact_shape1,
-                self.contacts.rigid_contact_point0,
-                self.contacts.rigid_contact_point1,
-                self.contacts.rigid_contact_normal,
-                self.contacts.rigid_contact_margin0,
-                self.contacts.rigid_contact_margin1,
-                self.state_0.body_q,
-                self.state_0.body_qd,
-                self.sheet_shape,
-                self.tool_body,
-                self.X_ws,
-                self.sheet_mesh_id,
-                self.sheet_uvs,
-                self.sheet_normals,
-                self.heightfield,
-                self.max_query_dist,
-                self.ctrl_wp,
-                WEAR_SIGMA_UV,
-                self.wear_stamp_radius,
-                WEAR_GATE,
-                self.frame_dt,
-            ],
-        )
-        wp.launch(
-            clamp_heightfield_kernel,
-            dim=(HF_RES, HF_RES),
-            inputs=[self.heightfield, self.heightfield_floor],
-        )
-
+        # Collision runs per substep: at 60 Hz frames the pad slides ~2 mm
+        # between contact updates and skips off stale contact planes on the
+        # curved panel; per-substep contacts keep it riding the um-scale
+        # displaced surface continuously.
         for _ in range(self.sim_substeps):
+            self.model.collide(self.state_0, self.contacts)
+
+            # --- user-side contact displacement: sample the live GPU heightfield ---
+            wp.launch(
+                displace_contacts_kernel,
+                dim=self.contacts.rigid_contact_max,
+                inputs=[
+                    self.contacts.rigid_contact_count,
+                    self.contacts.rigid_contact_shape0,
+                    self.contacts.rigid_contact_shape1,
+                    self.contacts.rigid_contact_point0,
+                    self.contacts.rigid_contact_point1,
+                    self.sheet_shape,
+                    self.X_ws,
+                    self.sheet_mesh_id,
+                    self.sheet_uvs,
+                    self.sheet_normals,
+                    self.heightfield,
+                    self.max_query_dist,
+                ],
+            )
+
+            # --- material removal under the pad (writes the heightfield in place) ---
+            wp.launch(
+                apply_wear_kernel,
+                dim=self.contacts.rigid_contact_max,
+                inputs=[
+                    self.contacts.rigid_contact_count,
+                    self.contacts.rigid_contact_shape0,
+                    self.contacts.rigid_contact_shape1,
+                    self.contacts.rigid_contact_point0,
+                    self.contacts.rigid_contact_point1,
+                    self.contacts.rigid_contact_normal,
+                    self.contacts.rigid_contact_margin0,
+                    self.contacts.rigid_contact_margin1,
+                    self.state_0.body_q,
+                    self.state_0.body_qd,
+                    self.sheet_shape,
+                    self.tool_body,
+                    self.X_ws,
+                    self.sheet_mesh_id,
+                    self.sheet_uvs,
+                    self.sheet_normals,
+                    self.heightfield,
+                    self.max_query_dist,
+                    self.ctrl_wp,
+                    WEAR_SIGMA_UV,
+                    self.wear_stamp_radius,
+                    WEAR_GATE,
+                    self.sim_dt,
+                ],
+            )
+            wp.launch(
+                clamp_heightfield_kernel,
+                dim=(HF_RES, HF_RES),
+                inputs=[self.heightfield, self.heightfield_floor],
+            )
+
             self.state_0.clear_forces()
             self.viewer.apply_forces(self.state_0)
             wp.launch(
@@ -837,6 +940,7 @@ class Example:
         self.viewer.log_scalar("Rq roughness [um]", h["rms"][-1] * 1.0e6)
         self.viewer.log_scalar("Max asperity [um]", h["max"][-1] * 1.0e6)
         self.viewer.log_scalar("Height under tool [um]", h["h_tool"][-1] * 1.0e6)
+        self.viewer.log_scalar("Pad ride height [um]", h["ride"][-1] * 1.0e6)
         self.viewer.log_scalar("Removed volume [mm3]", h["removed_volume"][-1] * 1.0e9)
 
     # ------------------------------------------------------------------
@@ -852,6 +956,10 @@ class Example:
                 self.tool_body,
                 self.X_ws,
                 SHEET_SIZE,
+                PANEL_RADIUS,
+                self.panel_z_offset,
+                PAD_HALF,
+                PAD_HALF_Z,
                 self.stats_wp,
             ],
         )
@@ -875,6 +983,7 @@ class Example:
         self.history["rms"].append(rms)
         self.history["max"].append(float(s[2]))
         self.history["h_tool"].append(float(s[3]))
+        self.history["ride"].append(float(s[5]))
         self.history["removed_volume"].append(removed)
         self.history["tool_x"].append(float(tool_q[0]))
         self.history["tool_y"].append(float(tool_q[1]))
@@ -910,6 +1019,46 @@ class Example:
             metallic=0.9,
             backface_culling=False,
         )
+        # displacement lens: displaced collision surface under the pad
+        if self.lens_enabled:
+            wp.launch(
+                update_lens_kernel,
+                dim=(LENS_RES, LENS_RES),
+                inputs=[
+                    self.heightfield,
+                    self.state_0.body_q,
+                    self.tool_body,
+                    self.X_ws,
+                    SHEET_SIZE,
+                    PANEL_RADIUS,
+                    self.panel_z_offset,
+                    LENS_RES,
+                    LENS_SIZE,
+                    self.lens_exaggeration,
+                    LENS_LIFT,
+                    self.hf_image_inv_scale,
+                    self.lens_points,
+                    self.lens_uvs,
+                ],
+            )
+        self.viewer.log_mesh(
+            "/displacement_lens",
+            self.lens_points,
+            self.lens_indices,
+            uvs=self.lens_uvs,
+            texture=self.lens_texture,
+            hidden=not self.lens_enabled,
+            backface_culling=False,
+            color=(1.0, 1.0, 1.0),
+            roughness=0.6,
+            metallic=0.0,
+        )
+        # the GL shader gates the albedo texture on Material.w (texture_enable),
+        # which log_mesh does not set -- enable it directly on the mesh object
+        lens_obj = getattr(self.viewer, "objects", {}).get("/displacement_lens")
+        if lens_obj is not None and hasattr(lens_obj, "material"):
+            r, m, c, _t = lens_obj.material
+            lens_obj.material = (r, m, c, 1.0)
         # live heightfield image window (GL only)
         wp.launch(
             heightfield_to_image_kernel,
@@ -971,6 +1120,9 @@ class Example:
             )
 
         _, self.viz_exaggeration = ui.slider_float("Panel exaggeration", self.viz_exaggeration, 100.0, 8000.0)
+        ui.separator()
+        _, self.lens_enabled = ui.checkbox("Displacement lens", self.lens_enabled)
+        _, self.lens_exaggeration = ui.slider_float("Lens exaggeration", self.lens_exaggeration, 1.0, 2000.0)
 
     # ------------------------------------------------------------------
     def test_final(self):
@@ -1000,6 +1152,7 @@ class Example:
             "rms_um": [round(v * um, 5) for v in self.history["rms"]],
             "max_um": [round(v * um, 5) for v in self.history["max"]],
             "h_tool_um": [round(v * um, 5) for v in self.history["h_tool"]],
+            "ride_um": [round(v * um, 5) for v in self.history["ride"]],
             "removed_mm3": [round(v * 1e9, 6) for v in self.history["removed_volume"]],
             "tool_x": [round(v, 5) for v in self.history["tool_x"]],
             "tool_y": [round(v, 5) for v in self.history["tool_y"]],
@@ -1055,13 +1208,17 @@ _REPORT_TEMPLATE = """<!DOCTYPE html>
   UV-parameterized). Newton's collision pipeline never sees the heightfield. Instead, the example
   post-processes the <code>Contacts</code> structure between collision detection and the solver step:
   </p>
-  <span class="flow">model.collide(state, contacts)
+  <span class="flow">per substep (480 Hz):
+  model.collide(state, contacts)
   &rarr; displace_contacts_kernel(contacts, heightfield)   # user code
   &rarr; apply_wear_kernel(contacts, heightfield)           # user code, writes heightfield in place
   &rarr; solver.step(state, contacts)                       # unmodified XPBD</span>
   <p>
-  All three stages are recorded into a single CUDA graph; there is no CPU synchronization anywhere in
-  the simulation loop.
+  The whole loop is recorded into a single CUDA graph; there is no CPU synchronization anywhere in the
+  simulation path. Collision runs <em>per substep</em>: at frame rate the pad slides ~2&nbsp;mm between
+  contact updates and skips off stale contact planes on the curved panel, while per-substep contacts keep
+  it riding the &micro;m-scale displaced surface continuously (measured pad ride height &asymp; footprint
+  peak asperity height, decaying as the surface is sanded).
   </p>
 
   <h2>Contact displacement kernel</h2>
@@ -1131,8 +1288,9 @@ Plotly.newPlot("rms", [
 ], { ...dark, title: "Surface roughness [\\u00b5m]", yaxis: { type: "log" }, xaxis: { title: "time [s]" } });
 
 Plotly.newPlot("htool", [
-  { x: D.t, y: D.h_tool_um, name: "h under tool", line: { color: "#ce93d8" } }
-], { ...dark, title: "Surface height under tool [\\u00b5m]", xaxis: { title: "time [s]" } });
+  { x: D.t, y: D.h_tool_um, name: "h under tool", line: { color: "#ce93d8" } },
+  { x: D.t, y: D.ride_um, name: "pad ride height", line: { color: "#80cbc4" } }
+], { ...dark, title: "Pad response: surface height vs ride height [\\u00b5m]", xaxis: { title: "time [s]" } });
 
 Plotly.newPlot("removed", [
   { x: D.t, y: D.removed_mm3, line: { color: "#e57373" } }
