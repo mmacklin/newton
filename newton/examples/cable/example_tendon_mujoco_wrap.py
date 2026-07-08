@@ -184,14 +184,18 @@ class Example:
         p0 = self._world_point_for_link(int(self.candidate_prev_links[i]), body_q)
         p1 = self._world_point_for_link(int(self.candidate_next_links[i]), body_q)
         span = p1 - p0
-        alpha = float(np.clip(np.dot(capstan - p0, span) / max(float(np.dot(span, span)), 1.0e-12), 0.0, 1.0))
+        span_length_sq = max(float(np.dot(span, span)), 1.0e-12)
+        alpha = float(np.clip(np.dot(capstan - p0, span) / span_length_sq, 0.0, 1.0))
         closest = p0 + alpha * span
         distance = float(np.linalg.norm((capstan - closest)[[0, 2]]))
-        return distance, alpha
+        span_normal = np.cross(np.array([0.0, 1.0, 0.0]), span) / math.sqrt(span_length_sq)
+        signed_distance = float(np.dot(capstan - closest, span_normal))
+        return distance, signed_distance, alpha
 
     def _candidate_should_wrap(self, i):
-        distance, alpha = self._candidate_span_projection(i)
-        return 0.0 < alpha < 1.0 and distance <= self.radius
+        _, signed_distance, alpha = self._candidate_span_projection(i)
+        orientation = float(self.capstan_specs[i]["orientation"])
+        return 0.0 < alpha < 1.0 and orientation * signed_distance <= self.radius
 
     def simulate(self):
         for substep in range(self.sim_substeps):
@@ -271,7 +275,7 @@ class Example:
             f"Expected activate/deactivate transitions for each capstan: {self._transition_counts}"
         )
         assert self._activation_mismatch_count == 0, (
-            f"Route active flags diverged from straight-span intersection test: {self._activation_mismatch_count}"
+            f"Route active flags diverged from oriented bypass test: {self._activation_mismatch_count}"
         )
         assert self._max_inactive_x_error < 2.0e-3, (
             f"Inactive cable should be the original vertical line: x_error={self._max_inactive_x_error:.6f}"

@@ -199,6 +199,7 @@ class Example:
                     "seg_right": candidate_link - tendon_id,
                     "prev_rolling": prev_rolling,
                     "next_rolling": next_rolling,
+                    "orientation": self._candidate_orientation(start_x),
                     "expected_side": -float(np.sign(start_x)),
                     "start_x": start_x,
                     "target_x": target_x,
@@ -313,14 +314,17 @@ class Example:
     def _candidate_span_projection(self, lane):
         p0, p1, candidate = self._bypass_points(lane)
         span = p1 - p0
-        alpha = float(np.clip(np.dot(candidate - p0, span) / max(float(np.dot(span, span)), 1.0e-12), 0.0, 1.0))
+        span_length_sq = max(float(np.dot(span, span)), 1.0e-12)
+        alpha = float(np.clip(np.dot(candidate - p0, span) / span_length_sq, 0.0, 1.0))
         closest = p0 + alpha * span
         distance = float(np.linalg.norm((candidate - closest)[[0, 2]]))
-        return distance, alpha
+        span_normal = np.cross(np.array([0.0, 1.0, 0.0]), span) / math.sqrt(span_length_sq)
+        signed_distance = float(np.dot(candidate - closest, span_normal))
+        return distance, signed_distance, alpha
 
     def _candidate_should_wrap(self, lane):
-        distance, alpha = self._candidate_span_projection(lane)
-        return 0.0 < alpha < 1.0 and distance <= self.radius
+        _, signed_distance, alpha = self._candidate_span_projection(lane)
+        return 0.0 < alpha < 1.0 and lane["orientation"] * signed_distance <= self.radius
 
     def simulate(self):
         for substep in range(self.sim_substeps):
@@ -369,7 +373,7 @@ class Example:
                 self._min_expected_side_clearance[i] = min(self._min_expected_side_clearance[i], *side_clearance)
             else:
                 self._saw_disabled_segment[i] = self._saw_disabled_segment[i] or seg_active[lane["seg_right"]] == 0
-                distance, _alpha = self._candidate_span_projection(lane)
+                distance, _signed_distance, _alpha = self._candidate_span_projection(lane)
                 self._max_inactive_penetration[i] = max(
                     self._max_inactive_penetration[i],
                     0.0,

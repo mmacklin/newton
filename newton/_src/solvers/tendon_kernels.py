@@ -139,7 +139,7 @@ def update_tendon_link_active(
     tendon_link_axis: wp.array[wp.vec3],
     tendon_link_active: wp.array[bool],
 ):
-    """Update optional rolling links from intersection with their bypass span."""
+    """Update dynamic rolling links from oriented distance to their bypass span."""
     tendon_id = wp.tid()
     link_start = tendon_start[tendon_id]
     link_end = tendon_start[tendon_id + 1]
@@ -227,7 +227,11 @@ def update_tendon_link_active(
         if span_length_sq > 1.0e-12:
             alpha = wp.dot(candidate_offset, span) / span_length_sq
             closest_offset = alpha * span
-            distance = wp.length(candidate_offset - closest_offset)
+            span_normal = wp.cross(normal, span) / wp.sqrt(span_length_sq)
+            # Orient the signed distance so it is positive on the inactive side.
+            distance = wp.dot(candidate_offset - closest_offset, span_normal)
+            if tendon_link_orientation[link_idx] <= 0:
+                distance = -distance
             if alpha > 0.0 and alpha < 1.0 and distance <= tendon_link_radius[link_idx]:
                 active = True
         tendon_link_active[link_idx] = active

@@ -777,6 +777,50 @@ def build_force_driven_dynamic_route(device):
     return builder.finalize(device=device), candidate, candidate_link
 
 
+def build_oriented_dynamic_route(orientation, device):
+    """Build a straight tendon with a kinematic rolling candidate."""
+    builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=0.0)
+
+    lower = builder.add_body(
+        xform=wp.transform(p=wp.vec3(0.0, 0.0, -0.5)),
+        mass=0.0,
+        is_kinematic=True,
+    )
+    upper = builder.add_body(
+        xform=wp.transform(p=wp.vec3(0.0, 0.0, 0.5)),
+        mass=0.0,
+        is_kinematic=True,
+    )
+    candidate = builder.add_body(
+        xform=wp.transform(p=wp.vec3(0.25 * orientation, 0.0, 0.0)),
+        mass=0.0,
+        is_kinematic=True,
+    )
+
+    builder.add_tendon()
+    builder.add_tendon_link(
+        body=lower,
+        link_type=int(TendonLinkType.ATTACHMENT),
+        axis=(0.0, 1.0, 0.0),
+    )
+    candidate_link = builder.add_tendon_link(
+        body=candidate,
+        link_type=int(TendonLinkType.ROLLING),
+        radius=0.1,
+        orientation=orientation,
+        dynamic=True,
+        axis=(0.0, 1.0, 0.0),
+        rest_length=-1.0,
+    )
+    builder.add_tendon_link(
+        body=upper,
+        link_type=int(TendonLinkType.ATTACHMENT),
+        axis=(0.0, 1.0, 0.0),
+        rest_length=-1.0,
+    )
+    return builder.finalize(device=device), candidate, candidate_link
+
+
 def build_loaded_dynamic_route(dynamic: bool, device):
     """Build a force-loaded route with an active roller before the optional roller."""
     builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=0.0)
@@ -1166,7 +1210,7 @@ def test_mujoco_wrap_straight_bypass_activates_and_deactivates(test, device):
         test.assertEqual(
             example._activation_mismatch_count,
             0,
-            "Dynamic wrap active flags should be exactly determined by the straight-span intersection test",
+            "Dynamic wrap active flags should be determined by the oriented bypass test",
         )
         test.assertLess(
             example._max_inactive_x_error,
@@ -1265,6 +1309,58 @@ def test_dynamic_route_initial_state_matches_geometry(test, device):
             0,
         )
         test.assertTrue(active_solver.tendon_link_active.numpy()[active_link])
+
+
+def test_dynamic_route_uses_oriented_signed_distance(test, device):
+    """A dynamic roller should remain active after crossing its bypass span."""
+    with wp.ScopedDevice(device):
+        for orientation in (-1, 1):
+            model, candidate, candidate_link = build_oriented_dynamic_route(orientation, device)
+            solver = newton.solvers.SolverXPBD(model, iterations=1)
+            body_q = model.body_q.numpy()
+
+            active_history = []
+            for x in (
+                0.25 * orientation,
+                0.05 * orientation,
+                -0.25 * orientation,
+                0.05 * orientation,
+                0.25 * orientation,
+            ):
+                body_q[candidate, :3] = (x, 0.0, 0.0)
+                model.body_q.assign(body_q)
+                solver._update_tendon_link_active(model, model.body_q)
+                active_history.append(bool(solver.tendon_link_active.numpy()[candidate_link]))
+
+            test.assertEqual(
+                active_history,
+                [
+                    False,
+                    True,
+                    True,
+                    True,
+                    False,
+                ],
+                f"orientation={orientation}",
+            )
+
+
+def test_dynamic_route_requires_projection_on_bypass_span(test, device):
+    """A roller beyond either neighboring site should remain inactive."""
+    with wp.ScopedDevice(device):
+        for orientation in (-1, 1):
+            model, candidate, candidate_link = build_oriented_dynamic_route(orientation, device)
+            solver = newton.solvers.SolverXPBD(model, iterations=1)
+            body_q = model.body_q.numpy()
+            for z in (-0.75, 0.75):
+                body_q[candidate, :3] = (-0.25 * orientation, 0.0, z)
+                model.body_q.assign(body_q)
+                solver._update_tendon_link_active(model, model.body_q)
+
+                test.assertFalse(
+                    solver.tendon_link_active.numpy()[candidate_link],
+                    f"orientation={orientation}, z={z}",
+                )
 
 
 def test_fixed_route_state_is_preserved(test, device):
@@ -2463,6 +2559,18 @@ add_test(
     "dynamic_route_initial_state_matches_geometry",
     devices,
     test_dynamic_route_initial_state_matches_geometry,
+)
+add_test(
+    TestTendonCapstan,
+    "dynamic_route_uses_oriented_signed_distance",
+    devices,
+    test_dynamic_route_uses_oriented_signed_distance,
+)
+add_test(
+    TestTendonCapstan,
+    "dynamic_route_requires_projection_on_bypass_span",
+    devices,
+    test_dynamic_route_requires_projection_on_bypass_span,
 )
 add_test(TestTendonCapstan, "fixed_route_state_is_preserved", devices, test_fixed_route_state_is_preserved)
 add_test(TestTendonCapstan, "dynamic_route_cuda_graph_capture", cuda_devices, test_dynamic_route_cuda_graph_capture)
