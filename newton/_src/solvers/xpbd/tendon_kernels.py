@@ -167,7 +167,7 @@ def solve_tendon_slip(
     tendon_link_type: wp.array[int],
     tendon_link_radius: wp.array[float],
     tendon_link_mu: wp.array[float],
-    tendon_link_active: wp.array[int],
+    tendon_link_active: wp.array[bool],
     tendon_link_offset: wp.array[wp.vec3],
     tendon_link_axis: wp.array[wp.vec3],
     seg_rest_length: wp.array[float],
@@ -201,7 +201,7 @@ def solve_tendon_slip(
         link_idx = link_start + i
         if tendon_link_type[link_idx] != int(TendonLinkType.ROLLING):
             continue
-        if tendon_link_active[link_idx] == 0:
+        if not tendon_link_active[link_idx]:
             continue
 
         radius = tendon_link_radius[link_idx]

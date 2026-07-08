@@ -145,7 +145,7 @@ class Example:
                 radius=self.radius,
                 orientation=self._candidate_orientation(start_x),
                 mu=0.0,
-                active=False,
+                dynamic=True,
                 offset=(0.0, 0.0, 0.0),
                 axis=(0.0, 1.0, 0.0),
                 compliance=1.0e-5,
@@ -384,12 +384,10 @@ class Example:
         body_q = self.state_0.body_q.numpy()
         assert np.isfinite(body_q).all(), "Non-finite values in switch-matrix body state"
         link_type = self.model.tendon_link_type.numpy()
-        initial_active = self.model.tendon_link_active.numpy()
 
         for i, lane in enumerate(self.lanes):
             history = np.array(self._active_history[i], dtype=np.int32)
             assert link_type[lane["candidate_link"]] == int(newton.TendonLinkType.ROLLING)
-            assert initial_active[lane["candidate_link"]] == 0
             assert history[0] == 0 and history[-1] == 0, f"{lane['name']} should start/end inactive: {history}"
             assert np.max(history) == 1, f"{lane['name']} should activate: {history}"
             active_frames = np.flatnonzero(history)

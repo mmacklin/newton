@@ -38,3 +38,10 @@ class TendonLinkType(IntEnum):
     Attachment follows the body point, while rest length transfers between
     adjacent segments subject to ``mu`` and the local bend angle.
     """
+
+
+class TendonLinkFlags(IntEnum):
+    """Flags controlling tendon link routing."""
+
+    DYNAMIC = 1 << 0
+    """Link activity is updated from the current route geometry."""

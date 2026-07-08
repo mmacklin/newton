@@ -58,6 +58,7 @@ newton
    SDF
    ShapeFlags
    State
+   TendonLinkFlags
    TendonLinkType
    TetMesh
 

@@ -78,7 +78,7 @@ class Example:
                 radius=self.radius,
                 orientation=int(self.capstan_specs[i]["orientation"]),
                 mu=0.0,
-                active=False,
+                dynamic=True,
                 offset=(0.0, 0.0, 0.0),
                 axis=(0.0, 1.0, 0.0),
                 compliance=1.0e-5,
@@ -255,12 +255,8 @@ class Example:
         body_q = self.state_0.body_q.numpy()
         assert np.isfinite(body_q).all(), "Non-finite values in dynamic-wrap body state"
         link_type = self.model.tendon_link_type.numpy()[self.candidate_link_indices]
-        initial_active = self.model.tendon_link_active.numpy()[self.candidate_link_indices]
         assert np.all(link_type == int(newton.TendonLinkType.ROLLING)), (
             f"Active-set candidates should remain authored as rolling links: {link_type}"
-        )
-        assert np.all(initial_active == 0), (
-            f"Dynamic wrap candidates should be authored as initially inactive active-set links: {initial_active}"
         )
         active_history = np.array(self._active_history, dtype=np.int32)
         assert len(active_history) > 0, "No route-state samples were recorded"

@@ -81,7 +81,7 @@ class Example:
             radius=self.middle_radius,
             orientation=self.middle_orientation,
             mu=0.0,
-            active=False,
+            dynamic=True,
             offset=(0.0, 0.0, self.middle_z),
             axis=(0.0, 1.0, 0.0),
             compliance=1.0e-5,
@@ -300,12 +300,9 @@ class Example:
         active_history = np.array(self._active_history, dtype=np.int32)
         top_x_history = np.array(self._top_x_history)
         link_type = self.model.tendon_link_type.numpy()
-        initial_active = self.model.tendon_link_active.numpy()
 
         assert link_type[self.lower_link] == int(newton.TendonLinkType.ROLLING)
         assert link_type[self.middle_link] == int(newton.TendonLinkType.ROLLING)
-        assert initial_active[self.lower_link] == 1
-        assert initial_active[self.middle_link] == 0
         assert len(active_history) > 0, "No switch-wrap active-set samples were recorded"
         assert active_history[0] == 0 and active_history[-1] == 0, (
             f"Middle candidate should start/end inactive: {active_history}"

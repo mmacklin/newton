@@ -14,7 +14,7 @@ from .enums import (
 )
 from .model import Model
 from .state import State
-from .tendon import TendonLinkType
+from .tendon import TendonLinkFlags, TendonLinkType
 
 __all__ = [
     "BodyFlags",
@@ -27,6 +27,7 @@ __all__ = [
     "Model",
     "ModelBuilder",
     "State",
+    "TendonLinkFlags",
     "TendonLinkType",
     "eval_fk",
     "eval_ik",

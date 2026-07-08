@@ -67,7 +67,7 @@ from .graph_coloring import (
     construct_particle_graph,
 )
 from .model import Model
-from .tendon import TendonLinkType
+from .tendon import TendonLinkFlags, TendonLinkType
 
 try:
     from newton_actuators import Actuator as _LegacyActuator
@@ -997,8 +997,8 @@ class ModelBuilder:
         """Winding direction (+1/-1) for each tendon link."""
         self.tendon_link_mu: list[float] = []
         """Friction coefficient at each tendon link."""
-        self.tendon_link_active: list[int] = []
-        """Initial active-route flag for each tendon link."""
+        self.tendon_link_flags: list[int] = []
+        """Routing flags for each tendon link."""
         self.tendon_link_offset: list[tuple[float, float, float]] = []
         """Local-frame offset of the cable plane center on each body [m]."""
         self.tendon_link_axis: list[tuple[float, float, float]] = []
@@ -4493,7 +4493,7 @@ class ModelBuilder:
         radius: float = 0.0,
         orientation: int = 1,
         mu: float = 0.0,
-        active: bool = True,
+        dynamic: bool = False,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         axis: tuple[float, float, float] = (0.0, 0.0, 1.0),
         compliance: float = 0.0,
@@ -4513,11 +4513,9 @@ class ModelBuilder:
             radius: Contact radius [m] for ROLLING links (pulley radius).
             orientation: Winding direction, +1 or -1.
             mu: Coulomb friction coefficient at this contact.
-            active: Initial active-set flag for this route link. Inactive
-                interior links are skipped by the solver active route, which
-                connects the nearest active route sites on either side.
-                :class:`~newton.solvers.SolverXPBD` updates initially inactive
-                ROLLING links once per time step from the current route geometry.
+            dynamic: Whether :class:`~newton.solvers.SolverXPBD` should update
+                this ROLLING link from the current route geometry. The initial
+                state is resolved before tendon rest lengths are measured.
             offset: Local-frame position of the cable plane center on the body [m].
             axis: Local-frame normal of the cable plane on the body.
             compliance: Compliance [m/N] for the segment ending at this link
@@ -4532,21 +4530,24 @@ class ModelBuilder:
         """
         link_idx = len(self.tendon_link_body)
         tendon_link_start = self.tendon_start[-1]
+        if dynamic and link_type != int(TendonLinkType.ROLLING):
+            raise ValueError("dynamic routing is only supported for ROLLING tendon links")
         if (
             link_idx > tendon_link_start
             and link_type == int(TendonLinkType.ROLLING)
-            and not active
+            and dynamic
             and self.tendon_link_type[-1] == int(TendonLinkType.ROLLING)
-            and self.tendon_link_active[-1] == 0
+            and (self.tendon_link_flags[-1] & int(TendonLinkFlags.DYNAMIC)) != 0
         ):
-            raise ValueError("Consecutive inactive ROLLING tendon links are not supported")
+            raise ValueError("Consecutive dynamic ROLLING tendon links are not supported")
 
         self.tendon_link_body.append(body)
         self.tendon_link_type.append(link_type)
         self.tendon_link_radius.append(radius)
         self.tendon_link_orientation.append(orientation)
         self.tendon_link_mu.append(mu)
-        self.tendon_link_active.append(1 if active else 0)
+        flags = TendonLinkFlags.DYNAMIC if dynamic else 0
+        self.tendon_link_flags.append(int(flags))
         self.tendon_link_offset.append(offset)
         self.tendon_link_axis.append(axis)
 
@@ -10534,7 +10535,7 @@ class ModelBuilder:
                 m.tendon_link_radius = wp.array(self.tendon_link_radius, dtype=wp.float32, requires_grad=requires_grad)
                 m.tendon_link_orientation = wp.array(self.tendon_link_orientation, dtype=wp.int32)
                 m.tendon_link_mu = wp.array(self.tendon_link_mu, dtype=wp.float32, requires_grad=requires_grad)
-                m.tendon_link_active = wp.array(self.tendon_link_active, dtype=wp.int32)
+                m.tendon_link_flags = wp.array(self.tendon_link_flags, dtype=wp.int32)
                 m.tendon_link_offset = wp.array(self.tendon_link_offset, dtype=wp.vec3)
                 m.tendon_link_axis = wp.array(self.tendon_link_axis, dtype=wp.vec3)
                 m.tendon_seg_compliance = wp.array(

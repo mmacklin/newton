@@ -17,7 +17,7 @@ import warp as wp
 
 import newton
 from newton._src.sim.builder import Axis
-from newton._src.sim.tendon import TendonLinkType
+from newton._src.sim.tendon import TendonLinkFlags, TendonLinkType
 from newton.examples.cable.cable import get_tendon_cable_lines
 from newton.examples.cable.example_tendon_capstan_friction import Example as DynamicCapstanExample
 from newton.examples.cable.example_tendon_mujoco_switch import Example as MujocoSwitchExample
@@ -762,7 +762,7 @@ def build_force_driven_dynamic_route(device):
         link_type=int(TendonLinkType.ROLLING),
         radius=0.1,
         orientation=1,
-        active=False,
+        dynamic=True,
         axis=(0.0, 1.0, 0.0),
         compliance=1.0e-2,
         rest_length=-1.0,
@@ -775,6 +775,82 @@ def build_force_driven_dynamic_route(device):
         rest_length=-1.0,
     )
     return builder.finalize(device=device), candidate, candidate_link
+
+
+def build_loaded_dynamic_route(dynamic: bool, device):
+    """Build a force-loaded route with an active roller before the optional roller."""
+    builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=0.0)
+    anchor_position = wp.vec3(-0.72, 0.0, 0.015)
+    anchor = builder.add_link(
+        xform=wp.transform(p=anchor_position),
+        mass=0.08,
+        inertia=wp.mat33(1.0e-4, 0.0, 0.0, 0.0, 1.0e-4, 0.0, 0.0, 0.0, 1.0e-4),
+    )
+    anchor_joint = builder.add_joint_prismatic(
+        parent=-1,
+        child=anchor,
+        parent_xform=wp.transform(p=anchor_position),
+        child_xform=wp.transform(),
+        axis=Axis.X,
+        target_ke=0.0,
+        target_kd=4.0,
+        limit_lower=-0.45,
+        limit_upper=0.15,
+        limit_ke=8000.0,
+        limit_kd=80.0,
+        actuator_mode=newton.JointTargetMode.EFFORT,
+    )
+    builder.add_articulation([anchor_joint])
+
+    guide = builder.add_body(xform=wp.transform(), mass=0.0, is_kinematic=True)
+    endpoint = builder.add_body(
+        xform=wp.transform(
+            p=wp.vec3(0.6 * math.sin(-0.27), 0.0, 0.62 + 0.6 * math.cos(-0.27)),
+        ),
+        mass=0.0,
+        is_kinematic=True,
+    )
+
+    builder.add_tendon()
+    builder.add_tendon_link(
+        body=anchor,
+        link_type=int(TendonLinkType.ATTACHMENT),
+        axis=(0.0, 1.0, 0.0),
+    )
+    builder.add_tendon_link(
+        body=guide,
+        link_type=int(TendonLinkType.ROLLING),
+        radius=0.09,
+        orientation=-1,
+        mu=0.2,
+        offset=(0.0, 0.0, 0.05),
+        axis=(0.0, 1.0, 0.0),
+        compliance=1.0e-4,
+        damping=0.2,
+        rest_length=-1.0,
+    )
+    candidate = builder.add_tendon_link(
+        body=guide,
+        link_type=int(TendonLinkType.ROLLING),
+        radius=0.085,
+        orientation=-1,
+        mu=0.2,
+        dynamic=dynamic,
+        offset=(0.0, 0.0, 0.62),
+        axis=(0.0, 1.0, 0.0),
+        compliance=1.0e-4,
+        damping=0.2,
+        rest_length=-1.0,
+    )
+    builder.add_tendon_link(
+        body=endpoint,
+        link_type=int(TendonLinkType.ATTACHMENT),
+        axis=(0.0, 1.0, 0.0),
+        compliance=1.0e-4,
+        damping=0.2,
+        rest_length=-1.0,
+    )
+    return builder.finalize(device=device), anchor, anchor_joint, candidate
 
 
 def run_motorized_model(model, drive_joint, target=2.0, num_frames=70, substeps=10, fps=60):
@@ -799,7 +875,16 @@ def run_motorized_model(model, drive_joint, target=2.0, num_frames=70, substeps=
 
 
 class TestTendonCapstan(unittest.TestCase):
-    def test_rejects_consecutive_inactive_rolling_links(self):
+    def test_rejects_dynamic_routing_on_non_rolling_link(self):
+        for link_type in (TendonLinkType.ATTACHMENT, TendonLinkType.PINHOLE):
+            with self.subTest(link_type=link_type):
+                builder = newton.ModelBuilder()
+                body = builder.add_body(mass=0.0)
+                builder.add_tendon()
+                with self.assertRaisesRegex(ValueError, "dynamic routing is only supported for ROLLING tendon links"):
+                    builder.add_tendon_link(body=body, link_type=int(link_type), dynamic=True)
+
+    def test_rejects_consecutive_dynamic_rolling_links(self):
         builder = newton.ModelBuilder()
         bodies = [builder.add_body(mass=0.0) for _ in range(3)]
         builder.add_tendon()
@@ -811,15 +896,15 @@ class TestTendonCapstan(unittest.TestCase):
             body=bodies[1],
             link_type=int(TendonLinkType.ROLLING),
             radius=0.1,
-            active=False,
+            dynamic=True,
         )
 
-        with self.assertRaisesRegex(ValueError, "Consecutive inactive ROLLING tendon links"):
+        with self.assertRaisesRegex(ValueError, "Consecutive dynamic ROLLING tendon links"):
             builder.add_tendon_link(
                 body=bodies[2],
                 link_type=int(TendonLinkType.ROLLING),
                 radius=0.1,
-                active=False,
+                dynamic=True,
             )
 
 
@@ -914,6 +999,89 @@ def _capstan_wrap_angle(att_l, att_r):
     return float(abs(np.atan2(np.dot(np.cross(left_radius, right_radius), normal), np.dot(left_radius, right_radius))))
 
 
+def _loaded_route_arc_length(solver, model, link_idx):
+    center = model.tendon_link_offset.numpy()[link_idx]
+    normal = model.tendon_link_axis.numpy()[link_idx]
+    radius_l = solver.tendon_seg_attachment_r.numpy()[link_idx - 1] - center
+    radius_r = solver.tendon_seg_attachment_l.numpy()[link_idx] - center
+    radius_l -= np.dot(radius_l, normal) * normal
+    radius_r -= np.dot(radius_r, normal) * normal
+    theta = abs(np.atan2(np.dot(np.cross(radius_l, radius_r), normal), np.dot(radius_l, radius_r)))
+    return float(theta * model.tendon_link_radius.numpy()[link_idx])
+
+
+def _loaded_route_material_length(solver, model):
+    active_segments = solver.tendon_seg_active.numpy().astype(bool)
+    material_length = float(np.sum(solver.tendon_seg_rest_length.numpy()[active_segments]))
+    link_active = solver.tendon_link_active.numpy()
+    for link_idx in (1, 2):
+        if link_active[link_idx]:
+            material_length += _loaded_route_arc_length(solver, model, link_idx)
+    return material_length
+
+
+def _run_loaded_dynamic_route(dynamic, device):
+    model, _, anchor_joint, candidate = build_loaded_dynamic_route(dynamic, device)
+    solver = newton.solvers.SolverXPBD(model, iterations=12, joint_linear_relaxation=0.9)
+
+    state_0, state_1 = model.state(), model.state()
+    control = model.control()
+    newton.eval_fk(model, model.joint_q, model.joint_qd, state_0)
+
+    # Advance both routes once before measuring material transport under load.
+    state_0.clear_forces()
+    solver.step(state_0, state_1, control, None, 1.0 / 120.0)
+    state_0, state_1 = state_1, state_0
+    material_before_load = _loaded_route_material_length(solver, model)
+
+    anchor_dof = int(model.joint_qd_start.numpy()[anchor_joint])
+    joint_f = control.joint_f.numpy()
+    joint_f[anchor_dof] = -25.0
+    control.joint_f.assign(joint_f)
+
+    for _ in range(60):
+        state_0.clear_forces()
+        solver.step(state_0, state_1, control, None, 1.0 / 120.0)
+        state_0, state_1 = state_1, state_0
+
+    rest_length = solver.tendon_seg_rest_length.numpy()
+    span_length = np.linalg.norm(
+        solver.tendon_seg_attachment_r.numpy() - solver.tendon_seg_attachment_l.numpy(), axis=1
+    )
+    tension = np.maximum(span_length - rest_length, 0.0) / model.tendon_seg_compliance.numpy()
+    peak_tension = float(np.max(np.where(solver.tendon_seg_active.numpy(), tension, 0.0)))
+    material_after_load = _loaded_route_material_length(solver, model)
+    return model, solver, candidate, material_before_load, material_after_load, peak_tension
+
+
+def test_loaded_dynamic_route_matches_fixed_route(test, device):
+    """An initially active dynamic roller should match a fixed roller under load."""
+    fixed_model, _, _, fixed_material_before, fixed_material_after, fixed_tension = _run_loaded_dynamic_route(
+        False, device
+    )
+    dynamic_model, dynamic_solver, candidate, dynamic_material_before, dynamic_material_after, dynamic_tension = (
+        _run_loaded_dynamic_route(True, device)
+    )
+    test.assertEqual(int(fixed_model.tendon_link_flags.numpy()[candidate]) & int(TendonLinkFlags.DYNAMIC), 0)
+    test.assertNotEqual(
+        int(dynamic_model.tendon_link_flags.numpy()[candidate]) & int(TendonLinkFlags.DYNAMIC),
+        0,
+    )
+    test.assertTrue(dynamic_solver.tendon_link_active.numpy()[candidate])
+    test.assertAlmostEqual(dynamic_material_before, fixed_material_before, delta=5.0e-5)
+    test.assertAlmostEqual(
+        dynamic_material_after - dynamic_material_before,
+        fixed_material_after - fixed_material_before,
+        delta=5.0e-5,
+    )
+    test.assertGreater(fixed_tension, 0.0)
+    test.assertLess(
+        abs(dynamic_tension - fixed_tension) / fixed_tension,
+        1.0e-3,
+        f"Dynamic route tension {dynamic_tension} should match fixed route tension {fixed_tension}",
+    )
+
+
 def _capstan_hysteresis_history(mu=0.2):
     model, _left_idx, _pulley_idx, right_idx = build_kinematic_capstan_hysteresis(mu=mu)
     solver = newton.solvers.SolverXPBD(model, iterations=16, joint_linear_relaxation=1.0)
@@ -974,15 +1142,15 @@ def test_mujoco_wrap_straight_bypass_activates_and_deactivates(test, device):
 
         active_history = np.array(example._active_history, dtype=np.int32)
         link_type = example.model.tendon_link_type.numpy()[example.candidate_link_indices]
-        initial_active = example.model.tendon_link_active.numpy()[example.candidate_link_indices]
+        authored_flags = example.model.tendon_link_flags.numpy()[example.candidate_link_indices]
         test.assertEqual(example.candidate_count, 3, "MuJoCo-style wrap example should use three candidates")
         test.assertTrue(
             np.all(link_type == int(newton.TendonLinkType.ROLLING)),
             f"Dynamic wrap candidates should remain authored as rolling links: {link_type}",
         )
         test.assertTrue(
-            np.all(initial_active == 0),
-            f"Dynamic wrap candidates should be initially inactive active-set links: {initial_active}",
+            np.all((authored_flags & int(TendonLinkFlags.DYNAMIC)) != 0),
+            f"Dynamic wrap candidates should be marked for automatic routing: {authored_flags}",
         )
         test.assertTrue(np.all(active_history[0] == 0), f"Route should start inactive: {active_history[:8]}")
         test.assertTrue(np.all(active_history[-1] == 0), f"Route should end inactive: {active_history[-8:]}")
@@ -1023,10 +1191,13 @@ def test_force_driven_dynamic_route_updates_inside_solver(test, device):
         expected_material_length = float(solver.tendon_total_cable.numpy()[0])
         body_f = np.zeros((model.body_count, 6), dtype=np.float32)
         active_history = []
-        material_length_errors = []
+        transition_material_errors = []
+        previous_active = 0
+        previous_material_length = expected_material_length
         dt = 1.0 / 120.0
 
         def step(force_x):
+            nonlocal previous_active, previous_material_length
             state_0.clear_forces()
             body_f[candidate] = (force_x, 0.0, 0.0, 0.0, 0.0, 0.0)
             state_0.body_f.assign(body_f)
@@ -1037,25 +1208,29 @@ def test_force_driven_dynamic_route_updates_inside_solver(test, device):
             seg_active = solver.tendon_seg_active.numpy().astype(bool)
             material_length = float(np.sum(solver.tendon_seg_rest_length.numpy()[seg_active]))
             if candidate_active:
-                candidate_center = state_1.body_q.numpy()[candidate, :3]
-                att_l = solver.tendon_seg_attachment_l.numpy()
-                att_r = solver.tendon_seg_attachment_r.numpy()
-                radius_l = att_r[0] - candidate_center
-                radius_r = att_l[1] - candidate_center
+                candidate_center = model.tendon_link_offset.numpy()[candidate_link]
+                candidate_axis = model.tendon_link_axis.numpy()[candidate_link]
+                att_l_local = solver.tendon_seg_attachment_l_local.numpy()
+                att_r_local = solver.tendon_seg_attachment_r_local.numpy()
+                radius_l = att_r_local[0] - candidate_center
+                radius_r = att_l_local[1] - candidate_center
                 theta = abs(
                     np.atan2(
-                        np.dot(np.cross(radius_l, radius_r), np.array([0.0, 1.0, 0.0])),
+                        np.dot(np.cross(radius_l, radius_r), candidate_axis),
                         np.dot(radius_l, radius_r),
                     )
                 )
                 material_length += theta * float(model.tendon_link_radius.numpy()[candidate_link])
-            material_length_errors.append(abs(material_length - expected_material_length))
+            if candidate_active != previous_active:
+                transition_material_errors.append(abs(material_length - previous_material_length))
+            previous_active = candidate_active
+            previous_material_length = material_length
             return state_1, state_0
 
         for _ in range(60):
             state_0, state_1 = step(-2.0)
 
-        test.assertEqual(active_history[-1], 1, "Solver should activate a candidate moved into the span")
+        test.assertNotEqual(active_history[-1], 0, "Solver should activate a candidate moved into the span")
 
         body_qd = state_0.body_qd.numpy()
         body_qd[candidate] = 0.0
@@ -1064,11 +1239,51 @@ def test_force_driven_dynamic_route_updates_inside_solver(test, device):
             state_0, state_1 = step(4.0)
 
         test.assertEqual(active_history[-1], 0, "Solver should deactivate a candidate moved clear of the span")
+        test.assertEqual(len(transition_material_errors), 2, "Expected one activation and one deactivation")
         test.assertLess(
-            max(material_length_errors),
+            max(transition_material_errors),
             1.0e-5,
-            "Active-set transitions should conserve free-span rest length plus wrapped material",
+            "Changing route representation should conserve free-span rest length plus wrapped material",
         )
+
+
+def test_dynamic_route_initial_state_matches_geometry(test, device):
+    """Dynamic links should resolve their initial state before measuring rest lengths."""
+    with wp.ScopedDevice(device):
+        inactive_model, _, inactive_link = build_force_driven_dynamic_route(device)
+        inactive_solver = newton.solvers.SolverXPBD(inactive_model, iterations=8, joint_linear_relaxation=1.0)
+        active_model, _, _, active_link = build_loaded_dynamic_route(True, device)
+        active_solver = newton.solvers.SolverXPBD(active_model, iterations=8, joint_linear_relaxation=1.0)
+
+        test.assertNotEqual(
+            int(inactive_model.tendon_link_flags.numpy()[inactive_link]) & int(TendonLinkFlags.DYNAMIC),
+            0,
+        )
+        test.assertFalse(inactive_solver.tendon_link_active.numpy()[inactive_link])
+        test.assertNotEqual(
+            int(active_model.tendon_link_flags.numpy()[active_link]) & int(TendonLinkFlags.DYNAMIC),
+            0,
+        )
+        test.assertTrue(active_solver.tendon_link_active.numpy()[active_link])
+
+
+def test_fixed_route_state_is_preserved(test, device):
+    """A fixed link should ignore runtime writes to the solver-owned route state."""
+    with wp.ScopedDevice(device):
+        model, _, _, candidate_link = build_loaded_dynamic_route(True, device)
+        solver = newton.solvers.SolverXPBD(model, iterations=8, joint_linear_relaxation=1.0)
+        state_0, state_1 = model.state(), model.state()
+        control = model.control()
+        newton.eval_fk(model, model.joint_q, model.joint_qd, state_0)
+        fixed_link = candidate_link - 1
+
+        test.assertEqual(int(model.tendon_link_flags.numpy()[fixed_link]) & int(TendonLinkFlags.DYNAMIC), 0)
+        test.assertTrue(solver.tendon_link_active.numpy()[fixed_link])
+        link_active = solver.tendon_link_active.numpy()
+        link_active[fixed_link] = False
+        solver.tendon_link_active.assign(link_active)
+        solver.step(state_0, state_1, control, None, 1.0 / 120.0)
+        test.assertTrue(solver.tendon_link_active.numpy()[fixed_link])
 
 
 def test_dynamic_route_cuda_graph_capture(test, device):
@@ -1106,9 +1321,9 @@ def test_dynamic_route_cuda_graph_capture(test, device):
         for _ in range(30):
             wp.capture_launch(capture.graph)
 
-        test.assertEqual(
+        test.assertNotEqual(
             int(solver.tendon_link_active.numpy()[candidate_link]),
-            1,
+            0,
             "Captured solver steps should activate a force-driven routing candidate",
         )
 
@@ -1144,11 +1359,11 @@ def test_mujoco_switch_optional_middle_capstan_activates(test, device):
 
         active_history = np.array(example._active_history, dtype=np.int32)
         link_type = example.model.tendon_link_type.numpy()
-        initial_active = example.model.tendon_link_active.numpy()
+        authored_flags = example.model.tendon_link_flags.numpy()
         test.assertEqual(link_type[example.lower_link], int(newton.TendonLinkType.ROLLING))
         test.assertEqual(link_type[example.middle_link], int(newton.TendonLinkType.ROLLING))
-        test.assertEqual(initial_active[example.lower_link], 1)
-        test.assertEqual(initial_active[example.middle_link], 0)
+        test.assertEqual(int(authored_flags[example.lower_link]) & int(TendonLinkFlags.DYNAMIC), 0)
+        test.assertNotEqual(int(authored_flags[example.middle_link]) & int(TendonLinkFlags.DYNAMIC), 0)
         test.assertEqual(active_history[0], 0, f"Switch route should start on lower-guide-only path: {active_history}")
         test.assertEqual(active_history[-1], 0, f"Switch route should end on lower-guide-only path: {active_history}")
         test.assertEqual(int(np.max(active_history)), 1, f"Middle capstan should activate: {active_history}")
@@ -2243,7 +2458,20 @@ add_test(
     devices,
     test_force_driven_dynamic_route_updates_inside_solver,
 )
+add_test(
+    TestTendonCapstan,
+    "dynamic_route_initial_state_matches_geometry",
+    devices,
+    test_dynamic_route_initial_state_matches_geometry,
+)
+add_test(TestTendonCapstan, "fixed_route_state_is_preserved", devices, test_fixed_route_state_is_preserved)
 add_test(TestTendonCapstan, "dynamic_route_cuda_graph_capture", cuda_devices, test_dynamic_route_cuda_graph_capture)
+add_test(
+    TestTendonCapstan,
+    "loaded_dynamic_route_matches_fixed_route",
+    devices,
+    test_loaded_dynamic_route_matches_fixed_route,
+)
 add_test(
     TestTendonCapstan,
     "mujoco_wrap_uses_expected_side_of_capstan",
