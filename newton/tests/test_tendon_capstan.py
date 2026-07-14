@@ -2483,6 +2483,45 @@ def test_settle_tol_early_out_matches_full_sweeps(test, device):
         test.assertLess(early, 0.81, f"early-out over-shoots capstan bound: {early:.4f}, target={target:.4f}")
 
 
+def test_slack_tendon_settles_without_chasing_vanishing_tension(test, device):
+    """An almost-slack tendon should not chase a vanishing relative tension scale."""
+    with wp.ScopedDevice(device):
+
+        def run(settle_tol, max_sweeps):
+            model, initial_rest, _ = build_frictionless_zero_span_route(
+                compliance=1.0e-4,
+                points=[
+                    (0.0, 0.0, 0.0),
+                    (1.0, 0.0, 0.0),
+                    (2.0, 0.0, 0.0),
+                    (3.0, 0.0, 0.0),
+                ],
+                rest_lengths=[1.001, 0.9999999, 1.001],
+            )
+            solver = newton.solvers.SolverXPBD(
+                model,
+                iterations=1,
+                tendon_max_sweeps=max_sweeps,
+                tendon_settle_tol=settle_tol,
+            )
+            state_0, state_1 = model.state(), model.state()
+            newton.eval_fk(model, model.joint_q, model.joint_qd, state_0)
+            solver.step(state_0, state_1, model.control(), None, 1.0 / 60.0)
+            return (
+                solver.tendon_seg_rest_length.numpy(),
+                int(solver.tendon_cone_sweep_count.numpy()[0]),
+                initial_rest,
+            )
+
+        early_rest, early_sweeps, initial_rest = run(1.0e-3, 16)
+        full_rest, full_sweeps, _ = run(0.0, 64)
+
+        test.assertLess(early_sweeps, 16, f"Slack tendon should settle before the budget, got {early_sweeps} sweeps")
+        test.assertEqual(full_sweeps, 64, "Zero tolerance should run the requested full sweep budget")
+        np.testing.assert_allclose(early_rest, full_rest, rtol=1.0e-6, atol=1.0e-6)
+        np.testing.assert_allclose(np.sum(early_rest), np.sum(initial_rest), rtol=1.0e-6, atol=1.0e-6)
+
+
 devices = ["cpu"]
 if wp.is_cuda_available():
     devices.append("cuda:0")
@@ -2676,6 +2715,12 @@ add_test(
     "settle_tol_early_out_matches_full_sweeps",
     devices,
     test_settle_tol_early_out_matches_full_sweeps,
+)
+add_test(
+    TestTendonCapstan,
+    "slack_tendon_settles_without_chasing_vanishing_tension",
+    devices,
+    test_slack_tendon_settles_without_chasing_vanishing_tension,
 )
 
 

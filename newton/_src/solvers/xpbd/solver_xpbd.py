@@ -121,9 +121,9 @@ class SolverXPBD(TendonStateMixin, SolverBase):
         super().__init__(model=model)
         self.iterations = iterations
         # Routed-cable capstan cone relaxation: up to tendon_max_sweeps Gauss-Seidel passes, stopping
-        # early once the relaxation has settled -- the max per-sweep relative tension change (largest
-        # tension change / peak tension, dimensionless) falls below tendon_settle_tol. Already-converged
-        # cables stop almost immediately; stiff/transient ones run up to the cap.
+        # early once the relaxation has settled -- the max per-sweep tension change relative to the
+        # first sweep's peak tension falls below tendon_settle_tol. Already-converged cables stop almost
+        # immediately; stiff/transient ones run up to the cap.
         self.tendon_max_sweeps = tendon_max_sweeps
         self.tendon_settle_tol = tendon_settle_tol
 
