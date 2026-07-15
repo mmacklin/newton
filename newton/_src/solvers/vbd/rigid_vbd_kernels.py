@@ -1049,6 +1049,69 @@ def apply_angular_drive_limit_torque(
 
 
 @wp.func
+def evaluate_revolute_drive_limit_force_hessian(
+    q_wp: wp.quat,
+    q_wc: wp.quat,
+    q_wp_rest: wp.quat,
+    q_wc_rest: wp.quat,
+    q_wp_prev: wp.quat,
+    q_wc_prev: wp.quat,
+    axis: wp.vec3,
+    rest_angle: float,
+    model_drive_ke: float,
+    drive_kd: float,
+    target_pos: float,
+    target_vel: float,
+    lim_lower: float,
+    lim_upper: float,
+    model_limit_ke: float,
+    lim_kd: float,
+    avbd_ke: float,
+    is_parent: bool,
+    dt: float,
+    kappa_cached: wp.vec3,
+    J_world_cached: wp.mat33,
+    has_cached: bool,
+):
+    """Evaluate the revolute free-axis drive or limit torque in world space."""
+    has_drive = model_drive_ke > 0.0 or drive_kd > 0.0
+    has_limits = model_limit_ke > 0.0 and (lim_lower > -MAXVAL or lim_upper < MAXVAL)
+    if not has_drive and not has_limits:
+        return wp.vec3(0.0), wp.mat33(0.0)
+
+    kappa = kappa_cached
+    J_world = J_world_cached
+    if not has_cached:
+        kappa, J_world = compute_kappa_and_jacobian(q_wp, q_wc, q_wp_rest, q_wc_rest)
+
+    theta = wp.dot(kappa, axis)
+    theta_abs = theta + rest_angle
+    omega_p = quat_velocity(q_wp, q_wp_prev, dt)
+    omega_c = quat_velocity(q_wc, q_wc_prev, dt)
+    dkappa_dt = compute_kappa_dot_analytic(q_wp, q_wc, q_wp_rest, q_wc_rest, omega_p, omega_c, kappa)
+    dtheta_dt = wp.dot(dkappa_dt, axis)
+
+    mode, err_pos = resolve_drive_limit_mode(theta_abs, target_pos, lim_lower, lim_upper, has_drive, has_limits)
+    f_scalar = float(0.0)
+    H_scalar = float(0.0)
+    if mode == _DRIVE_LIMIT_MODE_LIMIT_LOWER or mode == _DRIVE_LIMIT_MODE_LIMIT_UPPER:
+        lim_ke = wp.min(avbd_ke, model_limit_ke)
+        lim_d = lim_kd * lim_ke
+        f_scalar = lim_ke * err_pos + lim_d * dtheta_dt
+        H_scalar = lim_ke + lim_d / dt
+    elif mode == _DRIVE_LIMIT_MODE_DRIVE:
+        drive_ke = wp.min(avbd_ke, model_drive_ke)
+        drive_d = drive_kd * drive_ke
+        vel_err = dtheta_dt - target_vel
+        f_scalar = drive_ke * err_pos + drive_d * vel_err
+        H_scalar = drive_ke + drive_d / dt
+
+    if H_scalar > 0.0:
+        return apply_angular_drive_limit_torque(axis, J_world, is_parent, f_scalar, H_scalar)
+    return wp.vec3(0.0), wp.mat33(0.0)
+
+
+@wp.func
 def apply_linear_drive_limit_force(
     axis_w: wp.vec3,
     r: wp.vec3,
@@ -1136,6 +1199,7 @@ def evaluate_joint_force_hessian(
     elastic_joint: wp.array(dtype=wp.int32),
     elastic_mode_count: wp.array(dtype=wp.int32),
     joint_q: wp.array(dtype=float),
+    joint_q_prev: wp.array(dtype=float),
     joint_q_start: wp.array(dtype=int),
     joint_parent_elastic_endpoint: wp.array(dtype=wp.int32),
     joint_child_elastic_endpoint: wp.array(dtype=wp.int32),
@@ -1232,6 +1296,38 @@ def evaluate_joint_force_hessian(
         elastic_endpoint_psi,
         elastic_max_mode_count,
     )
+    X_pj_prev = eval_elastic_endpoint_xform(
+        joint_index,
+        parent_index,
+        True,
+        joint_X_p[joint_index],
+        body_elastic_index,
+        elastic_joint,
+        elastic_mode_count,
+        joint_q_prev,
+        joint_q_start,
+        joint_parent_elastic_endpoint,
+        joint_child_elastic_endpoint,
+        elastic_endpoint_phi,
+        elastic_endpoint_psi,
+        elastic_max_mode_count,
+    )
+    X_cj_prev = eval_elastic_endpoint_xform(
+        joint_index,
+        child_index,
+        False,
+        joint_X_c[joint_index],
+        body_elastic_index,
+        elastic_joint,
+        elastic_mode_count,
+        joint_q_prev,
+        joint_q_start,
+        joint_parent_elastic_endpoint,
+        joint_child_elastic_endpoint,
+        elastic_endpoint_phi,
+        elastic_endpoint_psi,
+        elastic_max_mode_count,
+    )
 
     if parent_index >= 0:
         parent_pose = body_q[parent_index]
@@ -1251,8 +1347,8 @@ def evaluate_joint_force_hessian(
 
     X_wp = parent_pose * X_pj
     X_wc = child_pose * X_cj
-    X_wp_prev = parent_pose_prev * X_pj
-    X_wc_prev = child_pose_prev * X_cj
+    X_wp_prev = parent_pose_prev * X_pj_prev
+    X_wc_prev = child_pose_prev * X_cj_prev
     X_wp_rest = parent_pose_rest * joint_X_p[joint_index]
     X_wc_rest = child_pose_rest * joint_X_c[joint_index]
 
@@ -1466,46 +1562,33 @@ def evaluate_joint_force_hessian(
         model_limit_ke = joint_limit_ke[dof_idx]
         lim_kd = joint_limit_kd[dof_idx]
 
-        has_drive = model_drive_ke > 0.0 or drive_kd > 0.0
-        has_limits = model_limit_ke > 0.0 and (lim_lower > -MAXVAL or lim_upper < MAXVAL)
-
         avbd_ke = joint_penalty_k[c_start + 2]
-        drive_ke = wp.min(avbd_ke, model_drive_ke)
-        lim_ke = wp.min(avbd_ke, model_limit_ke)
-
-        if has_drive or has_limits:
-            inv_dt = 1.0 / dt
-
-            if has_cached:
-                kappa = kappa_cached
-                J_world = J_world_cached
-            else:
-                kappa, J_world = compute_kappa_and_jacobian(q_wp, q_wc, q_wp_rest, q_wc_rest)
-
-            theta = wp.dot(kappa, a)
-            theta_abs = theta + joint_rest_angle[dof_idx]
-            omega_p = quat_velocity(q_wp, q_wp_prev, dt)
-            omega_c = quat_velocity(q_wc, q_wc_prev, dt)
-            dkappa_dt = compute_kappa_dot_analytic(q_wp, q_wc, q_wp_rest, q_wc_rest, omega_p, omega_c, kappa)
-            dtheta_dt = wp.dot(dkappa_dt, a)
-
-            mode, err_pos = resolve_drive_limit_mode(theta_abs, target_pos, lim_lower, lim_upper, has_drive, has_limits)
-            f_scalar = float(0.0)
-            H_scalar = float(0.0)
-            if mode == _DRIVE_LIMIT_MODE_LIMIT_LOWER or mode == _DRIVE_LIMIT_MODE_LIMIT_UPPER:
-                lim_d = lim_kd * lim_ke
-                f_scalar = lim_ke * err_pos + lim_d * dtheta_dt
-                H_scalar = lim_ke + lim_d * inv_dt
-            elif mode == _DRIVE_LIMIT_MODE_DRIVE:
-                drive_d = drive_kd * drive_ke
-                vel_err = dtheta_dt - target_vel
-                f_scalar = drive_ke * err_pos + drive_d * vel_err
-                H_scalar = drive_ke + drive_d * inv_dt
-
-            if H_scalar > 0.0:
-                tau_drive, Haa_drive = apply_angular_drive_limit_torque(a, J_world, is_parent_body, f_scalar, H_scalar)
-                t_ang = t_ang + tau_drive
-                Haa_ang = Haa_ang + Haa_drive
+        tau_drive, Haa_drive = evaluate_revolute_drive_limit_force_hessian(
+            q_wp,
+            q_wc,
+            q_wp_rest,
+            q_wc_rest,
+            q_wp_prev,
+            q_wc_prev,
+            a,
+            joint_rest_angle[dof_idx],
+            model_drive_ke,
+            drive_kd,
+            target_pos,
+            target_vel,
+            lim_lower,
+            lim_upper,
+            model_limit_ke,
+            lim_kd,
+            avbd_ke,
+            is_parent_body,
+            dt,
+            kappa_cached,
+            J_world_cached,
+            has_cached,
+        )
+        t_ang = t_ang + tau_drive
+        Haa_ang = Haa_ang + Haa_drive
 
         return f_lin, t_lin + t_ang, Hll_lin, Hal_lin, Haa_lin + Haa_ang
 
@@ -2843,6 +2926,7 @@ def solve_rigid_body(
     elastic_joint: wp.array(dtype=wp.int32),
     elastic_mode_count: wp.array(dtype=wp.int32),
     joint_q: wp.array(dtype=float),
+    joint_q_prev: wp.array(dtype=float),
     joint_q_start: wp.array(dtype=int),
     joint_parent_elastic_endpoint: wp.array(dtype=wp.int32),
     joint_child_elastic_endpoint: wp.array(dtype=wp.int32),
@@ -3024,6 +3108,7 @@ def solve_rigid_body(
             elastic_joint,
             elastic_mode_count,
             joint_q,
+            joint_q_prev,
             joint_q_start,
             joint_parent_elastic_endpoint,
             joint_child_elastic_endpoint,

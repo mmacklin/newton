@@ -2362,6 +2362,215 @@ def test_vbd_elastic_modal_joint_damping_projection(test, device):
     np.testing.assert_allclose(state_1.joint_q.numpy()[q_start + 7], q_expected, rtol=1.0e-6, atol=1.0e-7)
 
 
+def test_vbd_elastic_angular_constraint_without_linear_stiffness(test, device):
+    dt = 0.01
+    mode_mass = 0.05
+    mode_q = 0.3
+    angular_k = 100.0
+    basis = newton.ModalBasis(
+        sample_points=[[0.0, 0.0, 0.0]],
+        sample_phi=[[[0.0, 0.0, 0.0]]],
+        sample_psi=[[[1.0, 0.0, 0.0]]],
+        mode_mass=[mode_mass],
+        mode_stiffness=[0.0],
+        mode_damping=[0.0],
+    )
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    body = builder.add_body_elastic(
+        mass=1.0,
+        inertia=_identity_inertia(),
+        mode_q=[mode_q],
+        modal_basis=basis,
+        is_kinematic=True,
+    )
+    builder.add_joint_fixed(parent=-1, child=body)
+    builder.color()
+    model = builder.finalize(device=device)
+
+    state_0 = model.state()
+    state_1 = model.state()
+    solver = newton.solvers.SolverVBD(
+        model,
+        iterations=1,
+        rigid_joint_linear_k_start=0.0,
+        rigid_joint_linear_ke=0.0,
+        rigid_joint_angular_k_start=angular_k,
+        rigid_joint_angular_ke=angular_k,
+        rigid_joint_adaptive_stiffness=False,
+    )
+    solver.step(state_0, state_1, model.control(), None, dt)
+
+    q_start = int(model.joint_q_start.numpy()[int(model.elastic_joint.numpy()[0])]) + 7
+    modal_inertia = mode_mass / (dt * dt)
+    expected = mode_q - angular_k * mode_q / (modal_inertia + angular_k)
+    np.testing.assert_allclose(state_1.joint_q.numpy()[q_start], expected, rtol=1.0e-6, atol=1.0e-7)
+
+
+def test_vbd_rigid_angular_damping_includes_modal_velocity(test, device):
+    dt = 0.01
+    angular_k = 100.0
+
+    def solve_parent_angle(angular_kd: float) -> float:
+        basis = newton.ModalBasis(
+            sample_points=[[0.0, 0.0, 0.0]],
+            sample_phi=[[[0.0, 0.0, 0.0]]],
+            sample_psi=[[[1.0, 0.0, 0.0]]],
+            mode_mass=[0.05],
+            mode_stiffness=[0.0],
+            mode_damping=[0.0],
+        )
+        builder = newton.ModelBuilder(gravity=0.0)
+        parent = builder.add_body(mass=1.0, inertia=_identity_inertia())
+        child = builder.add_body_elastic(
+            mass=1.0,
+            inertia=_identity_inertia(),
+            mode_q=[0.0],
+            mode_qd=[1.0],
+            modal_basis=basis,
+            is_kinematic=True,
+        )
+        builder.add_joint_fixed(parent=parent, child=child)
+        builder.color()
+        model = builder.finalize(device=device)
+
+        state_0 = model.state()
+        state_1 = model.state()
+        solver = newton.solvers.SolverVBD(
+            model,
+            iterations=1,
+            rigid_joint_linear_k_start=0.0,
+            rigid_joint_linear_ke=0.0,
+            rigid_joint_angular_k_start=angular_k,
+            rigid_joint_angular_ke=angular_k,
+            rigid_joint_angular_kd=angular_kd,
+            rigid_joint_adaptive_stiffness=False,
+        )
+        solver.step(state_0, state_1, model.control(), None, dt)
+        q = state_1.body_q.numpy()[parent, 3:7]
+        return 2.0 * math.atan2(abs(float(q[0])), abs(float(q[3])))
+
+    undamped_angle = solve_parent_angle(0.0)
+    damped_angle = solve_parent_angle(0.2)
+    test.assertGreater(
+        damped_angle,
+        10.0 * undamped_angle,
+        f"modal angular damping did not react on the rigid parent: {damped_angle:.3e} vs {undamped_angle:.3e}",
+    )
+
+
+def test_vbd_elastic_angular_projection_uses_exponential_jacobian(test, device):
+    dt = 0.01
+    mode_mass = np.array([1.0, 1.0], dtype=np.float32)
+    mode_q = np.array([0.6, 0.4], dtype=np.float32)
+    psi = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float32)
+    angular_k = 100.0
+    basis = newton.ModalBasis(
+        sample_points=[[0.0, 0.0, 0.0]],
+        sample_phi=[np.zeros((2, 3), dtype=np.float32)],
+        sample_psi=[psi],
+        mode_mass=mode_mass,
+        mode_stiffness=[0.0, 0.0],
+        mode_damping=[0.0, 0.0],
+    )
+
+    builder = newton.ModelBuilder(gravity=0.0)
+    body = builder.add_body_elastic(
+        mass=1.0,
+        inertia=_identity_inertia(),
+        mode_q=mode_q,
+        modal_basis=basis,
+        is_kinematic=True,
+    )
+    builder.add_joint_revolute(parent=-1, child=body, axis=(1.0, 0.0, 0.0))
+    builder.color()
+    model = builder.finalize(device=device)
+
+    state_0 = model.state()
+    state_1 = model.state()
+    solver = newton.solvers.SolverVBD(
+        model,
+        iterations=1,
+        rigid_joint_linear_k_start=1.0,
+        rigid_joint_linear_ke=1.0,
+        rigid_joint_angular_k_start=angular_k,
+        rigid_joint_angular_ke=angular_k,
+        rigid_joint_adaptive_stiffness=False,
+    )
+    solver.step(state_0, state_1, model.control(), None, dt)
+
+    theta = psi.T @ mode_q
+    projector = np.diag([0.0, 1.0, 1.0])
+    expected_grad = angular_k * psi @ projector @ theta
+    expected_hessian = np.diag(mode_mass / (dt * dt)) + angular_k * psi @ projector @ psi.T
+    actual_grad = solver.elastic_mode_block_grad.numpy()[:2]
+    actual_hessian = solver.elastic_mode_block_matrix.numpy()[:4].reshape((2, 2))
+    np.testing.assert_allclose(actual_grad, expected_grad, rtol=5.0e-4, atol=2.0e-2)
+    np.testing.assert_allclose(actual_hessian, expected_hessian, rtol=1.0e-5, atol=6.0e-2)
+
+
+def test_vbd_revolute_drive_and_limit_project_into_elastic_modes(test, device):
+    dt = 0.01
+    mode_mass = 1.0
+    drive_k = 200.0
+
+    def solve_mode(*, mode_q: float, target_pos: float, target_ke: float, limit_upper: float) -> float:
+        basis = newton.ModalBasis(
+            sample_points=[[0.0, 0.0, 0.0]],
+            sample_phi=[[[0.0, 0.0, 0.0]]],
+            sample_psi=[[[1.0, 0.0, 0.0]]],
+            mode_mass=[mode_mass],
+            mode_stiffness=[0.0],
+            mode_damping=[0.0],
+        )
+        builder = newton.ModelBuilder(gravity=0.0)
+        body = builder.add_body_elastic(
+            mass=1.0,
+            inertia=_identity_inertia(),
+            mode_q=[mode_q],
+            modal_basis=basis,
+            is_kinematic=True,
+        )
+        builder.add_joint_revolute(
+            parent=-1,
+            child=body,
+            axis=(1.0, 0.0, 0.0),
+            target_pos=target_pos,
+            target_ke=target_ke,
+            target_kd=0.0,
+            limit_lower=-1.0,
+            limit_upper=limit_upper,
+            limit_ke=drive_k,
+            limit_kd=0.0,
+        )
+        builder.color()
+        model = builder.finalize(device=device)
+
+        state_0 = model.state()
+        state_1 = model.state()
+        solver = newton.solvers.SolverVBD(
+            model,
+            iterations=1,
+            rigid_joint_linear_k_start=1.0,
+            rigid_joint_linear_ke=1.0,
+            rigid_joint_angular_k_start=100.0,
+            rigid_joint_angular_ke=100.0,
+            rigid_joint_adaptive_stiffness=False,
+        )
+        solver.step(state_0, state_1, model.control(), None, dt)
+        q_start = int(model.joint_q_start.numpy()[int(model.elastic_joint.numpy()[0])]) + 7
+        return float(state_1.joint_q.numpy()[q_start])
+
+    modal_inertia = mode_mass / (dt * dt)
+    drive_result = solve_mode(mode_q=0.0, target_pos=0.25, target_ke=drive_k, limit_upper=1.0)
+    drive_expected = drive_k * 0.25 / (modal_inertia + drive_k)
+    np.testing.assert_allclose(drive_result, drive_expected, rtol=1.0e-6, atol=1.0e-7)
+
+    limit_result = solve_mode(mode_q=0.25, target_pos=0.0, target_ke=0.0, limit_upper=0.1)
+    limit_expected = 0.25 - drive_k * (0.25 - 0.1) / (modal_inertia + drive_k)
+    np.testing.assert_allclose(limit_result, limit_expected, rtol=1.0e-6, atol=1.0e-7)
+
+
 def test_fourbar_elastic_coupler_geometry(test, device):
     a, b_rest, c, d = 0.2, 0.5, 0.4, 0.5
     eta = 0.06
@@ -3090,6 +3299,30 @@ for device in devices:
         TestReducedElasticBody,
         "test_vbd_elastic_modal_joint_damping_projection",
         test_vbd_elastic_modal_joint_damping_projection,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_vbd_elastic_angular_constraint_without_linear_stiffness",
+        test_vbd_elastic_angular_constraint_without_linear_stiffness,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_vbd_rigid_angular_damping_includes_modal_velocity",
+        test_vbd_rigid_angular_damping_includes_modal_velocity,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_vbd_elastic_angular_projection_uses_exponential_jacobian",
+        test_vbd_elastic_angular_projection_uses_exponential_jacobian,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_vbd_revolute_drive_and_limit_project_into_elastic_modes",
+        test_vbd_revolute_drive_and_limit_project_into_elastic_modes,
         devices=[device],
     )
     add_function_test(

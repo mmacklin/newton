@@ -78,6 +78,22 @@ the dipper arm creep slowly and made joint damping tuning misleading. If
 `rigid_joint_linear_kd` is nonzero, the modal solve must include the damping
 force and the matching diagonal damping Hessian term.
 
+For an angular endpoint parameterized by
+`R(q) = Exp(sum_i psi_i q_i) R_rest`, project moments through the left SO(3)
+Jacobian:
+
+```text
+theta = sum_i psi_i q_i
+J_i = J_left(theta) psi_i
+grad_i += dot(tau_side, J_i)
+H_ij += dot(J_i, H_aa J_j)
+```
+
+Use previous modal coordinates when evaluating previous endpoint transforms so
+joint damping sees the same angular velocity on the rigid and modal sides. Keep
+linear and angular penalty gates independent, and project revolute drive and
+limit moments through the same endpoint Jacobian as structural joint moments.
+
 ## Debugging Workflow
 
 1. Isolate the mechanism. Disable contacts and actuation unless they are the
