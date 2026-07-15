@@ -10,6 +10,7 @@ from newton._src.solvers.vbd.rigid_vbd_kernels import (
     _SMALL_LENGTH_EPS,
     evaluate_angular_constraint_force_hessian,
     evaluate_contact_point_world,
+    evaluate_revolute_drive_limit_force_hessian,
     evaluate_rigid_contact_from_world_points,
 )
 
@@ -17,6 +18,21 @@ wp.set_module_options({"enable_backward": False})
 
 _NUM_ELASTIC_CONTACT_THREADS_PER_BODY = 32
 """Threads per reduced elastic body for modal contact accumulation."""
+
+
+@wp.func
+def _so3_left_jacobian(theta: wp.vec3) -> wp.mat33:
+    """Map a rotation-vector increment to a left-trivialized angular increment."""
+    theta_sq = wp.dot(theta, theta)
+    theta_skew = wp.skew(theta)
+    theta_skew_sq = theta_skew * theta_skew
+    if theta_sq < _SMALL_ANGLE_EPS * _SMALL_ANGLE_EPS:
+        return wp.identity(3, float) + 0.5 * theta_skew + (1.0 / 6.0) * theta_skew_sq
+
+    angle = wp.sqrt(theta_sq)
+    a = (1.0 - wp.cos(angle)) / theta_sq
+    b = (angle - wp.sin(angle)) / (theta_sq * angle)
+    return wp.identity(3, float) + a * theta_skew + b * theta_skew_sq
 
 
 @wp.func
@@ -363,6 +379,15 @@ def assemble_elastic_joints(
     joint_constraint_start: wp.array(dtype=wp.int32),
     joint_penalty_k: wp.array(dtype=float),
     joint_penalty_kd: wp.array(dtype=float),
+    joint_target_ke: wp.array(dtype=float),
+    joint_target_kd: wp.array(dtype=float),
+    joint_target_pos: wp.array(dtype=float),
+    joint_target_vel: wp.array(dtype=float),
+    joint_limit_lower: wp.array(dtype=float),
+    joint_limit_upper: wp.array(dtype=float),
+    joint_limit_ke: wp.array(dtype=float),
+    joint_limit_kd: wp.array(dtype=float),
+    joint_rest_angle: wp.array(dtype=float),
     joint_parent_elastic_endpoint: wp.array(dtype=wp.int32),
     joint_child_elastic_endpoint: wp.array(dtype=wp.int32),
     joint_q_start: wp.array(dtype=wp.int32),
@@ -468,8 +493,6 @@ def assemble_elastic_joints(
 
         c_start = joint_constraint_start[joint]
         k_lin = joint_penalty_k[c_start]
-        if k_lin <= 0.0:
-            continue
         kd_lin = joint_penalty_kd[c_start]
 
         parent = joint_parent[joint]
@@ -548,67 +571,73 @@ def assemble_elastic_joints(
         X_wc = body_q[child] * X_cj
         X_wc_prev = body_q_prev[child] * X_cj_prev
 
-        x_p = wp.transform_get_translation(X_wp)
-        x_c = wp.transform_get_translation(X_wc)
-        C = x_c - x_p
-        x_p_prev = wp.transform_get_translation(X_wp_prev)
-        x_c_prev = wp.transform_get_translation(X_wc_prev)
-        C_prev = x_c_prev - x_p_prev
-
-        P = wp.identity(3, float)
-        if jt == JointType.PRISMATIC:
-            axis = joint_axis[joint_qd_start[joint]]
-            axis_w = wp.normalize(wp.quat_rotate(wp.transform_get_rotation(X_wp), axis))
-            P = P - wp.outer(axis_w, axis_w)
-
-        PC = P * C
-        joint_force = k_lin * PC
-        h_scale = k_lin
-        if kd_lin > 0.0:
-            dC_dt = (C - C_prev) * inv_dt
-            joint_force = joint_force + (kd_lin * k_lin) * (P * dC_dt)
-            h_scale = h_scale + (kd_lin * inv_dt) * k_lin
-
         side = elastic_endpoint_side[endpoint]
-        joint_force_local = body_R_T * joint_force
-        P_local = body_R_T * (P * body_R)
-        for i in range(mode_count):
-            phi_i_local = elastic_endpoint_phi[endpoint * elastic_max_mode_count + i]
-            if side == 0:
-                phi_i_local = -phi_i_local
-            PdC_i = P_local * phi_i_local
-            elastic_mode_block_grad[block_vec_start + i] = elastic_mode_block_grad[block_vec_start + i] + wp.dot(
-                joint_force_local, PdC_i
-            )
+        if k_lin > 0.0:
+            x_p = wp.transform_get_translation(X_wp)
+            x_c = wp.transform_get_translation(X_wc)
+            C = x_c - x_p
+            x_p_prev = wp.transform_get_translation(X_wp_prev)
+            x_c_prev = wp.transform_get_translation(X_wc_prev)
+            C_prev = x_c_prev - x_p_prev
 
-            for j in range(i, mode_count):
-                phi_j_local = elastic_endpoint_phi[endpoint * elastic_max_mode_count + j]
+            P = wp.identity(3, float)
+            if jt == JointType.PRISMATIC:
+                axis = joint_axis[joint_qd_start[joint]]
+                axis_w = wp.normalize(wp.quat_rotate(wp.transform_get_rotation(X_wp), axis))
+                P = P - wp.outer(axis_w, axis_w)
+
+            PC = P * C
+            joint_force = k_lin * PC
+            h_scale = k_lin
+            if kd_lin > 0.0:
+                dC_dt = (C - C_prev) * inv_dt
+                joint_force = joint_force + (kd_lin * k_lin) * (P * dC_dt)
+                h_scale = h_scale + (kd_lin * inv_dt) * k_lin
+
+            joint_force_local = body_R_T * joint_force
+            P_local = body_R_T * (P * body_R)
+            for i in range(mode_count):
+                phi_i_local = elastic_endpoint_phi[endpoint * elastic_max_mode_count + i]
                 if side == 0:
-                    phi_j_local = -phi_j_local
-                PdC_j = P_local * phi_j_local
-                mat_idx = block_mat_start + i * max_modes + j
-                h_ij = h_scale * wp.dot(PdC_i, PdC_j)
-                elastic_mode_block_matrix[mat_idx] = elastic_mode_block_matrix[mat_idx] + h_ij
+                    phi_i_local = -phi_i_local
+                PdC_i = P_local * phi_i_local
+                elastic_mode_block_grad[block_vec_start + i] = elastic_mode_block_grad[block_vec_start + i] + wp.dot(
+                    joint_force_local, PdC_i
+                )
+
+                for j in range(i, mode_count):
+                    phi_j_local = elastic_endpoint_phi[endpoint * elastic_max_mode_count + j]
+                    if side == 0:
+                        phi_j_local = -phi_j_local
+                    PdC_j = P_local * phi_j_local
+                    mat_idx = block_mat_start + i * max_modes + j
+                    h_ij = h_scale * wp.dot(PdC_i, PdC_j)
+                    elastic_mode_block_matrix[mat_idx] = elastic_mode_block_matrix[mat_idx] + h_ij
 
         if jt == JointType.FIXED or jt == JointType.PRISMATIC or jt == JointType.REVOLUTE:
             k_ang = joint_penalty_k[c_start + 1]
             kd_ang = joint_penalty_kd[c_start + 1]
+            q_wp = wp.transform_get_rotation(X_wp)
+            q_wc = wp.transform_get_rotation(X_wc)
+            q_wp_prev = wp.transform_get_rotation(X_wp_prev)
+            q_wc_prev = wp.transform_get_rotation(X_wc_prev)
+            q_p_rest = wp.transform_get_rotation(joint_X_p[joint])
+            if parent >= 0:
+                q_p_rest = wp.transform_get_rotation(body_q_rest[parent]) * q_p_rest
+            q_c_rest = wp.transform_get_rotation(body_q_rest[child]) * wp.transform_get_rotation(joint_X_c[joint])
+
+            P_ang = wp.identity(3, float)
+            if jt == JointType.REVOLUTE:
+                axis_a = wp.normalize(joint_axis[joint_qd_start[joint]])
+                P_ang = P_ang - wp.outer(axis_a, axis_a)
+
+            tau_world = wp.vec3(0.0)
+            H_aa = wp.mat33(0.0)
+            kappa_cached = wp.vec3(0.0)
+            J_world_cached = wp.mat33(0.0)
+            has_cached = False
             if k_ang > 0.0:
-                q_wp = wp.transform_get_rotation(X_wp)
-                q_wc = wp.transform_get_rotation(X_wc)
-                q_wp_prev = wp.transform_get_rotation(X_wp_prev)
-                q_wc_prev = wp.transform_get_rotation(X_wc_prev)
-                q_p_rest = wp.transform_get_rotation(joint_X_p[joint])
-                if parent >= 0:
-                    q_p_rest = wp.transform_get_rotation(body_q_rest[parent]) * q_p_rest
-                q_c_rest = wp.transform_get_rotation(body_q_rest[child]) * wp.transform_get_rotation(joint_X_c[joint])
-
-                P_ang = wp.identity(3, float)
-                if jt == JointType.REVOLUTE:
-                    axis_a = wp.normalize(joint_axis[joint_qd_start[joint]])
-                    P_ang = P_ang - wp.outer(axis_a, axis_a)
-
-                tau_world, H_aa, _kappa, _jac = evaluate_angular_constraint_force_hessian(
+                tau_world, H_aa, kappa_cached, J_world_cached = evaluate_angular_constraint_force_hessian(
                     q_wp,
                     q_wc,
                     q_p_rest,
@@ -623,24 +652,64 @@ def assemble_elastic_joints(
                     kd_ang,
                     dt,
                 )
-                tau_local = body_R_T * tau_world
-                H_aa_local = body_R_T * (H_aa * body_R)
-                for i in range(mode_count):
-                    psi_i_local = elastic_endpoint_psi[endpoint * elastic_max_mode_count + i]
-                    if side == 0:
-                        psi_i_local = -psi_i_local
-                    elastic_mode_block_grad[block_vec_start + i] = elastic_mode_block_grad[block_vec_start + i] + wp.dot(
-                        tau_local, psi_i_local
-                    )
+                has_cached = True
 
-                    for j in range(i, mode_count):
-                        psi_j_local = elastic_endpoint_psi[endpoint * elastic_max_mode_count + j]
-                        if side == 0:
-                            psi_j_local = -psi_j_local
-                        mat_idx = block_mat_start + i * max_modes + j
-                        elastic_mode_block_matrix[mat_idx] = elastic_mode_block_matrix[mat_idx] + wp.dot(
-                            psi_i_local, H_aa_local * psi_j_local
-                        )
+            if jt == JointType.REVOLUTE:
+                dof_idx = joint_qd_start[joint]
+                drive_tau, drive_H_aa = evaluate_revolute_drive_limit_force_hessian(
+                    q_wp,
+                    q_wc,
+                    q_p_rest,
+                    q_c_rest,
+                    q_wp_prev,
+                    q_wc_prev,
+                    axis_a,
+                    joint_rest_angle[dof_idx],
+                    joint_target_ke[dof_idx],
+                    joint_target_kd[dof_idx],
+                    joint_target_pos[dof_idx],
+                    joint_target_vel[dof_idx],
+                    joint_limit_lower[dof_idx],
+                    joint_limit_upper[dof_idx],
+                    joint_limit_ke[dof_idx],
+                    joint_limit_kd[dof_idx],
+                    joint_penalty_k[c_start + 2],
+                    True,
+                    dt,
+                    kappa_cached,
+                    J_world_cached,
+                    has_cached,
+                )
+                tau_world = tau_world + drive_tau
+                H_aa = H_aa + drive_H_aa
+
+            theta_local = wp.vec3(0.0)
+            for mode in range(mode_count):
+                theta_local = (
+                    theta_local
+                    + elastic_endpoint_psi[endpoint * elastic_max_mode_count + mode] * joint_q[q_start + mode]
+                )
+            endpoint_rotation_jacobian = _so3_left_jacobian(theta_local)
+            tau_local = body_R_T * tau_world
+            H_aa_local = body_R_T * (H_aa * body_R)
+            for i in range(mode_count):
+                psi_i_local = endpoint_rotation_jacobian * elastic_endpoint_psi[endpoint * elastic_max_mode_count + i]
+                if side == 0:
+                    psi_i_local = -psi_i_local
+                elastic_mode_block_grad[block_vec_start + i] = elastic_mode_block_grad[block_vec_start + i] + wp.dot(
+                    tau_local, psi_i_local
+                )
+
+                for j in range(i, mode_count):
+                    psi_j_local = (
+                        endpoint_rotation_jacobian * elastic_endpoint_psi[endpoint * elastic_max_mode_count + j]
+                    )
+                    if side == 0:
+                        psi_j_local = -psi_j_local
+                    mat_idx = block_mat_start + i * max_modes + j
+                    elastic_mode_block_matrix[mat_idx] = elastic_mode_block_matrix[mat_idx] + wp.dot(
+                        psi_i_local, H_aa_local * psi_j_local
+                    )
 
 
 @wp.kernel

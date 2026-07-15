@@ -73,6 +73,7 @@
 - Fix viewer crash when contact buffer overflows by clamping contact count to buffer size
 - Decompose loop joint constraints by DOF type (WELD for fixed, CONNECT-pair for revolute, single CONNECT for ball) instead of always emitting 2x CONNECT
 - Render reduced elastic shape meshes double-sided so thin imported shells remain visible in ViewerGL
+- Fix reduced elastic angular joint coupling for rotation-only constraints, modal endpoint damping, finite multi-axis rotations, and revolute drives and limits
 
 ## [1.0.0] - 2026-03-10
 
