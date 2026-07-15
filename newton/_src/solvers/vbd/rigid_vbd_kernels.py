@@ -1082,6 +1082,7 @@ def eval_elastic_endpoint_xform(
     joint_parent_elastic_endpoint: wp.array(dtype=wp.int32),
     joint_child_elastic_endpoint: wp.array(dtype=wp.int32),
     elastic_endpoint_phi: wp.array(dtype=wp.vec3),
+    elastic_endpoint_psi: wp.array(dtype=wp.vec3),
     elastic_max_mode_count: int,
 ):
     if body_index < 0:
@@ -1103,9 +1104,16 @@ def eval_elastic_endpoint_xform(
     q_start = joint_q_start[owner_joint] + 7
     mode_count = elastic_mode_count[elastic_index]
 
+    theta = wp.vec3(0.0, 0.0, 0.0)
     for i in range(elastic_max_mode_count):
         if i < mode_count:
-            p = p + elastic_endpoint_phi[endpoint * elastic_max_mode_count + i] * joint_q[q_start + i]
+            idx = endpoint * elastic_max_mode_count + i
+            p = p + elastic_endpoint_phi[idx] * joint_q[q_start + i]
+            theta = theta + elastic_endpoint_psi[idx] * joint_q[q_start + i]
+
+    angle = wp.length(theta)
+    if angle > _SMALL_ANGLE_EPS:
+        q = wp.quat_from_axis_angle(theta / angle, angle) * q
 
     return wp.transform(p, q)
 
@@ -1132,6 +1140,7 @@ def evaluate_joint_force_hessian(
     joint_parent_elastic_endpoint: wp.array(dtype=wp.int32),
     joint_child_elastic_endpoint: wp.array(dtype=wp.int32),
     elastic_endpoint_phi: wp.array(dtype=wp.vec3),
+    elastic_endpoint_psi: wp.array(dtype=wp.vec3),
     elastic_max_mode_count: int,
     joint_axis: wp.array(dtype=wp.vec3),
     joint_qd_start: wp.array(dtype=int),
@@ -1204,6 +1213,7 @@ def evaluate_joint_force_hessian(
         joint_parent_elastic_endpoint,
         joint_child_elastic_endpoint,
         elastic_endpoint_phi,
+        elastic_endpoint_psi,
         elastic_max_mode_count,
     )
     X_cj = eval_elastic_endpoint_xform(
@@ -1219,6 +1229,7 @@ def evaluate_joint_force_hessian(
         joint_parent_elastic_endpoint,
         joint_child_elastic_endpoint,
         elastic_endpoint_phi,
+        elastic_endpoint_psi,
         elastic_max_mode_count,
     )
 
@@ -1242,8 +1253,8 @@ def evaluate_joint_force_hessian(
     X_wc = child_pose * X_cj
     X_wp_prev = parent_pose_prev * X_pj
     X_wc_prev = child_pose_prev * X_cj
-    X_wp_rest = parent_pose_rest * X_pj
-    X_wc_rest = child_pose_rest * X_cj
+    X_wp_rest = parent_pose_rest * joint_X_p[joint_index]
+    X_wc_rest = child_pose_rest * joint_X_c[joint_index]
 
     c_start = joint_constraint_start[joint_index]
 
@@ -2836,6 +2847,7 @@ def solve_rigid_body(
     joint_parent_elastic_endpoint: wp.array(dtype=wp.int32),
     joint_child_elastic_endpoint: wp.array(dtype=wp.int32),
     elastic_endpoint_phi: wp.array(dtype=wp.vec3),
+    elastic_endpoint_psi: wp.array(dtype=wp.vec3),
     elastic_max_mode_count: int,
     joint_axis: wp.array(dtype=wp.vec3),
     joint_qd_start: wp.array(dtype=int),
@@ -3016,6 +3028,7 @@ def solve_rigid_body(
             joint_parent_elastic_endpoint,
             joint_child_elastic_endpoint,
             elastic_endpoint_phi,
+            elastic_endpoint_psi,
             elastic_max_mode_count,
             joint_axis,
             joint_qd_start,
@@ -3148,6 +3161,7 @@ def update_duals_joint(
     joint_parent_elastic_endpoint: wp.array(dtype=wp.int32),
     joint_child_elastic_endpoint: wp.array(dtype=wp.int32),
     elastic_endpoint_phi: wp.array(dtype=wp.vec3),
+    elastic_endpoint_psi: wp.array(dtype=wp.vec3),
     elastic_max_mode_count: int,
     joint_axis: wp.array(dtype=wp.vec3),
     joint_qd_start: wp.array(dtype=int),
@@ -3247,6 +3261,7 @@ def update_duals_joint(
         joint_parent_elastic_endpoint,
         joint_child_elastic_endpoint,
         elastic_endpoint_phi,
+        elastic_endpoint_psi,
         elastic_max_mode_count,
     )
     X_cj = eval_elastic_endpoint_xform(
@@ -3262,6 +3277,7 @@ def update_duals_joint(
         joint_parent_elastic_endpoint,
         joint_child_elastic_endpoint,
         elastic_endpoint_phi,
+        elastic_endpoint_psi,
         elastic_max_mode_count,
     )
 

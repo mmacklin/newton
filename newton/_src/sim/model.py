@@ -741,6 +741,8 @@ class Model:
         """ModalBasis-local sample index for each internal reduced elastic endpoint, shape [elastic_endpoint_count], int."""
         self.elastic_endpoint_phi: wp.array(dtype=wp.vec3) | None = None
         """Flattened translational mode samples for reduced elastic endpoints [m per mode], shape [elastic_endpoint_count * elastic_max_mode_count, 3]."""
+        self.elastic_endpoint_psi: wp.array(dtype=wp.vec3) | None = None
+        """Flattened angular mode samples for reduced elastic endpoints [rad per mode], shape [elastic_endpoint_count * elastic_max_mode_count, 3]."""
         self.elastic_render_point_start: wp.array(dtype=wp.int32) | None = None
         """Start render point for each reduced elastic body, shape [elastic_body_count], int."""
         self.elastic_render_point_count: wp.array(dtype=wp.int32) | None = None
