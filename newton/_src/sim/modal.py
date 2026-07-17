@@ -540,6 +540,340 @@ class ModalGeneratorSampled:
         )
 
 
+class ModalGeneratorCraigBampton:
+    """Build interface modes from Craig-Bampton reduced matrices.
+
+    The generator accepts already-loaded arrays; Input coordinates must contain
+    six DOFs per interface in ``[tx, ty, tz, rx, ry, rz]`` order, followed by
+    any fixed-interface modes. This first-pass interface intentionally discards
+    the trailing fixed-interface modes.
+
+    One named interface is used to define the floating frame already carried by
+    a Newton reduced elastic body. The remaining interface coordinates are
+    transformed into ``6 * (interface_count - 1)`` mass-normalized elastic modes.
+    The transformed mass and stiffness matrices are diagonal. Because
+    :class:`ModalBasis` stores diagonal structural damping, off-diagonal entries
+    in the transformed damping matrix are omitted with a warning.
+
+    The reduced matrices determine rigid-to-modal linear and angular inertia
+    coupling. They do not contain the higher-order centrifugal and Coriolis
+    integrals used by Newton's nonlinear floating-frame coupling, so those
+    optional terms remain unavailable in the returned basis.
+
+    Args:
+        interface_positions: Body-local interface-frame positions [m], shape
+            ``[interface_count, 3]``. Their order defines the six-DOF blocks in
+            the reduced matrices.
+        mass_matrix: Craig-Bampton reduced mass matrix, shape
+            ``[reduced_dof_count, reduced_dof_count]``. The first
+            ``6 * interface_count`` rows and columns are the interface block.
+        stiffness_matrix: Craig-Bampton reduced stiffness matrix, with the same
+            shape and coordinate order as ``mass_matrix``.
+        sample_points: Body-local recovery sample points [m], shape
+            ``[sample_count, 3]``.
+        recovery_matrix: Translational recovery matrix mapping reduced
+            coordinates to interleaved sample displacements, shape
+            ``[3 * sample_count, reduced_dof_count]``.
+        damping_matrix: Optional Craig-Bampton reduced damping matrix, with the
+            same shape and coordinate order as ``mass_matrix``.
+        interface_names: Optional unique names for the interface frames. Defaults
+            to ``interface_0``, ``interface_1``, and so on.
+        reference_interface: Name or index of the interface that follows only the
+            Newton floating frame. All other interfaces contribute six relative
+            elastic coordinates.
+        damping_coupling_tolerance: Relative off-diagonal damping magnitude above
+            which the diagonal approximation emits a warning.
+        label: Optional basis label.
+    """
+
+    def __init__(
+        self,
+        interface_positions: Sequence[Sequence[float]] | np.ndarray,
+        mass_matrix: Sequence[Sequence[float]] | np.ndarray,
+        stiffness_matrix: Sequence[Sequence[float]] | np.ndarray,
+        sample_points: Sequence[Sequence[float]] | np.ndarray,
+        recovery_matrix: Sequence[Sequence[float]] | np.ndarray,
+        damping_matrix: Sequence[Sequence[float]] | np.ndarray | None = None,
+        interface_names: Sequence[str] | None = None,
+        reference_interface: int | str = 0,
+        damping_coupling_tolerance: float = 1.0e-5,
+        label: str | None = None,
+    ):
+        self.interface_positions = np.asarray(interface_positions, dtype=np.float64)
+        if self.interface_positions.ndim != 2 or self.interface_positions.shape[1] != 3:
+            raise ValueError(
+                f"interface_positions must have shape [interface_count, 3], got {self.interface_positions.shape}"
+            )
+        self.interface_count = int(self.interface_positions.shape[0])
+        if self.interface_count < 2:
+            raise ValueError(f"At least two interfaces are required, got {self.interface_count}")
+
+        if interface_names is None:
+            names = tuple(f"interface_{i}" for i in range(self.interface_count))
+        else:
+            names = tuple(str(name) for name in interface_names)
+            if len(names) != self.interface_count:
+                raise ValueError(f"interface_names must have length {self.interface_count}, got {len(names)}")
+            if any(not name for name in names):
+                raise ValueError("interface_names cannot contain empty names")
+            if len(set(names)) != len(names):
+                raise ValueError("interface_names must be unique")
+        self.interface_names = names
+
+        if isinstance(reference_interface, str):
+            try:
+                reference_index = names.index(reference_interface)
+            except ValueError as exc:
+                raise ValueError(f"Unknown reference_interface {reference_interface!r}") from exc
+        else:
+            reference_index = int(reference_interface)
+            if reference_index < 0 or reference_index >= self.interface_count:
+                raise ValueError(
+                    f"reference_interface index must be in [0, {self.interface_count}), got {reference_index}"
+                )
+        self.reference_interface = reference_index
+        self.reference_interface_name = names[reference_index]
+
+        mass = np.asarray(mass_matrix, dtype=np.float64)
+        if mass.ndim != 2 or mass.shape[0] != mass.shape[1]:
+            raise ValueError(f"mass_matrix must be square, got {mass.shape}")
+        self.reduced_dof_count = int(mass.shape[0])
+        self.interface_dof_count = 6 * self.interface_count
+        if self.reduced_dof_count < self.interface_dof_count:
+            raise ValueError(
+                f"mass_matrix must provide at least {self.interface_dof_count} interface DOFs, "
+                f"got {self.reduced_dof_count}"
+            )
+        self.mass_matrix = self._coerce_square_matrix(mass, self.reduced_dof_count, "mass_matrix")
+        self.stiffness_matrix = self._coerce_square_matrix(stiffness_matrix, self.reduced_dof_count, "stiffness_matrix")
+        self.damping_matrix = (
+            None
+            if damping_matrix is None
+            else self._coerce_square_matrix(damping_matrix, self.reduced_dof_count, "damping_matrix")
+        )
+
+        self.sample_points = np.asarray(sample_points, dtype=np.float64)
+        if self.sample_points.ndim != 2 or self.sample_points.shape[1] != 3:
+            raise ValueError(f"sample_points must have shape [sample_count, 3], got {self.sample_points.shape}")
+        if self.sample_points.shape[0] == 0:
+            raise ValueError("At least one recovery sample point is required")
+        self.recovery_matrix = np.asarray(recovery_matrix, dtype=np.float64)
+        expected_recovery_shape = (3 * self.sample_points.shape[0], self.reduced_dof_count)
+        if self.recovery_matrix.shape != expected_recovery_shape:
+            raise ValueError(
+                f"recovery_matrix must have shape {expected_recovery_shape}, got {self.recovery_matrix.shape}"
+            )
+
+        self.damping_coupling_tolerance = float(damping_coupling_tolerance)
+        if self.damping_coupling_tolerance < 0.0:
+            raise ValueError(f"damping_coupling_tolerance must be non-negative, got {self.damping_coupling_tolerance}")
+        self.label = label
+
+        self.discarded_mode_count = self.reduced_dof_count - self.interface_dof_count
+        self.mode_count = self.interface_dof_count - 6
+        self.mass = 0.0
+        self.com = np.zeros(3, dtype=np.float64)
+        self.inertia = np.zeros((3, 3), dtype=np.float64)
+        self.frequencies = np.zeros(0, dtype=np.float64)
+        self.relative_modes = np.zeros((self.mode_count, 0), dtype=np.float64)
+        self.modal_matrix = np.zeros((self.reduced_dof_count, 0), dtype=np.float64)
+        self.damping_off_diagonal_ratio = 0.0
+        self.interface_sample_indices: dict[str, int] = {}
+
+    @staticmethod
+    def _coerce_square_matrix(
+        matrix: Sequence[Sequence[float]] | np.ndarray,
+        size: int,
+        name: str,
+    ) -> np.ndarray:
+        array = np.asarray(matrix, dtype=np.float64)
+        if array.shape != (size, size):
+            raise ValueError(f"{name} must have shape ({size}, {size}), got {array.shape}")
+        return 0.5 * (array + array.T)
+
+    @staticmethod
+    def _skew(value: np.ndarray) -> np.ndarray:
+        x, y, z = value
+        return np.array([[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]], dtype=np.float64)
+
+    def _coordinate_maps(self) -> tuple[np.ndarray, np.ndarray]:
+        rigid = np.zeros((self.interface_dof_count, 6), dtype=np.float64)
+        for interface, position in enumerate(self.interface_positions):
+            start = 6 * interface
+            rigid[start : start + 3, :3] = np.eye(3)
+            rigid[start : start + 3, 3:] = -self._skew(position)
+            rigid[start + 3 : start + 6, 3:] = np.eye(3)
+
+        relative_dofs = np.concatenate(
+            [
+                np.arange(6 * interface, 6 * interface + 6, dtype=np.int32)
+                for interface in range(self.interface_count)
+                if interface != self.reference_interface
+            ]
+        )
+        relative = np.eye(self.interface_dof_count, dtype=np.float64)[:, relative_dofs]
+        return rigid, relative
+
+    def _extract_rigid_properties(self, spatial_mass: np.ndarray) -> None:
+        translation_mass = spatial_mass[:3, :3]
+        mass = float(np.trace(translation_mass) / 3.0)
+        scale = max(float(np.max(np.abs(spatial_mass))), 1.0)
+        if mass <= 0.0:
+            raise ValueError(f"The interface mass matrix has non-positive rigid mass {mass}")
+        if np.max(np.abs(translation_mass - mass * np.eye(3))) > 1.0e-7 * scale:
+            raise ValueError("The interface mass matrix does not contain a physical rigid translational block")
+
+        com_skew = -spatial_mass[:3, 3:] / mass
+        if np.max(np.abs(com_skew + com_skew.T)) > 1.0e-7 * scale:
+            raise ValueError("The interface mass matrix does not contain a physical rigid translation-rotation block")
+        com = np.array([com_skew[2, 1], com_skew[0, 2], com_skew[1, 0]], dtype=np.float64)
+
+        inertia_origin = 0.5 * (spatial_mass[3:, 3:] + spatial_mass[3:, 3:].T)
+        parallel_axis = mass * ((com @ com) * np.eye(3) - np.outer(com, com))
+        inertia = inertia_origin - parallel_axis
+        if np.min(np.linalg.eigvalsh(inertia)) < -1.0e-7 * scale:
+            raise ValueError("The interface mass matrix produces a non-positive rigid inertia")
+
+        self.mass = mass
+        self.com = com
+        self.inertia = inertia
+
+    def build(self) -> ModalBasis:
+        """Build the six-DOF interface modal basis."""
+        boundary = slice(0, self.interface_dof_count)
+        mass = self.mass_matrix[boundary, boundary]
+        stiffness = self.stiffness_matrix[boundary, boundary]
+        damping = None if self.damping_matrix is None else self.damping_matrix[boundary, boundary]
+        rigid, relative = self._coordinate_maps()
+
+        stiffness_scale = max(float(np.linalg.norm(stiffness, ord=np.inf)), 1.0)
+        rigid_scale = max(float(np.linalg.norm(rigid, ord=np.inf)), 1.0)
+        rigid_stiffness_ratio = float(np.linalg.norm(stiffness @ rigid, ord=np.inf)) / (stiffness_scale * rigid_scale)
+        if rigid_stiffness_ratio > 1.0e-7:
+            raise ValueError(
+                "The interface stiffness matrix does not preserve the six rigid-body modes "
+                f"(relative residual {rigid_stiffness_ratio:.3g})"
+            )
+        if damping is not None:
+            damping_scale = max(float(np.linalg.norm(damping, ord=np.inf)), 1.0)
+            rigid_damping_ratio = float(np.linalg.norm(damping @ rigid, ord=np.inf)) / (damping_scale * rigid_scale)
+            if rigid_damping_ratio > 1.0e-7:
+                raise ValueError(
+                    "The interface damping matrix does not preserve the six rigid-body modes "
+                    f"(relative residual {rigid_damping_ratio:.3g})"
+                )
+
+        relative_mass = relative.T @ mass @ relative
+        relative_stiffness = relative.T @ stiffness @ relative
+        try:
+            chol = np.linalg.cholesky(relative_mass)
+        except np.linalg.LinAlgError as exc:
+            raise ValueError("The relative interface mass matrix must be positive definite") from exc
+
+        inv_chol_stiffness = np.linalg.solve(chol, relative_stiffness)
+        standard = np.linalg.solve(chol, inv_chol_stiffness.T).T
+        standard = 0.5 * (standard + standard.T)
+        eigenvalues, eigenvectors = np.linalg.eigh(standard)
+        if float(eigenvalues[0]) <= 0.0:
+            raise ValueError(
+                "The relative interface stiffness matrix must be positive definite after removing rigid modes"
+            )
+        relative_modes = np.linalg.solve(chol.T, eigenvectors)
+        for mode in range(relative_modes.shape[1]):
+            pivot = int(np.argmax(np.abs(relative_modes[:, mode])))
+            if relative_modes[pivot, mode] < 0.0:
+                relative_modes[:, mode] *= -1.0
+
+        boundary_modes = relative @ relative_modes
+        modal_matrix = np.zeros((self.reduced_dof_count, self.mode_count), dtype=np.float64)
+        modal_matrix[boundary, :] = boundary_modes
+        mode_mass = np.diag(boundary_modes.T @ mass @ boundary_modes)
+        mode_stiffness = np.diag(boundary_modes.T @ stiffness @ boundary_modes)
+
+        if damping is None:
+            mode_damping = np.zeros(self.mode_count, dtype=np.float64)
+            self.damping_off_diagonal_ratio = 0.0
+        else:
+            modal_damping = boundary_modes.T @ damping @ boundary_modes
+            modal_damping = 0.5 * (modal_damping + modal_damping.T)
+            diagonal = np.diag(modal_damping)
+            off_diagonal = modal_damping - np.diag(diagonal)
+            diagonal_scale = max(float(np.max(np.abs(diagonal))), np.finfo(np.float64).eps)
+            self.damping_off_diagonal_ratio = float(np.max(np.abs(off_diagonal))) / diagonal_scale
+            if self.damping_off_diagonal_ratio > self.damping_coupling_tolerance:
+                warnings.warn(
+                    "Craig-Bampton damping is not diagonal in the retained six-DOF interface basis; "
+                    f"discarding off-diagonal terms with relative magnitude {self.damping_off_diagonal_ratio:.3g}",
+                    stacklevel=2,
+                )
+            mode_damping = np.maximum(diagonal, 0.0)
+
+        recovery_boundary = self.recovery_matrix[:, boundary]
+        sample_rigid = np.hstack(
+            (
+                np.tile(np.eye(3), (self.sample_points.shape[0], 1)),
+                np.vstack([-self._skew(point) for point in self.sample_points]),
+            )
+        )
+        recovery_scale = max(float(np.max(np.abs(sample_rigid))), 1.0)
+        recovery_rigid_error = float(np.max(np.abs(recovery_boundary @ rigid - sample_rigid)))
+        if recovery_rigid_error > 1.0e-6 * recovery_scale:
+            raise ValueError(
+                "recovery_matrix is inconsistent with rigid motion of sample_points "
+                f"(maximum error {recovery_rigid_error:.3g})"
+            )
+
+        recovered_modes = recovery_boundary @ boundary_modes
+        sample_phi = np.transpose(
+            recovered_modes.reshape((self.sample_points.shape[0], 3, self.mode_count)),
+            (0, 2, 1),
+        )
+        sample_psi = _estimate_sample_psi(self.sample_points, sample_phi)
+        basis_points = np.array(self.sample_points, dtype=np.float32, copy=True)
+        basis_phi = np.array(sample_phi, dtype=np.float32, copy=True)
+        basis_psi = np.array(sample_psi, dtype=np.float32, copy=True)
+
+        self.interface_sample_indices = {}
+        for interface, (name, point) in enumerate(zip(self.interface_names, self.interface_positions, strict=True)):
+            start = 6 * interface
+            interface_phi = boundary_modes[start : start + 3].T.astype(np.float32)
+            interface_psi = boundary_modes[start + 3 : start + 6].T.astype(np.float32)
+            distances = np.linalg.norm(basis_points.astype(np.float64) - point, axis=1)
+            matching = np.nonzero(distances <= 1.0e-7)[0]
+            if matching.shape[0] > 0:
+                sample_index = int(matching[0])
+                basis_phi[sample_index] = interface_phi
+                basis_psi[sample_index] = interface_psi
+            else:
+                sample_index = int(basis_points.shape[0])
+                basis_points = np.vstack((basis_points, point.astype(np.float32)))
+                basis_phi = np.concatenate((basis_phi, interface_phi[None]), axis=0)
+                basis_psi = np.concatenate((basis_psi, interface_psi[None]), axis=0)
+            self.interface_sample_indices[name] = sample_index
+
+        spatial_mass = rigid.T @ mass @ rigid
+        self._extract_rigid_properties(spatial_mass)
+        rigid_modal_mass = rigid.T @ mass @ boundary_modes
+        coupling_linear = rigid_modal_mass[:3].T
+        coupling_angular = -rigid_modal_mass[3:].T
+
+        self.relative_modes = np.array(relative_modes, dtype=np.float64, copy=True)
+        self.modal_matrix = modal_matrix
+        self.frequencies = np.sqrt(np.maximum(mode_stiffness / np.maximum(mode_mass, 1.0e-12), 0.0)) / (2.0 * math.pi)
+
+        return ModalBasis(
+            sample_points=basis_points,
+            sample_phi=basis_phi,
+            sample_psi=basis_psi,
+            mode_mass=mode_mass,
+            mode_stiffness=mode_stiffness,
+            mode_damping=mode_damping,
+            mode_coupling_linear=coupling_linear,
+            mode_coupling_angular=coupling_angular,
+            label=self.label,
+        )
+
+
 class ModalGeneratorPOD:
     """Build linear modal basis functions with proper orthogonal decomposition.
 
@@ -1196,6 +1530,7 @@ class ModalGeneratorBeam:
 __all__ = [
     "ModalBasis",
     "ModalGeneratorBeam",
+    "ModalGeneratorCraigBampton",
     "ModalGeneratorFEM",
     "ModalGeneratorPOD",
     "ModalGeneratorSampled",

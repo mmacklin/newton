@@ -330,6 +330,123 @@ def test_modal_generator_fem_matrix_rom(test, device):
     np.testing.assert_allclose(basis.sample_phi[1], np.zeros((3, 3)), atol=1.0e-7)
 
 
+def test_modal_generator_craig_bampton_interface_modes(test, device):
+    interface_positions = np.array([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=np.float64)
+
+    def skew(value):
+        x, y, z = value
+        return np.array([[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]], dtype=np.float64)
+
+    rigid_map = np.zeros((12, 6), dtype=np.float64)
+    for interface, position in enumerate(interface_positions):
+        start = 6 * interface
+        rigid_map[start : start + 3, :3] = np.eye(3)
+        rigid_map[start : start + 3, 3:] = -skew(position)
+        rigid_map[start + 3 : start + 6, 3:] = np.eye(3)
+
+    relative_map = np.zeros((12, 6), dtype=np.float64)
+    relative_map[6:, :] = np.eye(6)
+    coordinate_map = np.column_stack((rigid_map, relative_map))
+
+    spatial_mass = np.diag([4.0, 4.0, 4.0, 0.2, 0.3, 0.4])
+    relative_mass = np.diag([2.0, 2.5, 3.0, 0.5, 0.6, 0.7])
+    relative_mass[0, 1] = relative_mass[1, 0] = 0.2
+    relative_stiffness = np.diag([20.0, 30.0, 40.0, 5.0, 6.0, 7.0])
+    relative_stiffness[1, 2] = relative_stiffness[2, 1] = 1.5
+    relative_damping = 0.02 * relative_mass + 0.003 * relative_stiffness
+    relative_damping[0, 3] = relative_damping[3, 0] = 0.01
+    rigid_relative_mass = np.diag([0.10, -0.08, 0.06, 0.02, -0.015, 0.01])
+
+    transformed_mass = np.zeros((12, 12), dtype=np.float64)
+    transformed_mass[:6, :6] = spatial_mass
+    transformed_mass[:6, 6:] = rigid_relative_mass
+    transformed_mass[6:, :6] = rigid_relative_mass.T
+    transformed_mass[6:, 6:] = relative_mass
+    transformed_stiffness = np.zeros((12, 12), dtype=np.float64)
+    transformed_stiffness[6:, 6:] = relative_stiffness
+    transformed_damping = np.zeros((12, 12), dtype=np.float64)
+    transformed_damping[6:, 6:] = relative_damping
+
+    inverse_map = np.linalg.inv(coordinate_map)
+    boundary_mass = inverse_map.T @ transformed_mass @ inverse_map
+    boundary_stiffness = inverse_map.T @ transformed_stiffness @ inverse_map
+    boundary_damping = inverse_map.T @ transformed_damping @ inverse_map
+
+    mass = np.zeros((14, 14), dtype=np.float64)
+    stiffness = np.zeros((14, 14), dtype=np.float64)
+    damping = np.zeros((14, 14), dtype=np.float64)
+    mass[:12, :12] = boundary_mass
+    stiffness[:12, :12] = boundary_stiffness
+    damping[:12, :12] = boundary_damping
+    mass[12:, 12:] = np.diag([1.0, 1.1])
+    stiffness[12:, 12:] = np.diag([100.0, 120.0])
+    damping[12:, 12:] = np.diag([0.5, 0.6])
+
+    sample_points = np.array(
+        [
+            [-0.5, -0.1, -0.1],
+            [-0.5, 0.1, 0.1],
+            [0.0, -0.1, 0.1],
+            [0.0, 0.1, -0.1],
+            [0.5, -0.1, -0.1],
+            [0.5, 0.1, 0.1],
+        ],
+        dtype=np.float64,
+    )
+    sample_rigid_map = np.hstack(
+        (
+            np.tile(np.eye(3), (sample_points.shape[0], 1)),
+            np.vstack([-skew(point) for point in sample_points]),
+        )
+    )
+    sample_relative_map = np.zeros((3 * sample_points.shape[0], 6), dtype=np.float64)
+    x_weight = sample_points[:, 0] + 0.5
+    for sample, weight in enumerate(x_weight):
+        sample_relative_map[3 * sample : 3 * sample + 3, :3] = weight * np.eye(3)
+        sample_relative_map[3 * sample : 3 * sample + 3, 3:] = -weight * skew(sample_points[sample])
+    boundary_recovery = np.column_stack((sample_rigid_map, sample_relative_map)) @ inverse_map
+    recovery = np.column_stack((boundary_recovery, np.zeros((3 * sample_points.shape[0], 2))))
+
+    generator = newton.ModalGeneratorCraigBampton(
+        interface_positions=interface_positions,
+        interface_names=["left", "right"],
+        reference_interface="left",
+        mass_matrix=mass,
+        stiffness_matrix=stiffness,
+        damping_matrix=damping,
+        sample_points=sample_points,
+        recovery_matrix=recovery,
+    )
+    with test.assertWarnsRegex(UserWarning, "damping is not diagonal"):
+        basis = generator.build()
+
+    test.assertEqual(generator.discarded_mode_count, 2)
+    test.assertEqual(basis.mode_count, 6)
+    test.assertEqual(generator.reference_interface_name, "left")
+    test.assertEqual(set(generator.interface_sample_indices), {"left", "right"})
+    test.assertAlmostEqual(generator.mass, 4.0, places=6)
+    np.testing.assert_allclose(generator.com, 0.0, atol=1.0e-7)
+    np.testing.assert_allclose(generator.inertia, np.diag([0.2, 0.3, 0.4]), atol=1.0e-7)
+
+    boundary_modes = generator.modal_matrix[:12]
+    np.testing.assert_allclose(boundary_modes.T @ boundary_mass @ boundary_modes, np.eye(6), atol=1.0e-7)
+    np.testing.assert_allclose(
+        boundary_modes.T @ boundary_stiffness @ boundary_modes,
+        np.diag(basis.mode_stiffness),
+        atol=1.0e-5,
+    )
+    expected_rigid_modal_mass = rigid_relative_mass @ generator.relative_modes
+    np.testing.assert_allclose(basis.mode_coupling_linear, expected_rigid_modal_mass[:3].T, atol=1.0e-7)
+    np.testing.assert_allclose(basis.mode_coupling_angular, -expected_rigid_modal_mass[3:].T, atol=1.0e-7)
+
+    left = generator.interface_sample_indices["left"]
+    right = generator.interface_sample_indices["right"]
+    np.testing.assert_allclose(basis.sample_phi[left], 0.0, atol=1.0e-7)
+    np.testing.assert_allclose(basis.sample_psi[left], 0.0, atol=1.0e-7)
+    np.testing.assert_allclose(basis.sample_phi[right], generator.relative_modes[:3].T, atol=1.0e-7)
+    np.testing.assert_allclose(basis.sample_psi[right], generator.relative_modes[3:].T, atol=1.0e-7)
+
+
 def test_modal_basis_lumped_inertia_coupling(test, device):
     points = np.array([[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=np.float32)
     sample_phi = np.array(
@@ -2973,6 +3090,12 @@ for device in devices:
         TestReducedElasticBody,
         "test_modal_generator_fem_matrix_rom",
         test_modal_generator_fem_matrix_rom,
+        devices=[device],
+    )
+    add_function_test(
+        TestReducedElasticBody,
+        "test_modal_generator_craig_bampton_interface_modes",
+        test_modal_generator_craig_bampton_interface_modes,
         devices=[device],
     )
     add_function_test(

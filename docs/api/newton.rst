@@ -51,6 +51,7 @@ newton
    Mesh
    ModalBasis
    ModalGeneratorBeam
+   ModalGeneratorCraigBampton
    ModalGeneratorFEM
    ModalGeneratorPOD
    ModalGeneratorSampled
