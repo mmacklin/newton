@@ -28,6 +28,7 @@ def solve_tendon_stretch(
     body_inv_inertia: wp.array[wp.mat33],
     tendon_link_body: wp.array[int],
     tendon_link_type: wp.array[int],
+    tendon_link_offset: wp.array[wp.vec3],
     tendon_link_axis: wp.array[wp.vec3],
     seg_rest_length: wp.array[float],
     seg_attachment_l: wp.array[wp.vec3],
@@ -112,27 +113,41 @@ def solve_tendon_stretch(
     linear_r = n
     angular_l = -wp.cross(r_l, n)
     angular_r = wp.cross(r_r, n)
+    # Remove only spin about the roller center; motion of an off-center roller
+    # remains part of the rigid-body Jacobian.
     if link_type_l == int(TendonLinkType.ROLLING):
+        center_l = wp.transform_point(pose_l, tendon_link_offset[link_l])
         normal_l = wp.transform_vector(pose_l, tendon_link_axis[link_l])
-        angular_l = angular_l - wp.dot(angular_l, normal_l) * normal_l
+        radial_l = x_l - center_l
+        angular_l = angular_l - wp.dot(wp.cross(radial_l, linear_l), normal_l) * normal_l
     if link_type_r == int(TendonLinkType.ROLLING):
+        center_r = wp.transform_point(pose_r, tendon_link_offset[link_r])
         normal_r = wp.transform_vector(pose_r, tendon_link_axis[link_r])
-        angular_r = angular_r - wp.dot(angular_r, normal_r) * normal_r
-
-    # constraint velocity
-    derr = wp.dot(linear_l, vel_l) + wp.dot(linear_r, vel_r) + wp.dot(angular_l, omega_l) + wp.dot(angular_r, omega_r)
-
-    # effective mass
-    denom = 0.0
-    denom += wp.length_sq(linear_l) * m_inv_l
-    denom += wp.length_sq(linear_r) * m_inv_r
+        radial_r = x_r - center_r
+        angular_r = angular_r - wp.dot(wp.cross(radial_r, linear_r), normal_r) * normal_r
 
     rot_l = wp.transform_get_rotation(pose_l)
     rot_r = wp.transform_get_rotation(pose_r)
-    rot_ang_l = wp.quat_rotate_inv(rot_l, angular_l)
-    rot_ang_r = wp.quat_rotate_inv(rot_r, angular_r)
-    denom += wp.dot(rot_ang_l, I_inv_l * rot_ang_l)
-    denom += wp.dot(rot_ang_r, I_inv_r * rot_ang_r)
+
+    derr = 0.0
+    denom = 0.0
+    if body_l == body_r:
+        # A shared body has one velocity, so combine its endpoint Jacobians before
+        # forming the effective mass instead of treating it as two independent bodies.
+        linear = linear_l + linear_r
+        angular = angular_l + angular_r
+        derr = wp.dot(linear, vel_l) + wp.dot(angular, omega_l)
+        rot_ang = wp.quat_rotate_inv(rot_l, angular)
+        denom = wp.length_sq(linear) * m_inv_l + wp.dot(rot_ang, I_inv_l * rot_ang)
+    else:
+        derr = (
+            wp.dot(linear_l, vel_l) + wp.dot(linear_r, vel_r) + wp.dot(angular_l, omega_l) + wp.dot(angular_r, omega_r)
+        )
+        denom = wp.length_sq(linear_l) * m_inv_l + wp.length_sq(linear_r) * m_inv_r
+        rot_ang_l = wp.quat_rotate_inv(rot_l, angular_l)
+        rot_ang_r = wp.quat_rotate_inv(rot_r, angular_r)
+        denom += wp.dot(rot_ang_l, I_inv_l * rot_ang_l)
+        denom += wp.dot(rot_ang_r, I_inv_r * rot_ang_r)
 
     alpha = compliance * compliance_lambda_scale
     gamma = compliance * damping
@@ -154,14 +169,20 @@ def solve_tendon_stretch(
     lin_delta_r = linear_r * d_lambda
     ang_delta_r = angular_r * d_lambda
 
-    wp.atomic_add(body_deltas, body_l, wp.spatial_vector(lin_delta_l, ang_delta_l))
-    wp.atomic_add(body_deltas, body_r, wp.spatial_vector(lin_delta_r, ang_delta_r))
+    if body_l == body_r:
+        wp.atomic_add(
+            body_deltas,
+            body_l,
+            wp.spatial_vector(lin_delta_l + lin_delta_r, ang_delta_l + ang_delta_r),
+        )
+    else:
+        wp.atomic_add(body_deltas, body_l, wp.spatial_vector(lin_delta_l, ang_delta_l))
+        wp.atomic_add(body_deltas, body_r, wp.spatial_vector(lin_delta_r, ang_delta_r))
 
 
 @wp.kernel
 def solve_tendon_slip(
     body_q: wp.array[wp.transform],
-    body_com: wp.array[wp.vec3],
     tendon_start: wp.array[int],
     tendon_link_body: wp.array[int],
     tendon_link_type: wp.array[int],
@@ -251,7 +272,8 @@ def solve_tendon_slip(
         allowed_diff = beta * force_sum
         scale = wp.min(1.0, allowed_diff / wp.max(force_diff, 1.0e-8))
 
-        world_com = wp.transform_point(pose, body_com[body])
+        # Stretch retains center-motion torque; add only friction-limited spin
+        # about the roller center here.
         spin_delta = wp.vec3(0.0, 0.0, 0.0)
 
         x_l = seg_attachment_l[seg_left]
@@ -260,7 +282,7 @@ def solve_tendon_slip(
         dist = wp.length(diff)
         if dist > 1.0e-8:
             n = diff / dist
-            r = x_r - world_com
+            r = x_r - center
             angular = wp.cross(r, n)
             candidate = angular * seg_delta_lambda[seg_left]
             spin_delta = spin_delta + normal * wp.dot(candidate, normal)
@@ -271,7 +293,7 @@ def solve_tendon_slip(
         dist = wp.length(diff)
         if dist > 1.0e-8:
             n = diff / dist
-            r = x_l - world_com
+            r = x_l - center
             angular = -wp.cross(r, n)
             candidate = angular * seg_delta_lambda[seg_right]
             spin_delta = spin_delta + normal * wp.dot(candidate, normal)
