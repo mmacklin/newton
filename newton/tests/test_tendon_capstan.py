@@ -18,6 +18,7 @@ import warp as wp
 import newton
 from newton._src.sim.builder import Axis
 from newton._src.sim.tendon import TendonLinkFlags, TendonLinkType
+from newton._src.solvers.xpbd.tendon_kernels import solve_tendon_slip
 from newton.examples.cable.cable import get_tendon_cable_lines
 from newton.examples.cable.example_tendon_capstan_friction import Example as DynamicCapstanExample
 from newton.examples.cable.example_tendon_mujoco_switch import Example as MujocoSwitchExample
@@ -1980,6 +1981,71 @@ def test_simple_cable_gravity_tension_independent_of_relaxation(test, device):
             )
 
 
+def test_tendon_slip_uses_true_segment_compliance(test, device):
+    """The rolling-slip cone should use the same physical tension as material transfer."""
+    with wp.ScopedDevice(device):
+        compliance_l = 1.0e-9
+        compliance_r = 1.0e-7
+        rest_l = 1.0 - 1.0e-6
+        rest_r = 1.0 - 1.0e-4
+        mu = 0.1
+
+        body_q = wp.array([wp.transform_identity()], dtype=wp.transform)
+        body_com = wp.zeros(1, dtype=wp.vec3)
+        tendon_start = wp.array([0, 3], dtype=int)
+        tendon_link_body = wp.array([0, 0, 0], dtype=int)
+        tendon_link_type = wp.array(
+            [int(TendonLinkType.ATTACHMENT), int(TendonLinkType.ROLLING), int(TendonLinkType.ATTACHMENT)],
+            dtype=int,
+        )
+        tendon_link_radius = wp.array([0.0, 1.0, 0.0], dtype=float)
+        tendon_link_mu = wp.array([0.0, mu, 0.0], dtype=float)
+        tendon_link_active = wp.ones(3, dtype=bool)
+        tendon_link_offset = wp.zeros(3, dtype=wp.vec3)
+        tendon_link_axis = wp.array([wp.vec3(0.0, 1.0, 0.0)] * 3, dtype=wp.vec3)
+        seg_rest_length = wp.array([rest_l, rest_r], dtype=float)
+        seg_attachment_l = wp.array([wp.vec3(-1.0, 0.0, -1.0), wp.vec3(1.0, 0.0, 0.0)], dtype=wp.vec3)
+        seg_attachment_r = wp.array([wp.vec3(-1.0, 0.0, 0.0), wp.vec3(1.0, 0.0, -1.0)], dtype=wp.vec3)
+        seg_compliance = wp.array([compliance_l, compliance_r], dtype=float)
+        seg_delta_lambda = wp.array([-1.0, 0.0], dtype=float)
+        body_deltas = wp.zeros(1, dtype=wp.spatial_vector)
+
+        wp.launch(
+            solve_tendon_slip,
+            dim=1,
+            inputs=[
+                body_q,
+                body_com,
+                tendon_start,
+                tendon_link_body,
+                tendon_link_type,
+                tendon_link_radius,
+                tendon_link_mu,
+                tendon_link_active,
+                tendon_link_offset,
+                tendon_link_axis,
+                seg_rest_length,
+                seg_attachment_l,
+                seg_attachment_r,
+                seg_compliance,
+                seg_delta_lambda,
+                1.0,
+            ],
+            outputs=[body_deltas],
+        )
+
+        rest = seg_rest_length.numpy()
+        compliance = seg_compliance.numpy()
+        force_l = (1.0 - float(rest[0])) / float(compliance[0])
+        force_r = (1.0 - float(rest[1])) / float(compliance[1])
+        cap_ratio = math.exp(mu * math.pi)
+        beta = (cap_ratio - 1.0) / (cap_ratio + 1.0)
+        scale = min(1.0, beta * (force_l + force_r) / max(abs(force_l - force_r), 1.0e-8))
+        expected_spin_y = -scale * beta
+
+        test.assertAlmostEqual(float(body_deltas.numpy()[0, 4]), expected_spin_y, delta=1.0e-6)
+
+
 def test_motorized_pulley_drives_slider(test, device):
     """A rolling drive pulley must convert rotation into cable sliding."""
     with wp.ScopedDevice(device):
@@ -2541,6 +2607,12 @@ add_test(
     "simple_cable_gravity_tension_independent_of_relaxation",
     devices,
     test_simple_cable_gravity_tension_independent_of_relaxation,
+)
+add_test(
+    TestTendonCapstan,
+    "tendon_slip_uses_true_segment_compliance",
+    devices,
+    test_tendon_slip_uses_true_segment_compliance,
 )
 add_test(
     TestTendonCapstan,

@@ -241,8 +241,9 @@ def solve_tendon_slip(
         if d_r < 0.0:
             d_r = 0.0
 
-        comp_l = wp.max(seg_compliance[seg_left], 1.0e-8)
-        comp_r = wp.max(seg_compliance[seg_right], 1.0e-8)
+        # Match the material-transfer cone: guard division by zero without changing physical compliance.
+        comp_l = wp.max(seg_compliance[seg_left], 1.0e-30)
+        comp_r = wp.max(seg_compliance[seg_right], 1.0e-30)
         force_l = d_l / comp_l
         force_r = d_r / comp_r
 
