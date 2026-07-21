@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "reports" / "vbd_complex_linkages"
-OUTPUT = Path.home() / "reports" / ".hidden" / "vbd-complex-linkages"
+OUTPUT = Path.home() / "reports" / "vbd-complex-linkages"
 VIDEO_SOURCE = Path.home() / "reports" / "vbd-complex-linkages" / "videos"
 ASSET_SOURCE = SOURCE / "assets"
 FORMULATION_DATA_SOURCE = SOURCE / "formulation_data"
@@ -127,6 +127,7 @@ def main() -> None:
     foot = _load("robot_foot_compatible_results.json")
     foot_geometry = _load("robot_foot_geometry_diagnostic.json")
     g1 = _load("g1_ankle_results.json")
+    h2 = _load("h2_loop_results.json")
     dr_free_ankle = _load("dr_legs_free_ankle_results.json")
     dr_free_ankle_cuda = _load("dr_legs_free_ankle_cuda_results.json")
     matrix = _load("dr_legs_matrix_diagnostic.json")
@@ -139,7 +140,9 @@ def main() -> None:
     videos.mkdir(exist_ok=True)
     for path in VIDEO_SOURCE.iterdir():
         if path.suffix in (".mp4", ".jpg", ".json"):
-            shutil.copy2(path, videos / path.name)
+            destination = videos / path.name
+            if path.resolve() != destination.resolve():
+                shutil.copy2(path, destination)
     for source_dir, output_name in ((ASSET_SOURCE, "assets"), (FORMULATION_DATA_SOURCE, "formulation_data")):
         output_dir = OUTPUT / output_name
         if output_dir.exists():
@@ -149,6 +152,7 @@ def main() -> None:
         "robot_foot_compatible_results.json",
         "robot_foot_geometry_diagnostic.json",
         "g1_ankle_results.json",
+        "h2_loop_results.json",
         "dr_legs_free_ankle_results.json",
         "dr_legs_free_ankle_cuda_results.json",
         "dr_legs_matrix_diagnostic.json",
@@ -168,6 +172,10 @@ def main() -> None:
     g1_kamino = _row(g1, "kamino")
     g1_local = next(row for row in g1["rows"] if row.get("vbd_solve") == "local")
     g1_sparse = next(row for row in g1["rows"] if row.get("vbd_solve") == "block_sparse_joints")
+    h2_rows = {row["case"]: row for row in h2["rows"]}
+    h2_local_i8 = h2_rows["local_i8"]
+    h2_local_i32 = h2_rows["local_i32"]
+    h2_sparse_i8 = h2_rows["sparse_i8"]
     dr_free_kamino = _row(dr_free_ankle, "kamino")
     dr_free_local = next(row for row in dr_free_ankle["rows"] if row.get("vbd_solve") == "local")
     dr_free_sparse = next(row for row in dr_free_ankle["rows"] if row.get("vbd_solve") == "block_sparse_joints")
@@ -234,7 +242,7 @@ figure>svg{{display:block;width:100%;height:auto;border:1px solid var(--line);ba
 
 <h2>Summary</h2>
 <div class="status"><strong>Sparse VBD gives the lowest closure error on the feasible driven linkages.</strong> On the compatible three-pushrod foot it reduces aggregate closure RMS by {foot_local["rms_closure_um"] / foot_sparse["rms_closure_um"]:.1f}x versus local VBD and {foot_rows["kamino"]["rms_closure_um"] / foot_sparse["rms_closure_um"]:.1f}x versus tuned Kamino. On the G1 ankle settling test the corresponding reductions are {g1_local["rms_closure_um"] / g1_sparse["rms_closure_um"]:.1f}x and {g1_kamino["rms_closure_um"] / g1_sparse["rms_closure_um"]:.1f}x.</div>
-<p>On the contact-free robot foot, CPU-graph median substep latency is {_fmt(foot_local["p50_step_us"] / 1.0e3, 3)} ms for local VBD and {_fmt(foot_sparse["p50_step_us"] / 1.0e3, 3)} ms for sparse VBD; the sparse solve spends slightly more time but reaches lower closure error. In the larger DR Legs test, sparse VBD costs {_fmt(dr_free_sparse["p50_solver_us"] / 1.0e3, 3)} ms for CPU-graph solver replay and {_fmt((dr_free_sparse["p50_solver_us"] + dr_free_sparse["p50_collision_us"]) / 1.0e3, 3)} ms including dispatched collision; local VBD becomes nonfinite and Kamino reaches its iteration cap on most substeps.</p>
+<p>On Unitree's public 55-body H2 model with six reconstructed loop rods, sparse i8 matches local i32 within 5% aggregate closure RMS while taking {_fmt(h2_local_i32["p50_step_us"] / h2_sparse_i8["p50_step_us"], 2)}x less CPU wall time. Local i8 diverges under the same physical parameters. On the contact-free robot foot, CPU-graph median substep latency is {_fmt(foot_local["p50_step_us"] / 1.0e3, 3)} ms for local VBD and {_fmt(foot_sparse["p50_step_us"] / 1.0e3, 3)} ms for sparse VBD; the sparse solve spends slightly more time but reaches lower closure error. In the larger DR Legs test, sparse VBD costs {_fmt(dr_free_sparse["p50_solver_us"] / 1.0e3, 3)} ms for CPU-graph solver replay and {_fmt((dr_free_sparse["p50_solver_us"] + dr_free_sparse["p50_collision_us"]) / 1.0e3, 3)} ms including dispatched collision; local VBD becomes nonfinite and Kamino reaches its iteration cap on most substeps.</p>
 
 <h2>Solver landscape</h2>
 <p>Two choices organize the methods compared here. A <em>reduced-coordinate</em> model stores joint coordinates and derives body poses from an articulation tree. A <em>maximal-coordinate</em> model stores every body pose independently and enforces joints between bodies. A <em>primal</em> solve updates positions or pose increments directly, while a <em>dual</em> or primal-dual solve introduces constraint reactions or multipliers.</p>
@@ -327,6 +335,8 @@ apply_pose_updates(delta, relaxation)</code></pre>
   <a href="{GITHUB_BLOB}/newton/_src/solvers/vbd/rigid_sparse_articulation_kernels.py">Warp assembly and solve kernels</a>
   <a href="{GITHUB_BLOB}/newton/_src/solvers/vbd/solver_vbd.py">Solver integration</a>
   <a href="{GITHUB_BLOB}/newton/examples/kamino/example_kamino_robot_foot.py">Three-pushrod robot-foot example</a>
+  <a href="{GITHUB_BLOB}/reports/vbd_complex_linkages/bench_h2_loop.py">H2 loop benchmark</a>
+  <a href="{GITHUB_BLOB}/reports/vbd_complex_linkages/render_h2_loop.py">H2 ViewerGL renderer</a>
   <a href="{GITHUB_BLOB}/newton/tests/test_vbd_sparse_articulation.py">Regression tests</a>
   <a href="{GITHUB_BLOB}/reports/vbd_sparse_articulation/bench_vbd_sparse_articulation.py">Synthetic benchmark</a>
   <a href="{GITHUB_BLOB}/reports/vbd_sparse_articulation/bench_robot_perf.py">Robot performance harness</a>
@@ -378,7 +388,7 @@ apply_pose_updates(delta, relaxation)</code></pre>
 <p class="note">Raw data: <a href="visual_validation_results.json">visual validation and cable convergence JSON</a>. The i1 sparse point is slightly faster than local i1 in this run, so no slower local point exists strictly inside its measured budget; later sparse points use the best local row at or below their p50 latency.</p>
 
 <h2>Evaluation methods</h2>
-<p>CPU measurements use Warp's single-threaded CPU backend on one AMD EPYC 9B45 core. GPU measurements use an NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb partition. Contact-free VBD timings for the robot foot and cable replay the complete solver step through fixed-buffer CPU graphs. For DR Legs VBD on CPU, Newton collision runs through normal dispatch and the solver replays one of two fixed-buffer CPU graphs. Kamino CPU remains fully dispatched because its host-controlled PADMM path is not graph-replay safe. The DR Legs CUDA rows alternate two fixed-buffer CUDA graphs for the two state-buffer directions. Each CUDA graph contains force clear, Newton collision, and the complete solver step. Every measured component or graph replay is synchronized for wall-clock measurement.</p>
+<p>CPU measurements use Warp's single-threaded CPU backend on one AMD EPYC 9B45 core. GPU measurements use an NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb partition. H2 timings use synchronized CPU dispatch. Contact-free VBD timings for the robot foot and cable replay the complete solver step through fixed-buffer CPU graphs. For DR Legs VBD on CPU, Newton collision runs through normal dispatch and the solver replays one of two fixed-buffer CPU graphs. Kamino CPU remains fully dispatched because its host-controlled PADMM path is not graph-replay safe. The DR Legs CUDA rows alternate two fixed-buffer CUDA graphs for the two state-buffer directions. Each CUDA graph contains force clear, Newton collision, and the complete solver step. Every measured component or graph replay is synchronized for wall-clock measurement.</p>
 <h3 class="analysis-heading">Metrics and glossary</h3>
 <dl class="glossary">
   <div><dt>Closure joint</dt><dd>A joint edge selected to close a cycle in the articulation graph. Its parent and child anchors should coincide in world space.</dd></div>
@@ -447,6 +457,29 @@ apply_pose_updates(delta, relaxation)</code></pre>
 {_video("g1_ankle_sparse_tilt_pr_ik_viewergl_cuda_mesh.mp4", "VBD sparse direct", "The coupled solve preserves the closed-loop motion.")}
 </div>
 
+<h2 id="unitree-h2">Unitree H2: six closed-loop rods</h2>
+<p><span class="pill">55 bodies</span><span class="pill">61 joints</span><span class="pill">6 closure joints</span><span class="pill">73 DOFs</span></p>
+<p>The <a href="{h2["source_url"]}">public Unitree H2 loop URDF</a> encodes ankle, knee, and waist loops on both sides as paired endpoint links. The benchmark reconstructs each finite-length member as a proximal ball joint and a distal ball closure, matching the topology documented by Unitree's companion model, and places all bodies and joints in one maximal-coordinate Newton articulation. The imported rest pose begins with {h2_local_i8["initial_closure"]["aggregate_um"]:.3f} µm aggregate closure error.</p>
+<p>This is a fixed-base, zero-gravity actuation test without contact. The two ankle-A joints, two knee motors, and two torso constraint joints receive sinusoidal position targets for 180 frames. Every case uses <code>dt=1/240 s</code>, 4 substeps per 60 Hz frame, <code>ke=2e5</code>, and <code>kd=500</code>. The source model is pinned to commit <code>{h2["source_commit"][:12]}</code> and retains its BSD-3-Clause license.</p>
+<h3 class="analysis-heading">Error analysis</h3>
+<table><thead><tr><th>CPU solver</th><th>Status</th><th>Aggregate closure RMS [µm]</th><th>Peak aggregate closure [µm]</th><th>Final aggregate closure [µm]</th><th>Peak body speed [m/s]</th></tr></thead><tbody>
+<tr><td>VBD local, i8</td><td>{h2_local_i8["status"]}</td><td>{_fmt(h2_local_i8["rms_aggregate_closure_um"], 1)}</td><td>{_fmt(h2_local_i8["max_aggregate_closure_um"], 1)}</td><td>{_fmt(h2_local_i8["final_closure"]["aggregate_um"], 1)}</td><td>{_fmt(h2_local_i8["max_body_speed_mps"], 2)}</td></tr>
+<tr><td>VBD local, i32</td><td>{h2_local_i32["status"]}</td><td><strong>{_fmt(h2_local_i32["rms_aggregate_closure_um"], 1)}</strong></td><td>{_fmt(h2_local_i32["max_aggregate_closure_um"], 1)}</td><td>{_fmt(h2_local_i32["final_closure"]["aggregate_um"], 1)}</td><td>{_fmt(h2_local_i32["max_body_speed_mps"], 3)}</td></tr>
+<tr><td><strong>VBD sparse direct, i8</strong></td><td>{h2_sparse_i8["status"]}</td><td><strong>{_fmt(h2_sparse_i8["rms_aggregate_closure_um"], 1)}</strong></td><td>{_fmt(h2_sparse_i8["max_aggregate_closure_um"], 1)}</td><td>{_fmt(h2_sparse_i8["final_closure"]["aggregate_um"], 1)}</td><td>{_fmt(h2_sparse_i8["max_body_speed_mps"], 3)}</td></tr>
+</tbody></table>
+<p class="note">A run is marked divergent when it remains finite but exceeds either 10 mm aggregate closure or 5 m/s body speed. This prevents a numerically finite but physically invalid local-i8 trajectory from being counted as successful.</p>
+<h3 class="analysis-heading">Performance at achieved error</h3>
+<table><thead><tr><th>CPU solver</th><th>Timing path</th><th>p50 substep [ms]</th><th>p90 substep [ms]</th><th>Speedup vs local i32</th></tr></thead><tbody>
+<tr><td>VBD local, i8</td><td>synchronized dispatch</td><td>{_fmt(h2_local_i8["p50_step_us"] / 1.0e3, 3)}</td><td>{_fmt(h2_local_i8["p90_step_us"] / 1.0e3, 3)}</td><td>divergent</td></tr>
+<tr><td>VBD local, i32</td><td>synchronized dispatch</td><td>{_fmt(h2_local_i32["p50_step_us"] / 1.0e3, 3)}</td><td>{_fmt(h2_local_i32["p90_step_us"] / 1.0e3, 3)}</td><td>1.00x</td></tr>
+<tr><td><strong>VBD sparse direct, i8</strong></td><td>synchronized dispatch</td><td><strong>{_fmt(h2_sparse_i8["p50_step_us"] / 1.0e3, 3)}</strong></td><td>{_fmt(h2_sparse_i8["p90_step_us"] / 1.0e3, 3)}</td><td><strong>{_fmt(h2_local_i32["p50_step_us"] / h2_sparse_i8["p50_step_us"], 2)}x</strong></td></tr>
+</tbody></table>
+<p>Sparse i8 reaches aggregate closure RMS within {100.0 * abs(h2_sparse_i8["rms_aggregate_closure_um"] / h2_local_i32["rms_aggregate_closure_um"] - 1.0):.1f}% of local i32 while requiring one quarter as many nonlinear iterations. The comparison therefore measures wall time at matched achieved error rather than comparing equal iteration counts alone.</p>
+<div class="validation-grid">
+{_video("h2_loop_local_i32.mp4", "VBD local, 32 iterations", "Full public H2 model under the six-joint drive cycle. Visual-only rod capsules draw the reconstructed loop members without changing dynamics.")}
+{_video("h2_loop_sparse_i8.mp4", "VBD sparse direct, 8 iterations", "The coupled solve reproduces the same stable motion and closure quality in four times fewer iterations.")}
+</div>
+
 <h2>DR Legs with ground contact</h2>
 <p><span class="pill">31 bodies</span><span class="pill">36 revolute joints</span><span class="pill">6 graph-cycle closures</span></p>
 <p>This contact test releases the two foot-to-inner-ankle drives while retaining ten hip and linkage position drives at <code>kp=10</code>, <code>kd=2</code>. Gravity causes the mechanism to tip forward, exercising the closed loops during changing ground contact. The simulation uses <code>dt=0.01 s</code>, two substeps per 50 Hz frame, and 8 iterations for both VBD modes.</p>
@@ -480,7 +513,7 @@ apply_pose_updates(delta, relaxation)</code></pre>
 <h2>Interpretation</h2>
 <p>For these configurations, articulation-wide sparse VBD gives lower geometric closure error than local VBD and Kamino. It is also faster than local VBD on the two contact-free CPU tests and is the only VBD mode to complete the DR Legs contact test. The result supports a unified maximal-coordinate rigid-body path in which joints receive a coupled direct solve while contact curvature remains block diagonal.</p>
 <p>These are achieved-error comparisons, not equal-tolerance benchmarks. VBD uses a fixed eight nonlinear iterations, while Kamino uses residual-based PADMM stopping with different constraint and contact models. CPU VBD solver timings retain CPU-graph launch and synchronization overhead plus separately dispatched collision; Kamino CPU retains normal dispatch overhead. CUDA graph timings retain graph launch and synchronization overhead. The single-articulation GPU workloads do not saturate the device.</p>
-<p class="note">Reproducible data: <a href="robot_foot_compatible_results.json">compatible robot foot</a>, <a href="robot_foot_geometry_diagnostic.json">foot geometry check</a>, <a href="g1_ankle_results.json">G1 ankle</a>, <a href="dr_legs_free_ankle_results.json">DR Legs CPU</a>, <a href="dr_legs_free_ankle_cuda_results.json">DR Legs CUDA</a>, <a href="dr_legs_matrix_diagnostic.json">numerical checks</a>, and <a href="visual_validation_results.json">public visual validations</a>.</p>
+<p class="note">Reproducible data: <a href="robot_foot_compatible_results.json">compatible robot foot</a>, <a href="robot_foot_geometry_diagnostic.json">foot geometry check</a>, <a href="g1_ankle_results.json">G1 ankle</a>, <a href="h2_loop_results.json">Unitree H2 loops</a>, <a href="dr_legs_free_ankle_results.json">DR Legs CPU</a>, <a href="dr_legs_free_ankle_cuda_results.json">DR Legs CUDA</a>, <a href="dr_legs_matrix_diagnostic.json">numerical checks</a>, and <a href="visual_validation_results.json">public visual validations</a>.</p>
 </main></body></html>"""
     (OUTPUT / "index.html").write_text(body)
     print(OUTPUT / "index.html")

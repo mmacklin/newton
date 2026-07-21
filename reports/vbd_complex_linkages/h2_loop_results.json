@@ -1,0 +1,213 @@
+{
+  "asset_license": "BSD-3-Clause",
+  "closure_pairs": {
+    "left_ankle": [
+      "left_ankle_connect_rhs",
+      "left_ankle_connect_lhs"
+    ],
+    "left_knee": [
+      "left_knee_connect_rhs",
+      "left_knee_connect_lhs"
+    ],
+    "left_waist": [
+      "waist_connect_lhs",
+      "torso_connect_lhs"
+    ],
+    "right_ankle": [
+      "right_ankle_connect_lhs",
+      "right_ankle_connect_rhs"
+    ],
+    "right_knee": [
+      "right_knee_connect_lhs",
+      "right_knee_connect_rhs"
+    ],
+    "right_waist": [
+      "waist_connect_rhs",
+      "torso_connect_rhs"
+    ]
+  },
+  "conversion": "six finite-length rods reconstructed with a proximal BALL joint and a distal BALL closure",
+  "drive_phases": {
+    "left_ankle_A_joint": [
+      0.12,
+      0.0
+    ],
+    "left_knee_motor_joint": [
+      0.15,
+      0.0
+    ],
+    "right_ankle_A_joint": [
+      0.12,
+      3.141592653589793
+    ],
+    "right_knee_motor_joint": [
+      0.15,
+      3.141592653589793
+    ],
+    "torso_constraint_L_joint": [
+      0.08,
+      3.141592653589793
+    ],
+    "torso_constraint_R_joint": [
+      0.08,
+      0.0
+    ]
+  },
+  "rows": [
+    {
+      "articulation_count": 1,
+      "body_count": 55,
+      "case": "local_i8",
+      "closure_count": 6,
+      "device": "cpu",
+      "dt": 0.004166666666666667,
+      "final_closure": {
+        "aggregate_um": 62593.785213013674,
+        "joint_max_um": 44251.06786431471,
+        "joint_rms_um": 25553.80580687506,
+        "left_ankle_um": 791.5316879502791,
+        "left_knee_um": 9378.938088958432,
+        "left_waist_um": 41020.85325356854,
+        "right_ankle_um": 10409.328935097534,
+        "right_knee_um": 8953.737071262263,
+        "right_waist_um": 44251.06786431471
+      },
+      "finite": true,
+      "frames_requested": 180,
+      "initial_closure": {
+        "aggregate_um": 0.0060770632105539,
+        "joint_max_um": 0.004877389659651467,
+        "joint_rms_um": 0.0024809506667494647,
+        "left_ankle_um": 0.0,
+        "left_knee_um": 0.0,
+        "left_waist_um": 0.003625157565264249,
+        "right_ankle_um": 0.0,
+        "right_knee_um": 0.0,
+        "right_waist_um": 0.004877389659651467
+      },
+      "iterations": 8,
+      "joint_count": 61,
+      "joint_dof_count": 73,
+      "joint_kd": 500.0,
+      "joint_ke": 200000.0,
+      "label": "VBD local, 8 iterations",
+      "max_aggregate_closure_um": 68422.57933858802,
+      "max_body_speed_mps": 157.54022216796875,
+      "max_joint_closure_um": 47358.90178232099,
+      "mean_step_us": 1926.1778675071482,
+      "mode": "local",
+      "p50_step_us": 1918.5692071914673,
+      "p90_step_us": 1926.100067794323,
+      "relaxation": 0.65,
+      "rms_aggregate_closure_um": 45838.287374521766,
+      "stable": false,
+      "status": "divergent",
+      "substeps_completed": 720,
+      "substeps_per_frame": 4
+    },
+    {
+      "articulation_count": 1,
+      "body_count": 55,
+      "case": "local_i32",
+      "closure_count": 6,
+      "device": "cpu",
+      "dt": 0.004166666666666667,
+      "final_closure": {
+        "aggregate_um": 172.0011640965293,
+        "joint_max_um": 120.71137424552221,
+        "joint_rms_um": 70.21918120020246,
+        "left_ankle_um": 2.639431117792127,
+        "left_knee_um": 24.724789777902288,
+        "left_waist_um": 119.9287910913145,
+        "right_ankle_um": 0.4019165733011748,
+        "right_knee_um": 3.436027150009241,
+        "right_waist_um": 120.71137424552221
+      },
+      "finite": true,
+      "frames_requested": 180,
+      "initial_closure": {
+        "aggregate_um": 0.0060770632105539,
+        "joint_max_um": 0.004877389659651467,
+        "joint_rms_um": 0.0024809506667494647,
+        "left_ankle_um": 0.0,
+        "left_knee_um": 0.0,
+        "left_waist_um": 0.003625157565264249,
+        "right_ankle_um": 0.0,
+        "right_knee_um": 0.0,
+        "right_waist_um": 0.004877389659651467
+      },
+      "iterations": 32,
+      "joint_count": 61,
+      "joint_dof_count": 73,
+      "joint_kd": 500.0,
+      "joint_ke": 200000.0,
+      "label": "VBD local, 32 iterations",
+      "max_aggregate_closure_um": 453.4850336558194,
+      "max_body_speed_mps": 0.11176794767379761,
+      "max_joint_closure_um": 312.80392263742647,
+      "mean_step_us": 7287.993260090136,
+      "mode": "local",
+      "p50_step_us": 7287.553511559963,
+      "p90_step_us": 7317.699259147048,
+      "relaxation": 0.65,
+      "rms_aggregate_closure_um": 307.4405558542238,
+      "stable": true,
+      "status": "ok",
+      "substeps_completed": 720,
+      "substeps_per_frame": 4
+    },
+    {
+      "articulation_count": 1,
+      "body_count": 55,
+      "case": "sparse_i8",
+      "closure_count": 6,
+      "device": "cpu",
+      "dt": 0.004166666666666667,
+      "final_closure": {
+        "aggregate_um": 179.63529284285062,
+        "joint_max_um": 126.26972727424433,
+        "joint_rms_um": 73.33580121006918,
+        "left_ankle_um": 0.7735659154622319,
+        "left_knee_um": 24.770960442908223,
+        "left_waist_um": 125.32758818945253,
+        "right_ankle_um": 0.038604241560789315,
+        "right_knee_um": 1.8946428852173025,
+        "right_waist_um": 126.26972727424433
+      },
+      "finite": true,
+      "frames_requested": 180,
+      "initial_closure": {
+        "aggregate_um": 0.0060770632105539,
+        "joint_max_um": 0.004877389659651467,
+        "joint_rms_um": 0.0024809506667494647,
+        "left_ankle_um": 0.0,
+        "left_knee_um": 0.0,
+        "left_waist_um": 0.003625157565264249,
+        "right_ankle_um": 0.0,
+        "right_knee_um": 0.0,
+        "right_waist_um": 0.004877389659651467
+      },
+      "iterations": 8,
+      "joint_count": 61,
+      "joint_dof_count": 73,
+      "joint_kd": 500.0,
+      "joint_ke": 200000.0,
+      "label": "VBD sparse direct, 8 iterations",
+      "max_aggregate_closure_um": 475.585731365443,
+      "max_body_speed_mps": 0.11842220276594162,
+      "max_joint_closure_um": 329.0626048913848,
+      "mean_step_us": 1725.8823849260807,
+      "mode": "block_sparse_joints",
+      "p50_step_us": 1715.3799999505281,
+      "p90_step_us": 1721.5040978044271,
+      "relaxation": 0.65,
+      "rms_aggregate_closure_um": 322.30362152297914,
+      "stable": true,
+      "status": "ok",
+      "substeps_completed": 720,
+      "substeps_per_frame": 4
+    }
+  ],
+  "source_commit": "aa0f5c68b5aba347bad409e71b6430407da758d7",
+  "source_url": "https://github.com/unitreerobotics/unitree_ros/blob/master/robots/h2_description/H2_loop.urdf"
+}
