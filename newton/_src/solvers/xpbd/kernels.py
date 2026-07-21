@@ -1539,6 +1539,7 @@ def solve_body_joints(
     joint_target_vel: wp.array[float],
     joint_target_ke: wp.array[float],
     joint_target_kd: wp.array[float],
+    iteration: int,
     joint_linear_compliance: float,
     joint_angular_compliance: float,
     angular_relaxation: float,
@@ -1546,6 +1547,7 @@ def solve_body_joints(
     dt: float,
     deltas: wp.array[wp.spatial_vector],
     joint_impulse: wp.array[wp.spatial_vector],
+    joint_lambdas: wp.array2d[wp.spatial_vector],
 ):
     tid = wp.tid()
     type = joint_type[tid]
@@ -1605,6 +1607,18 @@ def solve_body_joints(
     ang_delta_p = wp.vec3(0.0)
     lin_delta_c = wp.vec3(0.0)
     ang_delta_c = wp.vec3(0.0)
+    constraint_lambda_linear = wp.vec3(0.0)
+    constraint_lambda_angular = wp.vec3(0.0)
+    drive_lambda_linear = wp.vec3(0.0)
+    drive_lambda_angular = wp.vec3(0.0)
+    # The first iteration starts a new substep and overwrites the prior values.
+    if joint_lambdas and iteration > 0:
+        constraint_lambda = joint_lambdas[0, tid]
+        drive_lambda = joint_lambdas[1, tid]
+        constraint_lambda_linear = wp.spatial_top(constraint_lambda)
+        constraint_lambda_angular = wp.spatial_bottom(constraint_lambda)
+        drive_lambda_linear = wp.spatial_top(drive_lambda)
+        drive_lambda_angular = wp.spatial_bottom(drive_lambda)
 
     rel_pose = wp.transform_inverse(X_wp) * X_wc
     rel_p = wp.transform_get_translation(rel_pose)
@@ -1656,7 +1670,7 @@ def solve_body_joints(
                 + wp.dot(angular_p, omega_p)
                 + wp.dot(angular_c, omega_c)
             )
-            lambda_in = 0.0
+            lambda_in = constraint_lambda_linear[0] / dt
             compliance = linear_compliance
             ke = joint_target_ke[axis_start]
             if ke > 0.0:
@@ -1681,10 +1695,15 @@ def solve_body_joints(
                 dt,
             )
 
-            lin_delta_p += linear_p * (d_lambda * linear_relaxation)
-            ang_delta_p += angular_p * (d_lambda * angular_relaxation)
-            lin_delta_c += linear_c * (d_lambda * linear_relaxation)
-            ang_delta_c += angular_c * (d_lambda * angular_relaxation)
+            d_lambda_linear = d_lambda * linear_relaxation
+            d_lambda_angular = d_lambda * angular_relaxation
+            constraint_lambda_linear[0] += d_lambda_linear
+            lin_delta_p += linear_p * d_lambda_linear
+            ang_delta_p += angular_p * d_lambda_angular
+            lin_delta_c += linear_c * d_lambda_linear
+            ang_delta_c += angular_c * d_lambda_angular
+        else:
+            constraint_lambda_linear[0] = 0.0
 
     else:
         # compute joint target, stiffness, damping
@@ -1773,6 +1792,8 @@ def solve_body_joints(
             err = 0.0
             compliance = linear_compliance
             damping = 0.0
+            limit_active = False
+            drive_active = False
 
             target_vel = axis_target_vel[dim]
             derr_rel = derr - target_vel
@@ -1782,8 +1803,10 @@ def solve_body_joints(
             upper = axis_limits_upper[dim]
             if e < lower:
                 err = e - lower
+                limit_active = True
             elif e > upper:
                 err = e - upper
+                limit_active = True
             else:
                 target_pos = axis_target_pos[dim]
                 target_pos = wp.clamp(target_pos, lower, upper)
@@ -1792,12 +1815,23 @@ def solve_body_joints(
                     err = e - target_pos
                     compliance = 1.0 / axis_stiffness[dim]
                     damping = axis_damping[dim]
+                    drive_active = True
                 elif axis_damping[dim] > 0.0:
                     compliance = 1.0 / axis_damping[dim]
                     damping = axis_damping[dim]
+                    drive_active = True
+
+            if not limit_active:
+                constraint_lambda_linear[dim] = 0.0
+            if not drive_active:
+                drive_lambda_linear[dim] = 0.0
 
             if wp.abs(err) > 1e-9 or wp.abs(derr_rel) > 1e-9:
                 lambda_in = 0.0
+                if limit_active:
+                    lambda_in = constraint_lambda_linear[dim] / dt
+                elif drive_active:
+                    lambda_in = drive_lambda_linear[dim] / dt
                 d_lambda = compute_positional_correction(
                     err,
                     derr_rel,
@@ -1817,10 +1851,16 @@ def solve_body_joints(
                     dt,
                 )
 
-                lin_delta_p += linear_p * (d_lambda * linear_relaxation)
-                ang_delta_p += angular_p * (d_lambda * angular_relaxation)
-                lin_delta_c += linear_c * (d_lambda * linear_relaxation)
-                ang_delta_c += angular_c * (d_lambda * angular_relaxation)
+                d_lambda_linear = d_lambda * linear_relaxation
+                d_lambda_angular = d_lambda * angular_relaxation
+                if limit_active:
+                    constraint_lambda_linear[dim] += d_lambda_linear
+                elif drive_active:
+                    drive_lambda_linear[dim] += d_lambda_linear
+                lin_delta_p += linear_p * d_lambda_linear
+                ang_delta_p += angular_p * d_lambda_angular
+                lin_delta_c += linear_c * d_lambda_linear
+                ang_delta_c += angular_c * d_lambda_angular
 
     if type == JointType.FIXED or type == JointType.PRISMATIC or type == JointType.REVOLUTE or type == JointType.D6:
         # handle angular constraints
@@ -1973,6 +2013,8 @@ def solve_body_joints(
             err = 0.0
             compliance = angular_compliance
             damping = 0.0
+            limit_active = False
+            drive_active = False
 
             target_vel = axis_target_vel[dim]
             angular_c_len = wp.length(angular_c)
@@ -1983,8 +2025,10 @@ def solve_body_joints(
             upper = axis_limits_upper[dim]
             if e < lower:
                 err = e - lower
+                limit_active = True
             elif e > upper:
                 err = e - upper
+                limit_active = True
             else:
                 target_pos = axis_target_pos[dim]
                 target_pos = wp.clamp(target_pos, lower, upper)
@@ -1993,16 +2037,44 @@ def solve_body_joints(
                     err = e - target_pos
                     compliance = 1.0 / axis_stiffness[dim]
                     damping = axis_damping[dim]
+                    drive_active = True
                 elif axis_damping[dim] > 0.0:
                     damping = axis_damping[dim]
                     compliance = 1.0 / axis_damping[dim]
+                    drive_active = True
+
+            if not limit_active:
+                constraint_lambda_angular[dim] = 0.0
+            if not drive_active:
+                drive_lambda_angular[dim] = 0.0
+
+            lambda_in = 0.0
+            if limit_active:
+                lambda_in = constraint_lambda_angular[dim] / dt
+            elif drive_active:
+                lambda_in = drive_lambda_angular[dim] / dt
 
             d_lambda = (
                 compute_angular_correction(
-                    err, derr_rel, pose_p, pose_c, I_inv_p, I_inv_c, angular_p, angular_c, 0.0, compliance, damping, dt
+                    err,
+                    derr_rel,
+                    pose_p,
+                    pose_c,
+                    I_inv_p,
+                    I_inv_c,
+                    angular_p,
+                    angular_c,
+                    lambda_in,
+                    compliance,
+                    damping,
+                    dt,
                 )
                 * angular_relaxation
             )
+            if limit_active:
+                constraint_lambda_angular[dim] += d_lambda
+            elif drive_active:
+                drive_lambda_angular[dim] += d_lambda
 
             # update deltas
             ang_delta_p += angular_p * d_lambda
@@ -2019,6 +2091,9 @@ def solve_body_joints(
     # measured from the child COM).
     if joint_impulse:
         wp.atomic_add(joint_impulse, tid, wp.spatial_vector(lin_delta_c, ang_delta_c))
+    if joint_lambdas:
+        joint_lambdas[0, tid] = wp.spatial_vector(constraint_lambda_linear, constraint_lambda_angular)
+        joint_lambdas[1, tid] = wp.spatial_vector(drive_lambda_linear, drive_lambda_angular)
 
 
 @wp.func

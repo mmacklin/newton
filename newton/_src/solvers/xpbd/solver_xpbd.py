@@ -152,6 +152,7 @@ class SolverXPBD(TendonStateMixin, SolverBase):
         in world frame at the child body's center of mass. It is refreshed by
         :meth:`step` from the accumulated XPBD joint impulse.
         """
+        self._joint_lambdas = wp.zeros((2, model.joint_count), dtype=wp.spatial_vector, device=model.device)
 
         # helper variables to track constraint resolution vars
         self._particle_delta_counter = 0
@@ -348,8 +349,13 @@ class SolverXPBD(TendonStateMixin, SolverBase):
         # ``self.joint_reaction_f`` and optionally ``state_out.body_parent_f``
         # after the iteration loop.
         joint_impulse = None
+        joint_lambdas = None
         if model.joint_count > 0:
             joint_impulse = wp.zeros(model.joint_count, dtype=wp.spatial_vector, device=model.device)
+            # In-place lambda updates cannot preserve the primal values needed
+            # by earlier launches during a differentiable backward pass.
+            if not requires_grad:
+                joint_lambdas = self._joint_lambdas
 
         if control is None:
             control = model.control(clone_variables=False)
@@ -687,13 +693,14 @@ class SolverXPBD(TendonStateMixin, SolverBase):
                                 control.joint_target_vel,
                                 model.joint_target_ke,
                                 model.joint_target_kd,
+                                i,
                                 self.joint_linear_compliance,
                                 self.joint_angular_compliance,
                                 self.joint_angular_relaxation,
                                 self.joint_linear_relaxation,
                                 dt,
                             ],
-                            outputs=[body_deltas, joint_impulse],
+                            outputs=[body_deltas, joint_impulse, joint_lambdas],
                             device=model.device,
                         )
 

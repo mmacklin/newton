@@ -2196,11 +2196,251 @@ def test_xpbd_parent_f_newton_second_law_zero_g(test, device):
             )
 
 
+def _simulate_joint_controller(
+    joint_type,
+    iterations,
+    device,
+    *,
+    mass=0.08,
+    target_ke=0.0,
+    target_kd=0.0,
+    initial_position=0.0,
+    initial_velocity=0.0,
+    effort=0.0,
+    steps=120,
+    dt=1.0 / 6000.0,
+    linear_relaxation=1.0,
+    angular_relaxation=1.0,
+    child_xform=None,
+):
+    builder = newton.ModelBuilder(gravity=0.0, up_axis=newton.Axis.Z)
+    body = builder.add_link(
+        mass=mass,
+        inertia=wp.mat33(mass, 0.0, 0.0, 0.0, mass, 0.0, 0.0, 0.0, mass),
+    )
+    joint_kwargs = {
+        "parent": -1,
+        "child": body,
+        "child_xform": child_xform,
+        "axis": wp.vec3(1.0, 0.0, 0.0),
+        "target_ke": target_ke,
+        "target_kd": target_kd,
+    }
+    if joint_type == "prismatic":
+        joint = builder.add_joint_prismatic(**joint_kwargs)
+        velocity_component = 0
+    else:
+        joint = builder.add_joint_revolute(**joint_kwargs)
+        velocity_component = 3
+    builder.add_articulation([joint])
+    builder.joint_q[0] = initial_position
+    builder.joint_qd[0] = initial_velocity
+    model = builder.finalize(device=device)
+
+    solver = newton.solvers.SolverXPBD(
+        model,
+        iterations=iterations,
+        joint_linear_relaxation=linear_relaxation,
+        joint_angular_relaxation=angular_relaxation,
+    )
+    state_0 = model.state()
+    state_1 = model.state()
+    control = model.control()
+    control.joint_f.assign([effort])
+    newton.eval_fk(model, model.joint_q, model.joint_qd, state_0)
+
+    for _ in range(steps):
+        solver.step(state_0, state_1, control, None, dt)
+        state_0, state_1 = state_1, state_0
+
+    body_q = state_0.body_q.numpy()[body]
+    coordinate = body_q[0] if joint_type == "prismatic" else 2.0 * np.arctan2(body_q[3], body_q[6])
+    return coordinate, state_0.body_qd.numpy()[body], velocity_component
+
+
+def test_xpbd_joint_controller_independent_of_iterations(test, device):
+    mass = 0.08
+    duration = 0.02
+    stiffness = 100.0
+    critical_damping = 2.0 * np.sqrt(stiffness * mass)
+    omega = np.sqrt(stiffness / mass)
+    damping_decay = np.exp(-4.0 * duration / mass)
+    cases = (
+        (
+            "damping",
+            {"target_kd": 4.0, "effort": -25.0},
+            -25.0 / 4.0 * (duration - mass / 4.0 * (1.0 - damping_decay)),
+            -25.0 / 4.0 * (1.0 - damping_decay),
+        ),
+        (
+            "stiffness",
+            {"target_ke": stiffness, "initial_position": 0.1},
+            0.1 * np.cos(omega * duration),
+            -0.1 * omega * np.sin(omega * duration),
+        ),
+        (
+            "pd",
+            {"target_ke": stiffness, "target_kd": critical_damping, "initial_position": 0.1},
+            0.1 * (1.0 + omega * duration) * np.exp(-omega * duration),
+            -0.1 * omega * omega * duration * np.exp(-omega * duration),
+        ),
+    )
+    for joint_type in ("prismatic", "revolute"):
+        for case_name, kwargs, expected_coordinate, expected_velocity in cases:
+            with test.subTest(joint_type=joint_type, case=case_name):
+                results = [_simulate_joint_controller(joint_type, count, device, **kwargs) for count in (1, 4, 24)]
+                coordinates = np.array([result[0] for result in results])
+                velocities = np.array([result[1][result[2]] for result in results])
+
+                np.testing.assert_allclose(coordinates, coordinates[0], rtol=1.0e-3, atol=1.0e-5)
+                np.testing.assert_allclose(velocities, velocities[0], rtol=1.0e-3, atol=1.0e-4)
+                np.testing.assert_allclose(coordinates, expected_coordinate, rtol=0.01, atol=1.0e-5)
+                np.testing.assert_allclose(velocities, expected_velocity, rtol=0.01, atol=1.0e-5)
+
+
+def _simulate_two_body_joint_damping(joint_type, iterations, device):
+    builder = newton.ModelBuilder(gravity=0.0, up_axis=newton.Axis.Z)
+    inertia = wp.mat33(0.08, 0.0, 0.0, 0.0, 0.08, 0.0, 0.0, 0.0, 0.08)
+    parent = builder.add_link(mass=0.08, inertia=inertia)
+    child = builder.add_link(mass=0.08, inertia=inertia)
+    root = builder.add_joint_free(parent=-1, child=parent)
+    joint_kwargs = {"parent": parent, "child": child, "axis": wp.vec3(1.0, 0.0, 0.0), "target_kd": 4.0}
+    if joint_type == "prismatic":
+        joint = builder.add_joint_prismatic(**joint_kwargs)
+        velocity_component = 0
+    else:
+        joint = builder.add_joint_revolute(**joint_kwargs)
+        velocity_component = 3
+    builder.add_articulation([root, joint])
+    builder.joint_qd[-1] = 5.0
+    model = builder.finalize(device=device)
+    solver = newton.solvers.SolverXPBD(
+        model,
+        iterations=iterations,
+        joint_linear_relaxation=1.0,
+        joint_angular_relaxation=1.0,
+    )
+    state_0 = model.state()
+    state_1 = model.state()
+    control = model.control()
+    newton.eval_fk(model, model.joint_q, model.joint_qd, state_0)
+    for _ in range(120):
+        solver.step(state_0, state_1, control, None, 1.0 / 6000.0)
+        state_0, state_1 = state_1, state_0
+    velocities = state_0.body_qd.numpy()
+    return velocities[parent, velocity_component], velocities[child, velocity_component]
+
+
+def test_xpbd_two_body_joint_damping_independent_of_iterations(test, device):
+    relative_velocity = 5.0 * np.exp(-4.0 * 0.02 / 0.04)
+    expected = np.array([2.5 - 0.5 * relative_velocity, 2.5 + 0.5 * relative_velocity])
+    for joint_type in ("prismatic", "revolute"):
+        with test.subTest(joint_type=joint_type):
+            velocities = np.array([_simulate_two_body_joint_damping(joint_type, count, device) for count in (1, 4, 24)])
+            np.testing.assert_allclose(velocities, np.tile(velocities[0], (3, 1)), rtol=1.0e-3, atol=1.0e-4)
+            np.testing.assert_allclose(velocities, np.tile(expected, (3, 1)), rtol=0.01)
+            np.testing.assert_allclose(np.sum(velocities, axis=1), 5.0, rtol=1.0e-4)
+
+
+def test_xpbd_off_center_joint_damping_convergence(test, device):
+    child_xform = wp.transform(wp.vec3(0.0, 1.0, 0.0), wp.quat_identity())
+    results = [
+        _simulate_joint_controller(
+            "prismatic",
+            count,
+            device,
+            mass=1.0,
+            target_kd=4.0,
+            initial_velocity=5.0,
+            steps=1,
+            dt=1.0 / 60.0,
+            linear_relaxation=0.7,
+            angular_relaxation=0.4,
+            child_xform=child_xform,
+        )
+        for count in (4, 24)
+    ]
+    velocities = np.array([result[1][result[2]] for result in results])
+    expected_velocity = 5.0 * np.exp(-4.0 / 60.0)
+    np.testing.assert_allclose(velocities, expected_velocity, rtol=0.005)
+    np.testing.assert_allclose(velocities, velocities[-1], rtol=0.003)
+
+
+def test_xpbd_compliant_joint_limit_independent_of_iterations(test, device):
+    def simulate(iterations):
+        builder = newton.ModelBuilder(gravity=0.0, up_axis=newton.Axis.Z)
+        body = builder.add_link(
+            mass=1.0,
+            inertia=wp.mat33(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0),
+        )
+        joint = builder.add_joint_prismatic(
+            parent=-1,
+            child=body,
+            axis=wp.vec3(1.0, 0.0, 0.0),
+            limit_lower=0.0,
+            limit_upper=1.0,
+        )
+        builder.add_articulation([joint])
+        model = builder.finalize(device=device)
+        solver = newton.solvers.SolverXPBD(
+            model,
+            iterations=iterations,
+            joint_linear_relaxation=1.0,
+            joint_angular_relaxation=1.0,
+            joint_linear_compliance=1.0e-3,
+        )
+        state_0 = model.state()
+        state_1 = model.state()
+        control = model.control()
+        control.joint_f.assign([-10.0])
+        newton.eval_fk(model, model.joint_q, model.joint_qd, state_0)
+        for _ in range(120):
+            solver.step(state_0, state_1, control, None, 1.0 / 6000.0)
+            state_0, state_1 = state_1, state_0
+        return state_0.body_q.numpy()[body, 0], state_0.body_qd.numpy()[body, 0]
+
+    results = np.array([simulate(count) for count in (1, 4, 24)])
+    omega = np.sqrt(1000.0)
+    expected = np.array([-0.01 + 0.01 * np.cos(omega * 0.02), -0.01 * omega * np.sin(omega * 0.02)])
+    np.testing.assert_allclose(results, np.tile(results[0], (3, 1)), rtol=1.0e-3, atol=1.0e-5)
+    np.testing.assert_allclose(results, np.tile(expected, (3, 1)), rtol=0.01)
+
+
 devices = get_test_devices()
 
 
 class TestSolverXPBD(unittest.TestCase):
     pass
+
+
+add_function_test(
+    TestSolverXPBD,
+    "test_xpbd_joint_controller_independent_of_iterations",
+    test_xpbd_joint_controller_independent_of_iterations,
+    devices=devices,
+    check_output=False,
+)
+add_function_test(
+    TestSolverXPBD,
+    "test_xpbd_two_body_joint_damping_independent_of_iterations",
+    test_xpbd_two_body_joint_damping_independent_of_iterations,
+    devices=devices,
+    check_output=False,
+)
+add_function_test(
+    TestSolverXPBD,
+    "test_xpbd_off_center_joint_damping_convergence",
+    test_xpbd_off_center_joint_damping_convergence,
+    devices=devices,
+    check_output=False,
+)
+add_function_test(
+    TestSolverXPBD,
+    "test_xpbd_compliant_joint_limit_independent_of_iterations",
+    test_xpbd_compliant_joint_limit_independent_of_iterations,
+    devices=devices,
+    check_output=False,
+)
 
 
 add_function_test(
