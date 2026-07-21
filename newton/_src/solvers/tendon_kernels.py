@@ -394,7 +394,25 @@ def update_tendon_attachments(
         seed_al = wp.transform_point(pose_l, seg_attachment_l_local[seg])
         seed_ar = wp.transform_point(pose_r, seg_attachment_r_local[seg])
         base_al = wp.transform_point(pose_l, seg_attachment_l_local_step[seg])
-        base_ar = wp.transform_point(pose_r, seg_attachment_r_local_step[seg])
+        base_ar_step_seg = seg
+
+        # Route transitions move the persistent right endpoint between adjacent segment slots.
+        # Its previous tangent remains in its former slot; the current slot was either inactive
+        # or ended on a different link last step.
+        transition_link = link_l + 1 if link_r == link_l + 2 else link_l
+
+        if (
+            tendon_link_type[transition_link] == int(TendonLinkType.ROLLING)
+            and (tendon_link_flags[transition_link] & int(TendonLinkFlags.DYNAMIC)) != 0
+        ):
+            if tendon_link_active[transition_link] and not tendon_link_active_step[transition_link]:
+                assert transition_link == link_l and link_l > link_start
+                base_ar_step_seg = seg - 1
+            elif not tendon_link_active[transition_link] and tendon_link_active_step[transition_link]:
+                assert transition_link == link_l + 1 and link_r == transition_link + 1
+                base_ar_step_seg = seg + 1
+
+        base_ar = wp.transform_point(pose_r, seg_attachment_r_local_step[base_ar_step_seg])
 
         new_al = center_l
         new_ar = center_r
@@ -523,6 +541,20 @@ def update_tendon_attachments(
                     if seg_active[seg_adj_left] != 0 and seg_active[seg_adj_right] != 0:
                         seg_left = seg_adj_left
                         seg_right = seg_adj_right
+                    else:
+                        if seg_active[seg_adj_left] != 0:
+                            seg_left = seg_adj_left
+                        elif i > 1:
+                            previous_seg = seg_adj_left - 1
+                            if seg_active[previous_seg] != 0 and seg_active_link_r[previous_seg] == link_idx:
+                                seg_left = previous_seg
+
+                        if seg_active[seg_adj_right] != 0:
+                            seg_right = seg_adj_right
+                        elif i < num_links - 2:
+                            next_seg = seg_adj_right + 1
+                            if seg_active[next_seg] != 0 and seg_active_link_l[next_seg] == link_idx:
+                                seg_right = next_seg
                 else:
                     for probe in range(num_segs):
                         left_candidate = i - 1 - probe
@@ -545,9 +577,31 @@ def update_tendon_attachments(
                     continue
 
                 if material_sweep == 0 and is_rolling:
+                    body = tendon_link_body[link_idx]
+                    pose = body_q[body]
+                    center = wp.transform_point(pose, tendon_link_offset[link_idx])
+                    normal = wp.transform_vector(pose, tendon_link_axis[link_idx])
+                    r_left = seg_attachment_r[seg_left] - center
+                    r_right = seg_attachment_l[seg_right] - center
+                    r_left = r_left - wp.dot(r_left, normal) * normal
+                    r_right = r_right - wp.dot(r_right, normal) * normal
+                    len_r_left = wp.length(r_left)
+                    len_r_right = wp.length(r_right)
+                    if len_r_left > 1.0e-8 and len_r_right > 1.0e-8:
+                        u_left = r_left / len_r_left
+                        u_right = r_right / len_r_right
+                        signed_wrap_angle = wp.atan2(wp.dot(wp.cross(u_left, u_right), normal), wp.dot(u_left, u_right))
+                        if signed_wrap_angle * float(tendon_link_orientation[link_idx]) < 0.0:
+                            wp.printf(
+                                "Warning: Tendon %d rolling link %d has an unsupported wrap outside [0, pi]. "
+                                "Check its orientation or use dynamic routing.\n",
+                                tendon_id,
+                                link_idx,
+                            )
+
                     # The common mode is material exchanged with the changing wrapped arc. Apply
                     # it before relaxation so the capstan projection sees the conserved cable.
-                    common_rest_delta = 0.5 * (seg_rolling_delta_r[seg_adj_left] + seg_rolling_delta_l[seg_adj_right])
+                    common_rest_delta = 0.5 * (seg_rolling_delta_r[seg_left] + seg_rolling_delta_l[seg_right])
                     seg_stretch[seg_left] = seg_stretch[seg_left] - common_rest_delta
                     seg_stretch[seg_right] = seg_stretch[seg_right] - common_rest_delta
 
@@ -681,7 +735,27 @@ def update_tendon_attachments(
 
                 seg_adj_left = seg_offset + i_roll - 1
                 seg_adj_right = seg_offset + i_roll
-                if seg_active[seg_adj_left] == 0 or seg_active[seg_adj_right] == 0:
+                seg_left = int(-1)
+                seg_right = int(-1)
+                if seg_active[seg_adj_left] != 0 and seg_active[seg_adj_right] != 0:
+                    seg_left = seg_adj_left
+                    seg_right = seg_adj_right
+                else:
+                    if seg_active[seg_adj_left] != 0:
+                        seg_left = seg_adj_left
+                    elif i_roll > 1:
+                        previous_seg = seg_adj_left - 1
+                        if seg_active[previous_seg] != 0 and seg_active_link_r[previous_seg] == link_idx:
+                            seg_left = previous_seg
+
+                    if seg_active[seg_adj_right] != 0:
+                        seg_right = seg_adj_right
+                    elif i_roll < num_links - 2:
+                        next_seg = seg_adj_right + 1
+                        if seg_active[next_seg] != 0 and seg_active_link_l[next_seg] == link_idx:
+                            seg_right = next_seg
+
+                if seg_left < 0 or seg_right < 0:
                     continue
 
                 radius = tendon_link_radius[link_idx]
@@ -693,8 +767,8 @@ def update_tendon_attachments(
                 center = wp.transform_point(pose, tendon_link_offset[link_idx])
                 normal = wp.transform_vector(pose, tendon_link_axis[link_idx])
 
-                pt_left = seg_attachment_r[seg_adj_left]
-                pt_right = seg_attachment_l[seg_adj_right]
+                pt_left = seg_attachment_r[seg_left]
+                pt_right = seg_attachment_l[seg_right]
                 r_left = pt_left - center
                 r_right = pt_right - center
                 r_left = r_left - wp.dot(r_left, normal) * normal
@@ -712,18 +786,18 @@ def update_tendon_attachments(
 
                 # Apply only the friction-limited differential mode after relaxation. The common
                 # mode above is independent of friction and already accounts for wrapped material.
-                rolling_delta_diff = 0.5 * (seg_rolling_delta_r[seg_adj_left] - seg_rolling_delta_l[seg_adj_right])
-                len_al = wp.length(seg_attachment_r[seg_adj_left] - seg_attachment_l[seg_adj_left])
-                len_ar = wp.length(seg_attachment_r[seg_adj_right] - seg_attachment_l[seg_adj_right])
-                rest_l = len_al - seg_stretch[seg_adj_left]
-                rest_r = len_ar - seg_stretch[seg_adj_right]
+                rolling_delta_diff = 0.5 * (seg_rolling_delta_r[seg_left] - seg_rolling_delta_l[seg_right])
+                len_al = wp.length(seg_attachment_r[seg_left] - seg_attachment_l[seg_left])
+                len_ar = wp.length(seg_attachment_r[seg_right] - seg_attachment_l[seg_right])
+                rest_l = len_al - seg_stretch[seg_left]
+                rest_r = len_ar - seg_stretch[seg_right]
                 rolling_transfer = rolling_delta_diff * beta
                 # Bound the zero-sum transfer as a pair. Clamping either span independently would
                 # discard the clipped amount and create cable material at the minimum rest length.
                 rolling_transfer = wp.max(rolling_transfer, min_rest - rest_l)
                 rolling_transfer = wp.min(rolling_transfer, rest_r - min_rest)
-                seg_stretch[seg_adj_left] = seg_stretch[seg_adj_left] - rolling_transfer
-                seg_stretch[seg_adj_right] = seg_stretch[seg_adj_right] + rolling_transfer
+                seg_stretch[seg_left] = seg_stretch[seg_left] - rolling_transfer
+                seg_stretch[seg_right] = seg_stretch[seg_right] + rolling_transfer
 
         # rebuild rest lengths from the telescoped stretch state (one cancellation per call,
         # paid once instead of every sweep -- this is what keeps the capstan accurate for stiff
