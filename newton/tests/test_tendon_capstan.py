@@ -1980,6 +1980,131 @@ def test_simple_cable_gravity_tension_independent_of_relaxation(test, device):
             )
 
 
+def test_same_body_tendon_segment_reports_constitutive_tension(test, device):
+    """A segment internal to one rigid body should not acquire effective mass."""
+    with wp.ScopedDevice(device):
+        length = 1.0e-3
+        compliance = 1.0e-8
+        rest_length = 0.99 * length
+
+        builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=0.0)
+        body = builder.add_body(
+            mass=1.0,
+            inertia=wp.mat33(
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+            ),
+            lock_inertia=True,
+        )
+        builder.add_tendon()
+        builder.add_tendon_link(
+            body=body,
+            link_type=int(TendonLinkType.ATTACHMENT),
+            offset=(-0.5 * length, 0.0, 0.0),
+        )
+        builder.add_tendon_link(
+            body=body,
+            link_type=int(TendonLinkType.ATTACHMENT),
+            offset=(0.5 * length, 0.0, 0.0),
+            compliance=compliance,
+            rest_length=rest_length,
+        )
+
+        model = builder.finalize()
+        solver = newton.solvers.SolverXPBD(model, iterations=1, joint_linear_relaxation=1.0)
+        state_0, state_1 = model.state(), model.state()
+        initial_pose = state_0.body_q.numpy().copy()
+        dt = 1.0 / 120.0
+
+        state_0.clear_forces()
+        solver.step(state_0, state_1, model.control(), None, dt)
+
+        span_length = float(
+            np.linalg.norm(solver.tendon_seg_attachment_r.numpy()[0] - solver.tendon_seg_attachment_l.numpy()[0])
+        )
+        expected_tension = (span_length - rest_length) / compliance
+        lambda_tension = float(-solver.tendon_seg_lambda.numpy()[0] / dt)
+
+        test.assertAlmostEqual(lambda_tension, expected_tension, delta=0.1)
+        np.testing.assert_allclose(state_1.body_q.numpy(), initial_pose, rtol=0.0, atol=1.0e-7)
+
+
+def test_rolling_link_body_preserves_center_motion_jacobian(test, device):
+    """A rolling endpoint must retain torque caused by motion of its center."""
+    with wp.ScopedDevice(device):
+        builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=0.0)
+        anchor = builder.add_body(xform=wp.transform(p=wp.vec3(0.5, -1.5, 0.0)), mass=0.0)
+        link = builder.add_link(
+            mass=1.0,
+            inertia=wp.mat33(
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+            ),
+            lock_inertia=True,
+        )
+        joint = builder.add_joint_revolute(
+            parent=-1,
+            child=link,
+            axis=Axis.Z,
+            target_ke=0.0,
+            target_kd=0.0,
+        )
+        builder.add_articulation([joint])
+
+        builder.add_tendon()
+        builder.add_tendon_link(body=anchor, link_type=int(TendonLinkType.ATTACHMENT))
+        builder.add_tendon_link(
+            body=link,
+            link_type=int(TendonLinkType.ROLLING),
+            radius=0.2,
+            orientation=-1,
+            mu=0.0,
+            offset=(2.5, 2.5, 0.0),
+            compliance=1.0e-3,
+            rest_length=-1.0,
+        )
+        builder.add_tendon_link(
+            body=link,
+            link_type=int(TendonLinkType.ATTACHMENT),
+            offset=(1.5, -2.5, 0.0),
+            compliance=1.0e-3,
+            rest_length=-1.0,
+        )
+
+        model = builder.finalize()
+        solver = newton.solvers.SolverXPBD(model, iterations=8, joint_linear_relaxation=1.0)
+        span_lengths = np.linalg.norm(
+            solver.tendon_seg_attachment_r.numpy() - solver.tendon_seg_attachment_l.numpy(), axis=1
+        )
+        solver.tendon_seg_rest_length.assign(span_lengths - 0.01)
+
+        # The total routed length increases with positive joint rotation in this
+        # geometry, so tension must drive the joint in the negative direction.
+        state_0, state_1 = model.state(), model.state()
+        for _ in range(4):
+            state_0.clear_forces()
+            solver.step(state_0, state_1, model.control(), None, 1.0 / 120.0)
+            state_0, state_1 = state_1, state_0
+
+        newton.eval_ik(model, state_0, model.joint_q, model.joint_qd)
+        joint_q = int(model.joint_q_start.numpy()[joint])
+        test.assertLess(float(model.joint_q.numpy()[joint_q]), -1.0e-3)
+
+
 def test_motorized_pulley_drives_slider(test, device):
     """A rolling drive pulley must convert rotation into cable sliding."""
     with wp.ScopedDevice(device):
@@ -2541,6 +2666,18 @@ add_test(
     "simple_cable_gravity_tension_independent_of_relaxation",
     devices,
     test_simple_cable_gravity_tension_independent_of_relaxation,
+)
+add_test(
+    TestTendonCapstan,
+    "same_body_tendon_segment_reports_constitutive_tension",
+    devices,
+    test_same_body_tendon_segment_reports_constitutive_tension,
+)
+add_test(
+    TestTendonCapstan,
+    "rolling_link_body_preserves_center_motion_jacobian",
+    devices,
+    test_rolling_link_body_preserves_center_motion_jacobian,
 )
 add_test(
     TestTendonCapstan,

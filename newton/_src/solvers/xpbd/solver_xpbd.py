@@ -773,6 +773,7 @@ class SolverXPBD(TendonStateMixin, SolverBase):
                                 self.body_inv_inertia_effective,
                                 model.tendon_link_body,
                                 model.tendon_link_type,
+                                model.tendon_link_offset,
                                 model.tendon_link_axis,
                                 self.tendon_seg_rest_length,
                                 self.tendon_seg_attachment_l,
@@ -806,7 +807,6 @@ class SolverXPBD(TendonStateMixin, SolverBase):
                             dim=model.tendon_count,
                             inputs=[
                                 body_q,
-                                model.body_com,
                                 model.tendon_start,
                                 model.tendon_link_body,
                                 model.tendon_link_type,
