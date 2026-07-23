@@ -280,8 +280,9 @@ def update_tendon_attachments(
     """Update routed tendon tangent points and free-span rest-length transfer.
 
     With adaptive sweeps enabled, the capstan cone is relaxed by up to ``tendon_max_sweeps``
-    Gauss-Seidel passes and stops when the relative tension change falls below
-    ``tendon_settle_tol``. Otherwise, the established fixed 4/32-sweep policy is used.
+    Gauss-Seidel passes and stops when the tension change relative to the first
+    sweep's peak tension falls below ``tendon_settle_tol``. Otherwise, the
+    established fixed 4/32-sweep policy is used.
     """
     tendon_id = wp.tid()
     link_start = tendon_start[tendon_id]
@@ -492,6 +493,7 @@ def update_tendon_attachments(
                     material_sweep_count = int(32)
 
         converged = int(0)
+        settle_tension_reference = float(0.0)
         for material_sweep in range(256):
             if material_sweep >= material_sweep_count or converged != 0:
                 continue
@@ -661,11 +663,12 @@ def update_tendon_attachments(
                     seg_stretch[seg_right] = d_r_raw - delta
                     sweep_dtension = wp.max(sweep_dtension, wp.max(delta / comp_l, delta / comp_r))
 
-            # early-out: stop once the relaxation has settled -- the max per-sweep relative tension
-            # change (largest tension change / peak tension) is below tendon_settle_tol. Once the cone
-            # stops moving material it is at its fixed point (converged, or clamped at min_rest), so a
-            # separate cone-violation test would add nothing (it can't be improved by more sweeps).
-            rel_change = sweep_dtension / wp.max(sweep_maxtension, 1.0e-30)
+            # Keep the normalization scale fixed so an unloading cable can settle as both the
+            # tension and its change approach zero. A per-sweep scale would shrink with the
+            # residual and keep their ratio finite long after the absolute change is negligible.
+            if material_sweep == 0:
+                settle_tension_reference = sweep_maxtension
+            rel_change = sweep_dtension / wp.max(settle_tension_reference, 1.0e-30)
             if adaptive_cone_sweeps != 0 and rel_change < tendon_settle_tol:
                 converged = 1
 
