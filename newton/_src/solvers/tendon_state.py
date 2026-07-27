@@ -105,10 +105,17 @@ class TendonStateMixin:
             self.tendon_max_sweeps = 256
         if not hasattr(self, "tendon_settle_tol"):
             self.tendon_settle_tol = 1.0e-3
+        if not hasattr(self, "tendon_activation_tol"):
+            self.tendon_activation_tol = 2.0e-3
         if not 1 <= self.tendon_max_sweeps <= 256:
             raise ValueError(f"tendon_max_sweeps must be between 1 and 256, got {self.tendon_max_sweeps}")
         if self.tendon_settle_tol < 0.0:
             raise ValueError(f"tendon_settle_tol must be non-negative, got {self.tendon_settle_tol}")
+        if not 0.0 <= self.tendon_activation_tol < 1.0:
+            raise ValueError(
+                f"tendon_activation_tol must be between 0 (inclusive) and 1 (exclusive), "
+                f"got {self.tendon_activation_tol}"
+            )
         if model.tendon_segment_count == 0:
             self.tendon_seg_rest_length = None
             self.tendon_seg_rest_length_step = None
@@ -248,6 +255,7 @@ class TendonStateMixin:
                 model.tendon_link_orientation,
                 model.tendon_link_offset,
                 model.tendon_link_axis,
+                self.tendon_activation_tol,
                 self.tendon_link_active,
             ],
             device=model.device,

@@ -117,6 +117,7 @@ class SolverXPBD(TendonStateMixin, SolverBase):
         enable_restitution: bool = False,
         tendon_max_sweeps: int = 256,
         tendon_settle_tol: float = 1.0e-3,
+        tendon_activation_tol: float = 2.0e-3,
     ):
         super().__init__(model=model)
         self.iterations = iterations
@@ -126,6 +127,9 @@ class SolverXPBD(TendonStateMixin, SolverBase):
         # cables stop almost immediately; stiff/transient ones run up to the cap.
         self.tendon_max_sweeps = tendon_max_sweeps
         self.tendon_settle_tol = tendon_settle_tol
+        # Inactive dynamic rollers activate only after entering this fraction of their radius.
+        # Active rollers still deactivate at zero clearance.
+        self.tendon_activation_tol = tendon_activation_tol
 
         self.soft_body_relaxation = soft_body_relaxation
         self.soft_contact_relaxation = soft_contact_relaxation

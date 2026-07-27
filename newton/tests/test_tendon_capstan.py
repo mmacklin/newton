@@ -1345,6 +1345,35 @@ def test_dynamic_route_uses_oriented_signed_distance(test, device):
             )
 
 
+def test_dynamic_route_activation_tolerance_preserves_boundary_state(test, device):
+    """Dynamic routing should not chatter inside the activation tolerance."""
+    with wp.ScopedDevice(device):
+        radius = 0.1
+        activation_tol = 1.0e-3
+        activation_gap = activation_tol * radius
+        for orientation in (-1, 1):
+            model, candidate, candidate_link = build_oriented_dynamic_route(orientation, device)
+            solver = newton.solvers.SolverXPBD(
+                model,
+                iterations=1,
+                tendon_activation_tol=activation_tol,
+            )
+            body_q = model.body_q.numpy()
+
+            transitions = (
+                (radius - 0.5 * activation_gap, False),
+                (radius - 1.5 * activation_gap, True),
+                (radius - 0.5 * activation_gap, True),
+                (radius + 0.5 * activation_gap, False),
+            )
+            for distance, expected_active in transitions:
+                body_q[candidate, :3] = (distance * orientation, 0.0, 0.0)
+                model.body_q.assign(body_q)
+                solver._update_tendon_link_active(model, model.body_q)
+                actual_active = bool(solver.tendon_link_active.numpy()[candidate_link])
+                test.assertEqual(actual_active, expected_active)
+
+
 def test_dynamic_route_requires_projection_on_bypass_span(test, device):
     """A roller beyond either neighboring site should remain inactive."""
     with wp.ScopedDevice(device):
@@ -2565,6 +2594,12 @@ add_test(
     "dynamic_route_uses_oriented_signed_distance",
     devices,
     test_dynamic_route_uses_oriented_signed_distance,
+)
+add_test(
+    TestTendonCapstan,
+    "dynamic_route_activation_tolerance_preserves_boundary_state",
+    devices,
+    test_dynamic_route_activation_tolerance_preserves_boundary_state,
 )
 add_test(
     TestTendonCapstan,
