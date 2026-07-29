@@ -748,6 +748,7 @@ class SolverXPBD(TendonStateMixin, SolverBase):
                                 self.tendon_cone_sweep_count,
                                 1,
                                 1,
+                                int(i == 0),
                                 1,
                                 self.tendon_max_sweeps,
                                 self.tendon_settle_tol,

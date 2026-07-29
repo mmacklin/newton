@@ -388,6 +388,7 @@ class TendonStateMixin:
                 0,
                 0,
                 0,
+                0,
                 self.tendon_max_sweeps,
                 self.tendon_settle_tol,
             ],

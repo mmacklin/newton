@@ -821,6 +821,59 @@ def build_oriented_dynamic_route(orientation, device):
     return builder.finalize(device=device), candidate, candidate_link
 
 
+def build_dynamic_route_neighbor_matrix_case(device, left_type, right_type, orientation):
+    """Build an inactive dynamic roller between the requested link types."""
+    builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=0.0)
+    base = builder.add_body(mass=0.0, is_kinematic=True)
+    inactive_position = (0.05, 0.03 * orientation, 0.0)
+    active_position = (0.05, 0.0025 * orientation, 0.0)
+    candidate = builder.add_body(
+        xform=wp.transform(p=wp.vec3(inactive_position)),
+        mass=0.0,
+        is_kinematic=True,
+    )
+
+    axis = (0.0, 0.0, 1.0)
+    builder.add_tendon()
+
+    def add_link(link_type, x, link_orientation):
+        return builder.add_tendon_link(
+            body=base,
+            link_type=int(link_type),
+            radius=0.005 if link_type == TendonLinkType.ROLLING else 0.0,
+            orientation=link_orientation,
+            mu=0.0,
+            offset=(x, 0.0, 0.0),
+            axis=axis,
+            compliance=5.0e-6,
+            damping=5.0,
+            rest_length=-1.0,
+        )
+
+    if left_type != TendonLinkType.ATTACHMENT:
+        add_link(TendonLinkType.ATTACHMENT, 0.0, orientation)
+    add_link(left_type, 0.025, -orientation)
+
+    candidate_link = builder.add_tendon_link(
+        body=candidate,
+        link_type=int(TendonLinkType.ROLLING),
+        radius=0.005,
+        orientation=orientation,
+        mu=0.0,
+        dynamic=True,
+        axis=axis,
+        compliance=5.0e-6,
+        damping=5.0,
+        rest_length=-1.0,
+    )
+
+    add_link(right_type, 0.075, orientation)
+    if right_type != TendonLinkType.ATTACHMENT:
+        add_link(TendonLinkType.ATTACHMENT, 0.10, orientation)
+
+    return builder.finalize(device=device), candidate, candidate_link, inactive_position, active_position
+
+
 def build_loaded_dynamic_route(dynamic: bool, device):
     """Build a force-loaded route with an active roller before the optional roller."""
     builder = newton.ModelBuilder(up_axis=Axis.Z, gravity=0.0)
@@ -1064,6 +1117,43 @@ def _loaded_route_material_length(solver, model):
     return material_length
 
 
+def _route_material_length(solver, model, state):
+    """Measure active free-span rest length plus rolling-link arcs."""
+    active_segments = solver.tendon_seg_active.numpy().astype(bool)
+    material_length = float(np.sum(solver.tendon_seg_rest_length.numpy()[active_segments]))
+    body_q = state.body_q.numpy()
+    link_type = model.tendon_link_type.numpy()
+    link_body = model.tendon_link_body.numpy()
+    link_offset = model.tendon_link_offset.numpy()
+    link_axis = model.tendon_link_axis.numpy()
+    link_radius = model.tendon_link_radius.numpy()
+    link_active = solver.tendon_link_active.numpy()
+    active_link_l = solver.tendon_seg_active_link_l.numpy()
+    active_link_r = solver.tendon_seg_active_link_r.numpy()
+    att_l = solver.tendon_seg_attachment_l.numpy()
+    att_r = solver.tendon_seg_attachment_r.numpy()
+
+    for link_idx in range(1, model.tendon_link_count - 1):
+        if link_type[link_idx] != int(TendonLinkType.ROLLING) or not link_active[link_idx]:
+            continue
+        left_segments = np.flatnonzero(active_segments & (active_link_r == link_idx))
+        right_segments = np.flatnonzero(active_segments & (active_link_l == link_idx))
+        if len(left_segments) != 1 or len(right_segments) != 1:
+            continue
+        left_seg = int(left_segments[0])
+        right_seg = int(right_segments[0])
+        center = body_q[link_body[link_idx]][:3] + link_offset[link_idx]
+        normal = link_axis[link_idx]
+        radius_l = att_r[left_seg] - center
+        radius_r = att_l[right_seg] - center
+        radius_l -= np.dot(radius_l, normal) * normal
+        radius_r -= np.dot(radius_r, normal) * normal
+        theta = abs(np.atan2(np.dot(np.cross(radius_l, radius_r), normal), np.dot(radius_l, radius_r)))
+        material_length += float(theta * link_radius[link_idx])
+
+    return material_length
+
+
 def _run_loaded_dynamic_route(dynamic, device):
     model, _, anchor_joint, candidate = build_loaded_dynamic_route(dynamic, device)
     solver = newton.solvers.SolverXPBD(model, iterations=12, joint_linear_relaxation=0.9)
@@ -1289,6 +1379,42 @@ def test_force_driven_dynamic_route_updates_inside_solver(test, device):
             1.0e-5,
             "Changing route representation should conserve free-span rest length plus wrapped material",
         )
+
+
+def test_dynamic_route_neighbor_matrix_conserves_material(test, device):
+    """Route transitions should conserve material for every supported neighbor-type pair."""
+    with wp.ScopedDevice(device):
+        neighbor_types = (TendonLinkType.ATTACHMENT, TendonLinkType.PINHOLE, TendonLinkType.ROLLING)
+        for orientation in (-1, 1):
+            for left_type in neighbor_types:
+                for right_type in neighbor_types:
+                    with test.subTest(orientation=orientation, left_type=left_type, right_type=right_type):
+                        model, candidate, candidate_link, inactive_position, active_position = (
+                            build_dynamic_route_neighbor_matrix_case(device, left_type, right_type, orientation)
+                        )
+                        solver = newton.solvers.SolverXPBD(model, iterations=1, joint_linear_relaxation=1.0)
+                        state_0, state_1 = model.state(), model.state()
+
+                        test.assertFalse(solver.tendon_link_active.numpy()[candidate_link])
+                        expected_material_length = _route_material_length(solver, model, state_0)
+
+                        body_q = state_0.body_q.numpy()
+                        body_q[candidate, :3] = active_position
+                        state_0.body_q.assign(body_q)
+                        solver.step(state_0, state_1, model.control(), None, 1.0 / 4800.0)
+
+                        test.assertTrue(solver.tendon_link_active.numpy()[candidate_link])
+                        actual_material_length = _route_material_length(solver, model, state_1)
+                        test.assertAlmostEqual(actual_material_length, expected_material_length, delta=1.0e-5)
+
+                        body_q = state_1.body_q.numpy()
+                        body_q[candidate, :3] = inactive_position
+                        state_1.body_q.assign(body_q)
+                        solver.step(state_1, state_0, model.control(), None, 1.0 / 4800.0)
+
+                        test.assertFalse(solver.tendon_link_active.numpy()[candidate_link])
+                        actual_material_length = _route_material_length(solver, model, state_0)
+                        test.assertAlmostEqual(actual_material_length, expected_material_length, delta=1.0e-5)
 
 
 def test_dynamic_route_initial_state_matches_geometry(test, device):
@@ -2553,6 +2679,12 @@ add_test(
     "force_driven_dynamic_route_updates_inside_solver",
     devices,
     test_force_driven_dynamic_route_updates_inside_solver,
+)
+add_test(
+    TestTendonCapstan,
+    "dynamic_route_neighbor_matrix_conserves_material",
+    devices,
+    test_dynamic_route_neighbor_matrix_conserves_material,
 )
 add_test(
     TestTendonCapstan,
