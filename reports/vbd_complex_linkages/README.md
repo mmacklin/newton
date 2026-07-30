@@ -19,3 +19,21 @@ Initial robot-foot smoke test:
 uv run --extra examples python reports/vbd_complex_linkages/bench_complex_linkages.py \
   --scenario robot-foot --frames 20 --output /tmp/vbd-complex-linkages-smoke.json
 ```
+
+Trained DR Legs policy comparison:
+
+```bash
+uv run --extra torch-cu12 python reports/vbd_complex_linkages/bench_dr_legs_policy.py \
+  --cases kamino local_i8 local_i32 sparse_i8 sparse_no_armature_i8
+```
+
+Render one policy rollout through the same harness:
+
+```bash
+uv run --extra torch-cu12 python reports/vbd_complex_linkages/render_dr_legs_policy.py \
+  --case sparse_i8
+```
+
+The VBD policy rows use an isotropic child-body inertia approximation for the
+policy's joint armature. The no-armature case records the unsupported baseline;
+the approximation and its limitations are defined in the report.

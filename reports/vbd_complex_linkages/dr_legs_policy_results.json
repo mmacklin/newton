@@ -1,0 +1,526 @@
+{
+  "config": {
+    "action_scale": 0.4,
+    "body_pose_offset_z": 0.265,
+    "contact_duration": 0.3,
+    "control_decimation": 5,
+    "height_error_scale": 0.05,
+    "linear_path_error_limit": 0.1,
+    "path_deviation_scale": 0.1,
+    "pd_armature": 0.01,
+    "pd_kd": 0.6,
+    "pd_kp": 15,
+    "phase_embedding_k": 2,
+    "policy_file": "drlegs_walk.pt",
+    "sim_dt": 0.004,
+    "standing_height": 0.265,
+    "usd_model": "dr_legs/usd/dr_legs_with_meshes_and_boxes.usda"
+  },
+  "policy_action_dim": 12,
+  "policy_file": "drlegs_walk.pt",
+  "policy_observation_dim": 94,
+  "policy_sha256": "ca63296ced544003334df1cc899bd06535d7a7019e8a4c2498dce51767d9fdf4",
+  "rows": [
+    {
+      "action_l2": {
+        "max": 4.333261013031006,
+        "mean": 2.7162766739726067,
+        "min": 1.2890325784683228,
+        "rms": 2.7718012955356897
+      },
+      "actuated_dof_indices": [
+        0,
+        1,
+        5,
+        6,
+        10,
+        15,
+        18,
+        19,
+        23,
+        24,
+        28,
+        33
+      ],
+      "actuated_target_error_rad": {
+        "max": 0.33468395471572876,
+        "mean": 0.13994006350636481,
+        "min": 0.0542452372610569,
+        "rms": 0.15449820174441473
+      },
+      "armature_mode": "native",
+      "case": "kamino",
+      "closure_error_um": {
+        "max": 1220.669632578068,
+        "mean": 363.10678273695174,
+        "min": 95.22919643389628,
+        "rms": 435.7718257639997
+      },
+      "closure_joint_labels": [
+        "/DR_Legs/Joints/j6_l_o",
+        "/DR_Legs/Joints/j6_r_o",
+        "/DR_Legs/Joints/j9_l_i",
+        "/DR_Legs/Joints/j9_l_o",
+        "/DR_Legs/Joints/j9_r_i",
+        "/DR_Legs/Joints/j9_r_o"
+      ],
+      "collision_p50_us": 547.7401427924633,
+      "completed_substeps": 2000,
+      "contact_count": {
+        "max": 6,
+        "mean": 2.165,
+        "min": 1,
+        "rms": 2.365375234502974
+      },
+      "control_steps_completed": 400,
+      "control_steps_requested": 400,
+      "device": "cpu",
+      "fall_time_s": null,
+      "forward_command_mps": 0.2,
+      "forward_displacement_m": 1.047896016156301,
+      "forward_velocity_error_mps": {
+        "max": 0.17321587763901086,
+        "mean": -0.05279237196783831,
+        "min": -0.2836252290632342,
+        "rms": 0.10965087896898104
+      },
+      "forward_velocity_mps": {
+        "max": 0.3732158776390109,
+        "mean": 0.1472076280321617,
+        "min": -0.08362522906323418,
+        "rms": 0.17580206617538602
+      },
+      "height_m": {
+        "max": 0.284074068069458,
+        "mean": 0.2726108395308256,
+        "min": 0.25119850039482117,
+        "rms": 0.27266248381414154
+      },
+      "iterations": null,
+      "label": "Kamino",
+      "lateral_displacement_m": -0.28662439665606865,
+      "path_error_m": {
+        "max": 0.45401625543262214,
+        "mean": 0.2299504455562667,
+        "min": 0.0009394192741443263,
+        "rms": 0.25726583907624007
+      },
+      "policy_p50_us": 143.89026910066605,
+      "simulated_time_s": 7.999999999999562,
+      "solver": "kamino",
+      "solver_p50_us": 59364.065527915955,
+      "solver_p90_us": 59796.87850922346,
+      "stand_time_s": 1,
+      "status": "complete",
+      "step_p50_us": 59916.13958030939,
+      "tilt_deg": {
+        "max": 7.3634422814451845,
+        "mean": 1.6925224768873601,
+        "min": 0.041103256354774374,
+        "rms": 2.0167132970899497
+      },
+      "vbd_solve": null
+    },
+    {
+      "action_l2": {
+        "max": 5.474342346191406,
+        "mean": 4.538350549611178,
+        "min": 2.7762131690979004,
+        "rms": 4.591918998247939
+      },
+      "actuated_dof_indices": [
+        0,
+        1,
+        5,
+        6,
+        10,
+        15,
+        18,
+        19,
+        23,
+        24,
+        28,
+        33
+      ],
+      "actuated_target_error_rad": {
+        "max": 0.4657977819442749,
+        "mean": 0.320831262929873,
+        "min": 0.2082919180393219,
+        "rms": 0.3291526719475673
+      },
+      "armature_mode": "isotropic_child_body",
+      "case": "local_i8",
+      "closure_error_um": {
+        "max": 25974.28923271584,
+        "mean": 2920.6812378716763,
+        "min": 102.66918968386506,
+        "rms": 6750.62946627934
+      },
+      "closure_joint_labels": [
+        "/DR_Legs/Joints/j6_l_o",
+        "/DR_Legs/Joints/j6_r_o",
+        "/DR_Legs/Joints/j9_l_i",
+        "/DR_Legs/Joints/j9_l_o",
+        "/DR_Legs/Joints/j9_r_i",
+        "/DR_Legs/Joints/j9_r_o"
+      ],
+      "collision_p50_us": 503.5344511270523,
+      "completed_substeps": 110,
+      "contact_count": {
+        "max": 8,
+        "mean": 7.363636363636363,
+        "min": 4,
+        "rms": 7.446780878644507
+      },
+      "control_steps_completed": 22,
+      "control_steps_requested": 400,
+      "device": "cpu",
+      "fall_time_s": 0.42,
+      "forward_command_mps": 0.2,
+      "forward_displacement_m": -0.07893935986794531,
+      "forward_velocity_error_mps": {
+        "max": null,
+        "mean": null,
+        "min": null,
+        "rms": null
+      },
+      "forward_velocity_mps": {
+        "max": null,
+        "mean": null,
+        "min": null,
+        "rms": null
+      },
+      "height_m": {
+        "max": 0.27706387639045715,
+        "mean": 0.2110497531565753,
+        "min": 0.11749899387359619,
+        "rms": 0.2173809502287529
+      },
+      "iterations": 8,
+      "label": "VBD local, 8 iterations",
+      "lateral_displacement_m": -0.00968847374281534,
+      "path_error_m": {
+        "max": 0.08152596527950334,
+        "mean": 0.05246192252199832,
+        "min": 0.0011907497799907964,
+        "rms": 0.059774884374102034
+      },
+      "policy_p50_us": 109.9701039493084,
+      "simulated_time_s": 0.44000000000000034,
+      "solver": "vbd",
+      "solver_p50_us": 2848.9879332482815,
+      "solver_p90_us": 2871.1391612887383,
+      "stand_time_s": 1,
+      "status": "fell",
+      "step_p50_us": 3352.353349328041,
+      "tilt_deg": {
+        "max": 28.55148186354192,
+        "mean": 9.761106877908025,
+        "min": 0.05216489829685484,
+        "rms": 13.19044992295779
+      },
+      "vbd_solve": "local"
+    },
+    {
+      "action_l2": {
+        "max": 5.3100361824035645,
+        "mean": 4.401762058337529,
+        "min": 2.5290756225585938,
+        "rms": 4.459914474120419
+      },
+      "actuated_dof_indices": [
+        0,
+        1,
+        5,
+        6,
+        10,
+        15,
+        18,
+        19,
+        23,
+        24,
+        28,
+        33
+      ],
+      "actuated_target_error_rad": {
+        "max": 0.4120728075504303,
+        "mean": 0.3224122201402982,
+        "min": 0.18020111322402954,
+        "rms": 0.32932671371766037
+      },
+      "armature_mode": "isotropic_child_body",
+      "case": "local_i32",
+      "closure_error_um": {
+        "max": 74.22632009236806,
+        "mean": 23.08928328639675,
+        "min": 12.025540701599928,
+        "rms": 28.256949837245653
+      },
+      "closure_joint_labels": [
+        "/DR_Legs/Joints/j6_l_o",
+        "/DR_Legs/Joints/j6_r_o",
+        "/DR_Legs/Joints/j9_l_i",
+        "/DR_Legs/Joints/j9_l_o",
+        "/DR_Legs/Joints/j9_r_i",
+        "/DR_Legs/Joints/j9_r_o"
+      ],
+      "collision_p50_us": 516.7797207832336,
+      "completed_substeps": 120,
+      "contact_count": {
+        "max": 3,
+        "mean": 1.7083333333333333,
+        "min": 1,
+        "rms": 1.8371173070873836
+      },
+      "control_steps_completed": 24,
+      "control_steps_requested": 400,
+      "device": "cpu",
+      "fall_time_s": 0.46,
+      "forward_command_mps": 0.2,
+      "forward_displacement_m": -0.10095455893315375,
+      "forward_velocity_error_mps": {
+        "max": null,
+        "mean": null,
+        "min": null,
+        "rms": null
+      },
+      "forward_velocity_mps": {
+        "max": null,
+        "mean": null,
+        "min": null,
+        "rms": null
+      },
+      "height_m": {
+        "max": 0.2786850035190582,
+        "mean": 0.20610665498922268,
+        "min": 0.11552263796329498,
+        "rms": 0.21332505255965487
+      },
+      "iterations": 32,
+      "label": "VBD local, 32 iterations",
+      "lateral_displacement_m": -0.028589394379767263,
+      "path_error_m": {
+        "max": 0.11541639680677052,
+        "mean": 0.07921538592540574,
+        "min": 0.001660722789968106,
+        "rms": 0.08900594718846555
+      },
+      "policy_p50_us": 119.9403777718544,
+      "simulated_time_s": 0.48000000000000037,
+      "solver": "vbd",
+      "solver_p50_us": 10976.227931678295,
+      "solver_p90_us": 11026.154644787312,
+      "stand_time_s": 1,
+      "status": "fell",
+      "step_p50_us": 11497.738305479288,
+      "tilt_deg": {
+        "max": 33.54741742181404,
+        "mean": 14.00068814322941,
+        "min": 0.09849920161406275,
+        "rms": 17.50381883201264
+      },
+      "vbd_solve": "local"
+    },
+    {
+      "action_l2": {
+        "max": 4.86618709564209,
+        "mean": 3.0465264186263084,
+        "min": 1.5827081203460693,
+        "rms": 3.089779790565083
+      },
+      "actuated_dof_indices": [
+        0,
+        1,
+        5,
+        6,
+        10,
+        15,
+        18,
+        19,
+        23,
+        24,
+        28,
+        33
+      ],
+      "actuated_target_error_rad": {
+        "max": 0.36521223187446594,
+        "mean": 0.18146627323701978,
+        "min": 0.09673693776130676,
+        "rms": 0.18925300322189234
+      },
+      "armature_mode": "isotropic_child_body",
+      "case": "sparse_i8",
+      "closure_error_um": {
+        "max": 96.18513819601438,
+        "mean": 28.513540084700676,
+        "min": 4.371217824472341,
+        "rms": 32.57849961359331
+      },
+      "closure_joint_labels": [
+        "/DR_Legs/Joints/j6_l_o",
+        "/DR_Legs/Joints/j6_r_o",
+        "/DR_Legs/Joints/j9_l_i",
+        "/DR_Legs/Joints/j9_l_o",
+        "/DR_Legs/Joints/j9_r_i",
+        "/DR_Legs/Joints/j9_r_o"
+      ],
+      "collision_p50_us": 499.6941424906254,
+      "completed_substeps": 2000,
+      "contact_count": {
+        "max": 3,
+        "mean": 1.545,
+        "min": 0,
+        "rms": 1.6926310879810758
+      },
+      "control_steps_completed": 400,
+      "control_steps_requested": 400,
+      "device": "cpu",
+      "fall_time_s": null,
+      "forward_command_mps": 0.2,
+      "forward_displacement_m": 1.3470419531222433,
+      "forward_velocity_error_mps": {
+        "max": 0.17692623694257975,
+        "mean": -0.0166411011793589,
+        "min": -0.3154302138546388,
+        "rms": 0.07995902434300349
+      },
+      "forward_velocity_mps": {
+        "max": 0.37692623694257976,
+        "mean": 0.18335889882064116,
+        "min": -0.11543021385463881,
+        "rms": 0.1993414284641842
+      },
+      "height_m": {
+        "max": 0.303537517786026,
+        "mean": 0.2684935852512717,
+        "min": 0.24229463934898376,
+        "rms": 0.2686397366826738
+      },
+      "iterations": 8,
+      "label": "VBD sparse direct, 8 iterations",
+      "lateral_displacement_m": -0.13418659052661308,
+      "path_error_m": {
+        "max": 0.19032429007224083,
+        "mean": 0.09712540585731193,
+        "min": 0.0010256998856454174,
+        "rms": 0.10520586267363329
+      },
+      "policy_p50_us": 111.32005602121353,
+      "simulated_time_s": 7.999999999999562,
+      "solver": "vbd",
+      "solver_p50_us": 1871.3888712227345,
+      "solver_p90_us": 1892.1831622719765,
+      "stand_time_s": 1,
+      "status": "complete",
+      "step_p50_us": 2369.918394833803,
+      "tilt_deg": {
+        "max": 9.14768916794066,
+        "mean": 4.606123167543539,
+        "min": 0.5744705325418195,
+        "rms": 5.040742873678826
+      },
+      "vbd_solve": "block_sparse_joints"
+    },
+    {
+      "action_l2": {
+        "max": 6.964170932769775,
+        "mean": 2.766872850331393,
+        "min": 1.3750349283218384,
+        "rms": 3.01774823331752
+      },
+      "actuated_dof_indices": [
+        0,
+        1,
+        5,
+        6,
+        10,
+        15,
+        18,
+        19,
+        23,
+        24,
+        28,
+        33
+      ],
+      "actuated_target_error_rad": {
+        "max": 0.49882635474205017,
+        "mean": 0.17684849436310204,
+        "min": 0.053230252116918564,
+        "rms": 0.2212424048792676
+      },
+      "armature_mode": "unsupported",
+      "case": "sparse_no_armature_i8",
+      "closure_error_um": {
+        "max": 50.77401078844541,
+        "mean": 15.764633887090815,
+        "min": 1.0069651516663758,
+        "rms": 22.362658339857216
+      },
+      "closure_joint_labels": [
+        "/DR_Legs/Joints/j6_l_o",
+        "/DR_Legs/Joints/j6_r_o",
+        "/DR_Legs/Joints/j9_l_i",
+        "/DR_Legs/Joints/j9_l_o",
+        "/DR_Legs/Joints/j9_r_i",
+        "/DR_Legs/Joints/j9_r_o"
+      ],
+      "collision_p50_us": 509.6695385873318,
+      "completed_substeps": 110,
+      "contact_count": {
+        "max": 2,
+        "mean": 0.8636363636363636,
+        "min": 0,
+        "rms": 1.1870513506545997
+      },
+      "control_steps_completed": 22,
+      "control_steps_requested": 400,
+      "device": "cpu",
+      "fall_time_s": 0.42,
+      "forward_command_mps": 0.2,
+      "forward_displacement_m": 0.1455311810132116,
+      "forward_velocity_error_mps": {
+        "max": null,
+        "mean": null,
+        "min": null,
+        "rms": null
+      },
+      "forward_velocity_mps": {
+        "max": null,
+        "mean": null,
+        "min": null,
+        "rms": null
+      },
+      "height_m": {
+        "max": 0.29745835065841675,
+        "mean": 0.25798852132125333,
+        "min": 0.16499090194702148,
+        "rms": 0.2603574443016025
+      },
+      "iterations": 8,
+      "label": "VBD sparse direct, no armature, 8 iterations",
+      "lateral_displacement_m": -0.05678862190655121,
+      "path_error_m": {
+        "max": 0.15621866797903955,
+        "mean": 0.05401838501161014,
+        "min": 0.0008372044903221898,
+        "rms": 0.07179235723557693
+      },
+      "policy_p50_us": 114.67514559626579,
+      "simulated_time_s": 0.44000000000000034,
+      "solver": "vbd",
+      "solver_p50_us": 1884.3784928321838,
+      "solver_p90_us": 1911.9336269795895,
+      "stand_time_s": 1,
+      "status": "fell",
+      "step_p50_us": 2393.273636698723,
+      "tilt_deg": {
+        "max": 60.81580189702178,
+        "mean": 27.61167870060541,
+        "min": 2.2069483416427214,
+        "rms": 34.00389954065676
+      },
+      "vbd_solve": "block_sparse_joints"
+    }
+  ],
+  "source": "Newton Disney Research asset package"
+}

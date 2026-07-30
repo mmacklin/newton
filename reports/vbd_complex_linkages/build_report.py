@@ -130,6 +130,7 @@ def main() -> None:
     h2 = _load("h2_loop_results.json")
     dr_free_ankle = _load("dr_legs_free_ankle_results.json")
     dr_free_ankle_cuda = _load("dr_legs_free_ankle_cuda_results.json")
+    dr_policy = _load("dr_legs_policy_results.json")
     matrix = _load("dr_legs_matrix_diagnostic.json")
     visual_validation = _load("visual_validation_results.json")
     iteration_sweep = json.loads((FORMULATION_DATA_SOURCE / "iteration_sweep_cpu_sparse.json").read_text())
@@ -142,7 +143,7 @@ def main() -> None:
         if path.suffix in (".mp4", ".jpg", ".json"):
             destination = videos / path.name
             if path.resolve() != destination.resolve():
-                shutil.copy2(path, destination)
+                shutil.copyfile(path, destination)
     for source_dir, output_name in ((ASSET_SOURCE, "assets"), (FORMULATION_DATA_SOURCE, "formulation_data")):
         output_dir = OUTPUT / output_name
         if output_dir.exists():
@@ -155,10 +156,11 @@ def main() -> None:
         "h2_loop_results.json",
         "dr_legs_free_ankle_results.json",
         "dr_legs_free_ankle_cuda_results.json",
+        "dr_legs_policy_results.json",
         "dr_legs_matrix_diagnostic.json",
         "visual_validation_results.json",
     ):
-        shutil.copy2(SOURCE / name, OUTPUT / name)
+        shutil.copyfile(SOURCE / name, OUTPUT / name)
     for stale_name in ("robot_foot_results.json", "dr_legs_results.json", "dr_legs_tuning"):
         stale_path = OUTPUT / stale_name
         if stale_path.is_dir():
@@ -181,6 +183,12 @@ def main() -> None:
     dr_free_sparse = next(row for row in dr_free_ankle["rows"] if row.get("vbd_solve") == "block_sparse_joints")
     dr_cuda_kamino = _row(dr_free_ankle_cuda, "kamino")
     dr_cuda_sparse = next(row for row in dr_free_ankle_cuda["rows"] if row.get("vbd_solve") == "block_sparse_joints")
+    dr_policy_rows = {row["case"]: row for row in dr_policy["rows"]}
+    dr_policy_kamino = dr_policy_rows["kamino"]
+    dr_policy_local_i8 = dr_policy_rows["local_i8"]
+    dr_policy_local_i32 = dr_policy_rows["local_i32"]
+    dr_policy_sparse = dr_policy_rows["sparse_i8"]
+    dr_policy_sparse_no_armature = dr_policy_rows["sparse_no_armature_i8"]
     visual_rows = {row["scenario"]: row for row in visual_validation["visuals"]}
     four_bar_visual = visual_rows["four-bar"]
     cable_visual = visual_rows["cable"]
@@ -243,6 +251,7 @@ figure>svg{{display:block;width:100%;height:auto;border:1px solid var(--line);ba
 <h2>Summary</h2>
 <div class="status"><strong>Sparse VBD gives the lowest closure error on the feasible driven linkages.</strong> On the compatible three-pushrod foot it reduces aggregate closure RMS by {foot_local["rms_closure_um"] / foot_sparse["rms_closure_um"]:.1f}x versus local VBD and {foot_rows["kamino"]["rms_closure_um"] / foot_sparse["rms_closure_um"]:.1f}x versus tuned Kamino. On the G1 ankle settling test the corresponding reductions are {g1_local["rms_closure_um"] / g1_sparse["rms_closure_um"]:.1f}x and {g1_kamino["rms_closure_um"] / g1_sparse["rms_closure_um"]:.1f}x.</div>
 <p>On Unitree's public 55-body H2 model with six reconstructed loop rods, sparse i8 matches local i32 within 5% aggregate closure RMS while taking {_fmt(h2_local_i32["p50_step_us"] / h2_sparse_i8["p50_step_us"], 2)}x less CPU wall time. Local i8 diverges under the same physical parameters. On the contact-free robot foot, CPU-graph median substep latency is {_fmt(foot_local["p50_step_us"] / 1.0e3, 3)} ms for local VBD and {_fmt(foot_sparse["p50_step_us"] / 1.0e3, 3)} ms for sparse VBD; the sparse solve spends slightly more time but reaches lower closure error. In the larger DR Legs test, sparse VBD costs {_fmt(dr_free_sparse["p50_solver_us"] / 1.0e3, 3)} ms for CPU-graph solver replay and {_fmt((dr_free_sparse["p50_solver_us"] + dr_free_sparse["p50_collision_us"]) / 1.0e3, 3)} ms including dispatched collision; local VBD becomes nonfinite and Kamino reaches its iteration cap on most substeps.</p>
+<p>A trained DR Legs walking policy provides a closed-loop control validation. Sparse VBD completes the full 8 s rollout, tracks a 0.2 m/s command at {_fmt(dr_policy_sparse["forward_velocity_mps"]["mean"], 3)} m/s mean walking speed, and holds graph-cycle closure to {_fmt(dr_policy_sparse["closure_error_um"]["rms"], 1)} µm RMS. Local VBD falls during the initial standing phase at both 8 and 32 iterations. Because VBD does not yet implement joint armature, these transfer results use the explicitly documented child-body inertia approximation described below.</p>
 
 <h2>Solver landscape</h2>
 <p>Two choices organize the methods compared here. A <em>reduced-coordinate</em> model stores joint coordinates and derives body poses from an articulation tree. A <em>maximal-coordinate</em> model stores every body pose independently and enforces joints between bodies. A <em>primal</em> solve updates positions or pose increments directly, while a <em>dual</em> or primal-dual solve introduces constraint reactions or multipliers.</p>
@@ -506,6 +515,34 @@ apply_pose_updates(delta, relaxation)</code></pre>
 {_video("dr_legs_vbd_sparse_free_ankle_cpu.mp4", "VBD sparse direct free ankle", "Matched free-ankle configuration; the driven linkage tips forward while preserving closure.")}
 </div>
 
+<h2>Trained DR Legs walking policy</h2>
+<p>This test runs the trained policy distributed with Newton's Disney Research assets. It preserves the SDK policy contract: a 94-dimensional observation, 12 position actions scaled by 0.4, <code>kp=15</code>, <code>kd=0.6</code>, a 250 Hz physics rate (<code>dt=0.004 s</code>), and one policy inference every five substeps. The robot stands for 1 s, then receives a 0.2 m/s forward command for 7 s. Kamino and both VBD modes use the same imported 31-body model and Newton contact pipeline. The <a href="{GITHUB_BLOB}/reports/vbd_complex_linkages/bench_dr_legs_policy.py">benchmark harness</a> reconstructs the exact observation ordering and checkpoint normalizer used by the SDK example; the <a href="{GITHUB_BLOB}/reports/vbd_complex_linkages/render_dr_legs_policy.py">ViewerGL renderer</a> records the same execution path.</p>
+<div class="equation-note">
+<strong>Armature transfer limitation.</strong> The policy was trained with <code>0.01 kg·m²</code> armature on every actuator. VBD does not currently implement <code>Model.joint_armature</code>; this value is larger than many physical linkage inertias by two to four orders of magnitude. The primary VBD rows therefore add <code>0.01 kg·m² I</code> to each actuated child body's rotational inertia. This isotropic child-body approximation restores the dominant inertia scale and remains well conditioned, but it is not dynamically equivalent to relative-coordinate joint armature. The no-armature sparse row is retained as an ablation.
+</div>
+<h3 class="analysis-heading">Policy outcome</h3>
+<table><thead><tr><th>CPU solver</th><th>Armature treatment</th><th>Status</th><th>Mean walk speed [m/s]</th><th>Forward travel [m]</th><th>Lateral drift [m]</th><th>Pelvis height [m]</th><th>Tilt RMS / max [deg]</th><th>Closure RMS [µm]</th></tr></thead><tbody>
+<tr><td>Kamino</td><td>native joint armature</td><td>completes 8 s</td><td>{_fmt(dr_policy_kamino["forward_velocity_mps"]["mean"], 3)}</td><td>{_fmt(dr_policy_kamino["forward_displacement_m"], 3)}</td><td>{_fmt(abs(dr_policy_kamino["lateral_displacement_m"]), 3)}</td><td>{_fmt(dr_policy_kamino["height_m"]["min"], 3)}&ndash;{_fmt(dr_policy_kamino["height_m"]["max"], 3)}</td><td>{_fmt(dr_policy_kamino["tilt_deg"]["rms"], 1)} / {_fmt(dr_policy_kamino["tilt_deg"]["max"], 1)}</td><td>{_fmt(dr_policy_kamino["closure_error_um"]["rms"], 1)}</td></tr>
+<tr><td>VBD local, i8</td><td>isotropic child body</td><td>falls at {dr_policy_local_i8["fall_time_s"]:.2f} s</td><td>-</td><td>{_fmt(dr_policy_local_i8["forward_displacement_m"], 3)}</td><td>{_fmt(abs(dr_policy_local_i8["lateral_displacement_m"]), 3)}</td><td>{_fmt(dr_policy_local_i8["height_m"]["min"], 3)}&ndash;{_fmt(dr_policy_local_i8["height_m"]["max"], 3)}</td><td>{_fmt(dr_policy_local_i8["tilt_deg"]["rms"], 1)} / {_fmt(dr_policy_local_i8["tilt_deg"]["max"], 1)}</td><td>{_fmt(dr_policy_local_i8["closure_error_um"]["rms"], 1)}</td></tr>
+<tr><td>VBD local, i32</td><td>isotropic child body</td><td>falls at {dr_policy_local_i32["fall_time_s"]:.2f} s</td><td>-</td><td>{_fmt(dr_policy_local_i32["forward_displacement_m"], 3)}</td><td>{_fmt(abs(dr_policy_local_i32["lateral_displacement_m"]), 3)}</td><td>{_fmt(dr_policy_local_i32["height_m"]["min"], 3)}&ndash;{_fmt(dr_policy_local_i32["height_m"]["max"], 3)}</td><td>{_fmt(dr_policy_local_i32["tilt_deg"]["rms"], 1)} / {_fmt(dr_policy_local_i32["tilt_deg"]["max"], 1)}</td><td>{_fmt(dr_policy_local_i32["closure_error_um"]["rms"], 1)}</td></tr>
+<tr><td>VBD sparse direct, i8</td><td>none; unsupported</td><td>falls at {dr_policy_sparse_no_armature["fall_time_s"]:.2f} s</td><td>-</td><td>{_fmt(dr_policy_sparse_no_armature["forward_displacement_m"], 3)}</td><td>{_fmt(abs(dr_policy_sparse_no_armature["lateral_displacement_m"]), 3)}</td><td>{_fmt(dr_policy_sparse_no_armature["height_m"]["min"], 3)}&ndash;{_fmt(dr_policy_sparse_no_armature["height_m"]["max"], 3)}</td><td>{_fmt(dr_policy_sparse_no_armature["tilt_deg"]["rms"], 1)} / {_fmt(dr_policy_sparse_no_armature["tilt_deg"]["max"], 1)}</td><td>{_fmt(dr_policy_sparse_no_armature["closure_error_um"]["rms"], 1)}</td></tr>
+<tr><td><strong>VBD sparse direct, i8</strong></td><td>isotropic child body</td><td><strong>completes 8 s</strong></td><td><strong>{_fmt(dr_policy_sparse["forward_velocity_mps"]["mean"], 3)}</strong></td><td><strong>{_fmt(dr_policy_sparse["forward_displacement_m"], 3)}</strong></td><td><strong>{_fmt(abs(dr_policy_sparse["lateral_displacement_m"]), 3)}</strong></td><td>{_fmt(dr_policy_sparse["height_m"]["min"], 3)}&ndash;{_fmt(dr_policy_sparse["height_m"]["max"], 3)}</td><td>{_fmt(dr_policy_sparse["tilt_deg"]["rms"], 1)} / {_fmt(dr_policy_sparse["tilt_deg"]["max"], 1)}</td><td><strong>{_fmt(dr_policy_sparse["closure_error_um"]["rms"], 1)}</strong></td></tr>
+</tbody></table>
+<p>Sparse VBD completes the rollout with mean forward-speed error {_fmt(abs(dr_policy_sparse["forward_velocity_error_mps"]["mean"]), 3)} m/s and {_fmt(dr_policy_sparse["closure_error_um"]["rms"], 1)} µm closure RMS. Kamino also completes, with lower pelvis tilt but slower mean forward motion and larger lateral drift in this rollout. Local i32 reaches closure error comparable to sparse i8 before falling, so geometric closure is necessary but not sufficient for policy transfer. The no-armature sparse ablation is even more direct: it holds closure to {_fmt(dr_policy_sparse_no_armature["closure_error_um"]["rms"], 1)} µm RMS yet falls at {dr_policy_sparse_no_armature["fall_time_s"]:.2f} s because the controlled dynamics no longer match training.</p>
+<h3 class="analysis-heading">Diagnostic CPU cost</h3>
+<table><thead><tr><th>Solver</th><th>Run status</th><th>p50 solver [ms]</th><th>p50 collision [ms]</th><th>p50 physics substep [ms]</th><th>Speedup vs Kamino</th></tr></thead><tbody>
+<tr><td>Kamino</td><td>complete</td><td>{_fmt(dr_policy_kamino["solver_p50_us"] / 1.0e3, 3)}</td><td>{_fmt(dr_policy_kamino["collision_p50_us"] / 1.0e3, 3)}</td><td>{_fmt(dr_policy_kamino["step_p50_us"] / 1.0e3, 3)}</td><td>1.00x</td></tr>
+<tr><td>VBD local, i8</td><td>failed prefix</td><td>{_fmt(dr_policy_local_i8["solver_p50_us"] / 1.0e3, 3)}</td><td>{_fmt(dr_policy_local_i8["collision_p50_us"] / 1.0e3, 3)}</td><td>{_fmt(dr_policy_local_i8["step_p50_us"] / 1.0e3, 3)}</td><td>-</td></tr>
+<tr><td>VBD local, i32</td><td>failed prefix</td><td>{_fmt(dr_policy_local_i32["solver_p50_us"] / 1.0e3, 3)}</td><td>{_fmt(dr_policy_local_i32["collision_p50_us"] / 1.0e3, 3)}</td><td>{_fmt(dr_policy_local_i32["step_p50_us"] / 1.0e3, 3)}</td><td>-</td></tr>
+<tr><td><strong>VBD sparse direct, i8</strong></td><td>complete</td><td><strong>{_fmt(dr_policy_sparse["solver_p50_us"] / 1.0e3, 3)}</strong></td><td>{_fmt(dr_policy_sparse["collision_p50_us"] / 1.0e3, 3)}</td><td><strong>{_fmt(dr_policy_sparse["step_p50_us"] / 1.0e3, 3)}</strong></td><td><strong>{_fmt(dr_policy_kamino["step_p50_us"] / dr_policy_sparse["step_p50_us"], 1)}x</strong></td></tr>
+</tbody></table>
+<p class="note">These policy-run timings use synchronized normal dispatch on Warp's single-threaded CPU backend and exclude the roughly 0.1&ndash;0.15 ms policy inference. They are diagnostic rather than the graph-replay performance numbers reported in the preceding DR Legs table. Timing from failed local prefixes is not successful throughput.</p>
+<div class="media-grid">
+{_video("dr_legs_policy_kamino.mp4", "Kamino policy rollout", "Native joint armature; completes the full eight-second command sequence.")}
+{_video("dr_legs_policy_local_i32.mp4", "VBD local, 32 iterations", "The local solve collapses during the one-second standing phase; the final frame is held to make the failure visible.")}
+{_video("dr_legs_policy_sparse_i8.mp4", "VBD sparse direct, 8 iterations", "The coupled solve completes the full trained-policy rollout using the documented isotropic child-body armature approximation.")}
+</div>
+
 <h2>Numerical validation</h2>
 <p>The sparse block-Cholesky implementation is checked directly against its assembled articulation matrix and obtains relative linear residual <strong>{matrix["sparse_relative_residual"]:.2e}</strong>. The rigid contact implementation is checked against finite differences of contact energy: the normal-only force has relative gradient error <strong>{matrix["normal_contact_gradient_relative_error"]:.2e}</strong>, and normal plus damping has relative error <strong>{matrix["normal_damping_contact_gradient_relative_error"]:.2e}</strong>.</p>
 <p>The DR Legs sparse-direct run provides an end-to-end validation with joints and changing contact active together. It completes all {dr_free_sparse["completed_substeps"]} substeps with {_fmt(dr_free_sparse["rms_closure_um"], 3)} µm aggregate closure RMS and {_fmt(dr_free_sparse["max_body_speed_mps"], 2)} m/s maximum body speed.</p>
@@ -513,7 +550,7 @@ apply_pose_updates(delta, relaxation)</code></pre>
 <h2>Interpretation</h2>
 <p>For these configurations, articulation-wide sparse VBD gives lower geometric closure error than local VBD and Kamino. It is also faster than local VBD on the two contact-free CPU tests and is the only VBD mode to complete the DR Legs contact test. The result supports a unified maximal-coordinate rigid-body path in which joints receive a coupled direct solve while contact curvature remains block diagonal.</p>
 <p>These are achieved-error comparisons, not equal-tolerance benchmarks. VBD uses a fixed eight nonlinear iterations, while Kamino uses residual-based PADMM stopping with different constraint and contact models. CPU VBD solver timings retain CPU-graph launch and synchronization overhead plus separately dispatched collision; Kamino CPU retains normal dispatch overhead. CUDA graph timings retain graph launch and synchronization overhead. The single-articulation GPU workloads do not saturate the device.</p>
-<p class="note">Reproducible data: <a href="robot_foot_compatible_results.json">compatible robot foot</a>, <a href="robot_foot_geometry_diagnostic.json">foot geometry check</a>, <a href="g1_ankle_results.json">G1 ankle</a>, <a href="h2_loop_results.json">Unitree H2 loops</a>, <a href="dr_legs_free_ankle_results.json">DR Legs CPU</a>, <a href="dr_legs_free_ankle_cuda_results.json">DR Legs CUDA</a>, <a href="dr_legs_matrix_diagnostic.json">numerical checks</a>, and <a href="visual_validation_results.json">public visual validations</a>.</p>
+<p class="note">Reproducible data: <a href="robot_foot_compatible_results.json">compatible robot foot</a>, <a href="robot_foot_geometry_diagnostic.json">foot geometry check</a>, <a href="g1_ankle_results.json">G1 ankle</a>, <a href="h2_loop_results.json">Unitree H2 loops</a>, <a href="dr_legs_free_ankle_results.json">DR Legs CPU</a>, <a href="dr_legs_free_ankle_cuda_results.json">DR Legs CUDA</a>, <a href="dr_legs_policy_results.json">DR Legs policy</a>, <a href="dr_legs_matrix_diagnostic.json">numerical checks</a>, and <a href="visual_validation_results.json">public visual validations</a>.</p>
 </main></body></html>"""
     (OUTPUT / "index.html").write_text(body)
     print(OUTPUT / "index.html")
