@@ -559,6 +559,7 @@ def _solve_stiffness_ratio_energy(mode: str) -> float:
         iterations=1,
         rigid_articulation_solve=mode,
         rigid_articulation_relaxation=1.0,
+        rigid_avbd_alpha=0.0,
         rigid_joint_linear_k_start=1.0e6,
         rigid_joint_linear_ke=1.0e6,
         rigid_joint_angular_k_start=1.0,
@@ -583,6 +584,7 @@ def _solve_projected_joint_split_residual(joint_kind: str, mode: str) -> tuple[f
         iterations=1,
         rigid_articulation_solve=mode,
         rigid_articulation_relaxation=1.0,
+        rigid_avbd_alpha=0.0,
         rigid_joint_linear_ke=1.0e6,
         rigid_joint_angular_ke=1.0e5,
         rigid_joint_linear_kd=0.0,
@@ -605,6 +607,7 @@ def _solve_cable_rod_split_residual(closed: bool, mode: str, bend_damping: float
         iterations=1,
         rigid_articulation_solve=mode,
         rigid_articulation_relaxation=1.0,
+        rigid_avbd_alpha=0.0,
         rigid_joint_linear_ke=1.0e6,
         rigid_joint_angular_ke=1.0e4,
         rigid_joint_linear_kd=0.0,
@@ -637,7 +640,11 @@ def _solve_residual(mode: str) -> float:
     state_in.body_q.assign(body_q)
 
     solver = newton.solvers.SolverVBD(
-        model, iterations=1, rigid_articulation_solve=mode, rigid_articulation_relaxation=1.0
+        model,
+        iterations=1,
+        rigid_articulation_solve=mode,
+        rigid_articulation_relaxation=1.0,
+        rigid_avbd_alpha=0.0,
     )
     solver.step(state_in, state_out, control, None, 1.0 / 120.0)
     return _joint_residual(model, state_out)
@@ -652,7 +659,11 @@ def _solve_loop_q(mode: str, device: str) -> np.ndarray:
     _perturb_body_poses(state_in, translation_amplitude=0.02, rotation_amplitude=0.0)
 
     solver = newton.solvers.SolverVBD(
-        model, iterations=1, rigid_articulation_solve=mode, rigid_articulation_relaxation=1.0
+        model,
+        iterations=1,
+        rigid_articulation_solve=mode,
+        rigid_articulation_relaxation=1.0,
+        rigid_avbd_alpha=0.0,
     )
     solver.step(state_in, state_out, control, None, 1.0 / 120.0)
     return state_out.body_q.numpy()

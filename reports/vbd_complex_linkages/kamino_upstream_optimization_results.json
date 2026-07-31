@@ -1,0 +1,28 @@
+{
+  "benchmark": "DR Legs trained-policy rollout, CPU normal dispatch",
+  "device": "cpu",
+  "old_newton_commit": "13475da9a",
+  "upstream_merge_commit": "23e680a3a",
+  "warp_version": "1.16.0.dev20260716",
+  "matched_20_control_step_comparison": {
+    "before": {
+      "collision_p50_us": 609.254,
+      "solver_p50_us": 59519.9,
+      "step_p50_us": 60129.45
+    },
+    "after": {
+      "collision_p50_us": 267.805,
+      "solver_p50_us": 42340.51,
+      "step_p50_us": 42605.925
+    },
+    "solver_speedup": 1.406,
+    "step_speedup": 1.411
+  },
+  "full_8_second_rollout_after": {
+    "closure_rms_um": 433.852,
+    "collision_p50_us": 262.175,
+    "completed_substeps": 2000,
+    "solver_p50_us": 42269.96,
+    "step_p50_us": 42536.73
+  }
+}

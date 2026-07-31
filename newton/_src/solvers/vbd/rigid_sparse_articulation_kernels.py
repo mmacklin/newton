@@ -1510,9 +1510,15 @@ def assemble_articulation_joints_scalar(
     lin_lambda = wp.vec3(0.0)
     lin_C0 = wp.vec3(0.0)
     lin_alpha = float(0.0)
-    if joint_is_hard[c_start] == 1:
+    linear_hard = joint_is_hard[c_start] == 1
+    if jt == JointType.CABLE:
+        linear_hard = linear_hard or joint_is_hard[c_start + 1] == 1
+    if linear_hard:
         lin_lambda = joint_lambda_lin[joint]
         lin_C0 = joint_C0_lin[joint]
+        if jt == JointType.CABLE:
+            lin_lambda = wp.quat_rotate(parent_anchor_q, lin_lambda)
+            lin_C0 = wp.quat_rotate(parent_anchor_q, lin_C0)
         lin_alpha = avbd_alpha
 
     ang_lambda = wp.vec3(0.0)
@@ -1520,7 +1526,11 @@ def assemble_articulation_joints_scalar(
     ang_alpha = float(0.0)
     ang_hard = int(0)
     if jt != JointType.BALL:
-        ang_hard = joint_is_hard[c_start + 1]
+        if jt == JointType.CABLE:
+            if joint_is_hard[c_start + 2] == 1 or joint_is_hard[c_start + 3] == 1:
+                ang_hard = 1
+        else:
+            ang_hard = joint_is_hard[c_start + 1]
         if ang_hard == 1:
             ang_lambda = joint_lambda_ang[joint]
             ang_C0 = joint_C0_ang[joint]
@@ -1531,10 +1541,10 @@ def assemble_articulation_joints_scalar(
     kd_linear = float(0.0)
     kd_angular = float(0.0)
     if jt == JointType.CABLE:
-        k_linear = joint_penalty_k[c_start]
-        k_angular = joint_penalty_k[c_start + 1]
-        kd_linear = joint_penalty_kd[c_start]
-        kd_angular = joint_penalty_kd[c_start + 1]
+        k_linear = wp.max(joint_penalty_k[c_start], joint_penalty_k[c_start + 1])
+        k_angular = wp.max(joint_penalty_k[c_start + 2], joint_penalty_k[c_start + 3])
+        kd_linear = wp.max(joint_penalty_kd[c_start], joint_penalty_kd[c_start + 1])
+        kd_angular = wp.max(joint_penalty_kd[c_start + 2], joint_penalty_kd[c_start + 3])
     elif jt == JointType.BALL:
         k_linear = joint_penalty_k[c_start]
         kd_linear = joint_penalty_kd[c_start]
@@ -2234,9 +2244,15 @@ def solve_articulation_sparse_serial(
         lin_lambda = wp.vec3(0.0)
         lin_C0 = wp.vec3(0.0)
         lin_alpha = float(0.0)
-        if joint_is_hard[c_start] == 1:
+        linear_hard = joint_is_hard[c_start] == 1
+        if jt == JointType.CABLE:
+            linear_hard = linear_hard or joint_is_hard[c_start + 1] == 1
+        if linear_hard:
             lin_lambda = joint_lambda_lin[joint]
             lin_C0 = joint_C0_lin[joint]
+            if jt == JointType.CABLE:
+                lin_lambda = wp.quat_rotate(parent_anchor_q, lin_lambda)
+                lin_C0 = wp.quat_rotate(parent_anchor_q, lin_C0)
             lin_alpha = avbd_alpha
 
         ang_lambda = wp.vec3(0.0)
@@ -2244,7 +2260,11 @@ def solve_articulation_sparse_serial(
         ang_alpha = float(0.0)
         ang_hard = int(0)
         if jt != JointType.BALL:
-            ang_hard = joint_is_hard[c_start + 1]
+            if jt == JointType.CABLE:
+                if joint_is_hard[c_start + 2] == 1 or joint_is_hard[c_start + 3] == 1:
+                    ang_hard = 1
+            else:
+                ang_hard = joint_is_hard[c_start + 1]
             if ang_hard == 1:
                 ang_lambda = joint_lambda_ang[joint]
                 ang_C0 = joint_C0_ang[joint]
@@ -2255,10 +2275,10 @@ def solve_articulation_sparse_serial(
         kd_linear = float(0.0)
         kd_angular = float(0.0)
         if jt == JointType.CABLE:
-            k_linear = joint_penalty_k[c_start]
-            k_angular = joint_penalty_k[c_start + 1]
-            kd_linear = joint_penalty_kd[c_start]
-            kd_angular = joint_penalty_kd[c_start + 1]
+            k_linear = wp.max(joint_penalty_k[c_start], joint_penalty_k[c_start + 1])
+            k_angular = wp.max(joint_penalty_k[c_start + 2], joint_penalty_k[c_start + 3])
+            kd_linear = wp.max(joint_penalty_kd[c_start], joint_penalty_kd[c_start + 1])
+            kd_angular = wp.max(joint_penalty_kd[c_start + 2], joint_penalty_kd[c_start + 3])
         elif jt == JointType.BALL:
             k_linear = joint_penalty_k[c_start]
             kd_linear = joint_penalty_kd[c_start]

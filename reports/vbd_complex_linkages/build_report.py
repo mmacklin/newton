@@ -157,6 +157,7 @@ def main() -> None:
         "dr_legs_free_ankle_results.json",
         "dr_legs_free_ankle_cuda_results.json",
         "dr_legs_policy_results.json",
+        "kamino_upstream_optimization_results.json",
         "dr_legs_matrix_diagnostic.json",
         "visual_validation_results.json",
     ):
@@ -536,7 +537,7 @@ apply_pose_updates(delta, relaxation)</code></pre>
 <tr><td>VBD local, i32</td><td>failed prefix</td><td>{_fmt(dr_policy_local_i32["solver_p50_us"] / 1.0e3, 3)}</td><td>{_fmt(dr_policy_local_i32["collision_p50_us"] / 1.0e3, 3)}</td><td>{_fmt(dr_policy_local_i32["step_p50_us"] / 1.0e3, 3)}</td><td>-</td></tr>
 <tr><td><strong>VBD sparse direct, i8</strong></td><td>complete</td><td><strong>{_fmt(dr_policy_sparse["solver_p50_us"] / 1.0e3, 3)}</strong></td><td>{_fmt(dr_policy_sparse["collision_p50_us"] / 1.0e3, 3)}</td><td><strong>{_fmt(dr_policy_sparse["step_p50_us"] / 1.0e3, 3)}</strong></td><td><strong>{_fmt(dr_policy_kamino["step_p50_us"] / dr_policy_sparse["step_p50_us"], 1)}x</strong></td></tr>
 </tbody></table>
-<p class="note">These policy-run timings use synchronized normal dispatch on Warp's single-threaded CPU backend and exclude the roughly 0.1&ndash;0.15 ms policy inference. They are diagnostic rather than the graph-replay performance numbers reported in the preceding DR Legs table. Timing from failed local prefixes is not successful throughput.</p>
+<p class="note">These policy-run timings use synchronized normal dispatch on Warp's single-threaded CPU backend and exclude the roughly 0.1&ndash;0.15 ms policy inference. Upstream Kamino direct-solver optimizations reduce its matched solver median from 59.520 ms to 42.341 ms (1.41x); the full-rollout result shown above is 42.270 ms with effectively unchanged closure error. Timing from failed local prefixes is not successful throughput. <a href="kamino_upstream_optimization_results.json">Optimization comparison data</a>.</p>
 <div class="media-grid">
 {_video("dr_legs_policy_kamino.mp4", "Kamino policy rollout", "Native joint armature; completes the full eight-second command sequence.")}
 {_video("dr_legs_policy_local_i32.mp4", "VBD local, 32 iterations", "The local solve collapses during the one-second standing phase; the final frame is held to make the failure visible.")}
@@ -550,7 +551,7 @@ apply_pose_updates(delta, relaxation)</code></pre>
 <h2>Interpretation</h2>
 <p>For these configurations, articulation-wide sparse VBD gives lower geometric closure error than local VBD and Kamino. It is also faster than local VBD on the two contact-free CPU tests and is the only VBD mode to complete the DR Legs contact test. The result supports a unified maximal-coordinate rigid-body path in which joints receive a coupled direct solve while contact curvature remains block diagonal.</p>
 <p>These are achieved-error comparisons, not equal-tolerance benchmarks. VBD uses a fixed eight nonlinear iterations, while Kamino uses residual-based PADMM stopping with different constraint and contact models. CPU VBD solver timings retain CPU-graph launch and synchronization overhead plus separately dispatched collision; Kamino CPU retains normal dispatch overhead. CUDA graph timings retain graph launch and synchronization overhead. The single-articulation GPU workloads do not saturate the device.</p>
-<p class="note">Reproducible data: <a href="robot_foot_compatible_results.json">compatible robot foot</a>, <a href="robot_foot_geometry_diagnostic.json">foot geometry check</a>, <a href="g1_ankle_results.json">G1 ankle</a>, <a href="h2_loop_results.json">Unitree H2 loops</a>, <a href="dr_legs_free_ankle_results.json">DR Legs CPU</a>, <a href="dr_legs_free_ankle_cuda_results.json">DR Legs CUDA</a>, <a href="dr_legs_policy_results.json">DR Legs policy</a>, <a href="dr_legs_matrix_diagnostic.json">numerical checks</a>, and <a href="visual_validation_results.json">public visual validations</a>.</p>
+<p class="note">Reproducible data: <a href="robot_foot_compatible_results.json">compatible robot foot</a>, <a href="robot_foot_geometry_diagnostic.json">foot geometry check</a>, <a href="g1_ankle_results.json">G1 ankle</a>, <a href="h2_loop_results.json">Unitree H2 loops</a>, <a href="dr_legs_free_ankle_results.json">DR Legs CPU</a>, <a href="dr_legs_free_ankle_cuda_results.json">DR Legs CUDA</a>, <a href="dr_legs_policy_results.json">DR Legs policy</a>, <a href="kamino_upstream_optimization_results.json">Kamino optimization comparison</a>, <a href="dr_legs_matrix_diagnostic.json">numerical checks</a>, and <a href="visual_validation_results.json">public visual validations</a>.</p>
 </main></body></html>"""
     (OUTPUT / "index.html").write_text(body)
     print(OUTPUT / "index.html")
