@@ -66,6 +66,9 @@ CASE_CONFIGS = {
         "kamino",
         "cpu",
         kamino_dynamics_solver="dvi",
+        kamino_dvi_contact_iterations=6,
+        kamino_dvi_contact_block_preconditioner=True,
+        kamino_dvi_contact_stabilization=0.1,
     ),
     "local_i8": ModeSpec("VBD local, 8 iterations", "vbd", "cpu", "local", 8, 0.65),
     "local_i32": ModeSpec("VBD local, 32 iterations", "vbd", "cpu", "local", 32, 0.65),
@@ -206,14 +209,21 @@ def _add_child_body_armature(model: newton.Model) -> None:
     model.body_inv_inertia.assign(np.linalg.inv(inertia).astype(np.float32))
 
 
-def build_model(device: str, config: PolicyConfig, *, armature_mode: str) -> newton.Model:
+def build_model(
+    device: str,
+    config: PolicyConfig,
+    *,
+    armature_mode: str,
+    contact_margin: float = 0.0,
+    contact_gap: float = 0.0,
+) -> newton.Model:
     asset_path = newton.utils.download_asset("disneyresearch")
     source = asset_path / config.usd_model
     builder = newton.ModelBuilder(up_axis=newton.Axis.Z)
     newton.solvers.SolverKamino.register_custom_attributes(builder)
     builder.request_contact_attributes("force")
-    builder.default_shape_cfg.margin = 0.0
-    builder.default_shape_cfg.gap = 0.0
+    builder.default_shape_cfg.margin = contact_margin
+    builder.default_shape_cfg.gap = contact_gap
     builder.add_usd(
         str(source),
         joint_ordering=None,
@@ -340,6 +350,35 @@ def _make_solver(model: newton.Model, spec: ModeSpec):
     )
 
 
+def _ground_contact_penetrations(model: newton.Model, state: newton.State, contacts: newton.Contacts) -> np.ndarray:
+    contact_count = int(contacts.rigid_contact_count.numpy()[0])
+    if contact_count == 0:
+        return np.empty(0, dtype=np.float64)
+
+    shape_body = model.shape_body.numpy()
+    shape0 = contacts.rigid_contact_shape0.numpy()[:contact_count]
+    shape1 = contacts.rigid_contact_shape1.numpy()[:contact_count]
+    ground_contacts = (shape_body[shape0] < 0) | (shape_body[shape1] < 0)
+    if not np.any(ground_contacts):
+        return np.empty(0, dtype=np.float64)
+
+    poses = state.body_q.numpy()
+    point0 = contacts.rigid_contact_point0.numpy()[:contact_count].astype(np.float64)
+    point1 = contacts.rigid_contact_point1.numpy()[:contact_count].astype(np.float64)
+    normal = contacts.rigid_contact_normal.numpy()[:contact_count].astype(np.float64)
+    margin0 = contacts.rigid_contact_margin0.numpy()[:contact_count].astype(np.float64)
+    margin1 = contacts.rigid_contact_margin1.numpy()[:contact_count].astype(np.float64)
+    penetrations = []
+    for index in np.flatnonzero(ground_contacts):
+        body0 = int(shape_body[shape0[index]])
+        body1 = int(shape_body[shape1[index]])
+        p0 = point0[index] if body0 < 0 else poses[body0, :3] + _quat_rotate(poses[body0, 3:], point0[index])
+        p1 = point1[index] if body1 < 0 else poses[body1, :3] + _quat_rotate(poses[body1, 3:], point1[index])
+        separation = float(np.dot(normal[index], p1 - p0) - margin0[index] - margin1[index])
+        penetrations.append(max(-separation, 0.0))
+    return np.asarray(penetrations, dtype=np.float64)
+
+
 def _summarize(values: list[float]) -> dict[str, float | None]:
     if not values:
         return {"mean": None, "rms": None, "min": None, "max": None}
@@ -369,13 +408,21 @@ def run_case(
         armature_mode = "unsupported"
     else:
         armature_mode = "isotropic_child_body"
-    model = build_model(spec.device, config, armature_mode=armature_mode)
+    model = build_model(
+        spec.device,
+        config,
+        armature_mode=armature_mode,
+        contact_margin=spec.contact_margin,
+        contact_gap=spec.contact_gap,
+    )
     state_0 = model.state()
     state_1 = model.state()
     state_1.assign(state_0)
     control = model.control()
     pipeline = newton.CollisionPipeline(model)
-    contacts = model.contacts(collision_pipeline=pipeline)
+    contacts = pipeline.contacts()
+    diagnostic_pipeline = newton.CollisionPipeline(model)
+    diagnostic_contacts = diagnostic_pipeline.contacts()
     solver = _make_solver(model, spec)
     pelvis = _body_index(model, "pelvis")
     closure_labels = _cycle_joint_labels(model)
@@ -401,6 +448,8 @@ def run_case(
     action_norms: list[float] = []
     target_errors: list[float] = []
     contact_counts: list[float] = []
+    ground_penetrations_mm: list[float] = []
+    ground_max_penetrations_mm: list[float] = []
     policy_times_us: list[float] = []
     collision_times_us: list[float] = []
     solver_times_us: list[float] = []
@@ -482,6 +531,10 @@ def run_case(
         action_norms.append(float(np.linalg.norm(previous_action)))
         target_errors.append(float(np.sqrt(np.mean(target_error * target_error))))
         contact_counts.append(float(contacts.rigid_contact_count.numpy()[0]))
+        diagnostic_pipeline.collide(state_0, diagnostic_contacts)
+        penetration_mm = 1.0e3 * _ground_contact_penetrations(model, state_0, diagnostic_contacts)
+        ground_penetrations_mm.extend(penetration_mm.tolist())
+        ground_max_penetrations_mm.append(float(np.max(penetration_mm, initial=0.0)))
         if on_control_step is not None:
             on_control_step(
                 model,
@@ -503,6 +556,7 @@ def run_case(
     walk_slice = slice(min(stand_steps, completed_control_steps), completed_control_steps)
     walk_velocity_errors = velocity_errors[walk_slice]
     walk_velocities = forward_velocities[walk_slice]
+    walk_ground_max_penetrations_mm = ground_max_penetrations_mm[walk_slice]
     poses = state_0.body_q.numpy()
     final_root = _body_com_position(model, poses, pelvis) if np.isfinite(poses).all() else np.full(3, np.nan)
     initial_root = _body_com_position(model, initial_poses, pelvis)
@@ -516,6 +570,20 @@ def run_case(
         "iterations": spec.iterations,
         "sim_dt_s": config.sim_dt,
         "control_decimation": config.control_decimation,
+        "contact_margin_m": spec.contact_margin,
+        "contact_gap_m": spec.contact_gap,
+        "kamino_dvi_settings": (
+            {
+                "block_iterations": spec.kamino_dvi_block_iterations,
+                "contact_iterations": spec.kamino_dvi_contact_iterations,
+                "contact_jacobi_omega": spec.kamino_dvi_contact_jacobi_omega,
+                "contact_jacobi_relaxation": spec.kamino_dvi_contact_jacobi_relaxation,
+                "contact_block_preconditioner": spec.kamino_dvi_contact_block_preconditioner,
+                "contact_stabilization": spec.kamino_dvi_contact_stabilization,
+            }
+            if spec.kamino_dynamics_solver == "dvi"
+            else None
+        ),
         "device": spec.device,
         "armature_mode": armature_mode,
         "status": "complete" if completed_control_steps == control_steps else "fell",
@@ -537,6 +605,9 @@ def run_case(
         "action_l2": _summarize(action_norms),
         "actuated_target_error_rad": _summarize(target_errors),
         "contact_count": _summarize(contact_counts),
+        "ground_penetration_mm": _summarize(ground_penetrations_mm),
+        "ground_frame_max_penetration_mm": _summarize(ground_max_penetrations_mm),
+        "walk_ground_frame_max_penetration_mm": _summarize(walk_ground_max_penetrations_mm),
         "policy_p50_us": float(np.percentile(policy_times_us, 50.0)),
         "collision_p50_us": float(np.percentile(collision_times_us, 50.0)),
         "solver_p50_us": float(np.percentile(solver_times_us, 50.0)),

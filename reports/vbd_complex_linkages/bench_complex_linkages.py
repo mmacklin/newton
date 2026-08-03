@@ -54,6 +54,14 @@ class ModeSpec:
     cpu_graph: bool = False
     cuda_graph: bool = False
     kamino_dynamics_solver: str = "padmm"
+    kamino_dvi_block_iterations: int = 4
+    kamino_dvi_contact_iterations: int = 2
+    kamino_dvi_contact_jacobi_omega: float = 0.45
+    kamino_dvi_contact_jacobi_relaxation: float = 0.9
+    kamino_dvi_contact_block_preconditioner: bool = False
+    kamino_dvi_contact_stabilization: float = 0.015
+    contact_margin: float = 0.0
+    contact_gap: float = 0.0
 
 
 ROBOT_FOOT_MODES = {
@@ -460,7 +468,7 @@ def _make_dr_legs_solver(model: newton.Model, spec: ModeSpec):
             config.integrator = "moreau"
             config.constraints.alpha = 0.1
             config.constraints.beta = 0.011
-            config.constraints.gamma = 0.015
+            config.constraints.gamma = spec.kamino_dvi_contact_stabilization
             config.dynamics.preconditioning = False
             config.dynamics.linear_solver_type = "CR"
             config.dynamics.linear_solver_kwargs = {"maxiter": 9}
@@ -470,12 +478,12 @@ def _make_dr_legs_solver(model: newton.Model, spec: ModeSpec):
             config.dvi.tolerance = 1.0e-4
             config.dvi.regularization = 1.0e-5
             config.dvi.omega = 0.3
-            config.dvi.block_iterations = 4
-            config.dvi.contact_iterations = 2
+            config.dvi.block_iterations = spec.kamino_dvi_block_iterations
+            config.dvi.contact_iterations = spec.kamino_dvi_contact_iterations
             config.dvi.bilateral_solve_period = 1
-            config.dvi.contact_jacobi_omega = 0.45
-            config.dvi.contact_jacobi_relaxation = 0.9
-            config.dvi.contact_block_preconditioner = False
+            config.dvi.contact_jacobi_omega = spec.kamino_dvi_contact_jacobi_omega
+            config.dvi.contact_jacobi_relaxation = spec.kamino_dvi_contact_jacobi_relaxation
+            config.dvi.contact_block_preconditioner = spec.kamino_dvi_contact_block_preconditioner
             config.dvi.contact_warmstart_method = "key_and_position_with_net_force_backup"
         return newton.solvers.SolverKamino(model=model, config=config)
     if spec.contact_normal_stiffness_scale != 1.0:

@@ -64,7 +64,7 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 263.2751129567623,
+      "collision_p50_us": 260.3549510240555,
       "completed_substeps": 2000,
       "contact_count": {
         "max": 6.0,
@@ -72,6 +72,8 @@
         "min": 0.0,
         "rms": 2.3906066175763843
       },
+      "contact_gap_m": 0.0,
+      "contact_margin_m": 0.0,
       "control_decimation": 5,
       "control_steps_completed": 400,
       "control_steps_requested": 400,
@@ -91,6 +93,18 @@
         "min": -0.08625171024148301,
         "rms": 0.14786500379005685
       },
+      "ground_frame_max_penetration_mm": {
+        "max": 5.399619688436302,
+        "mean": 1.4777250054884683,
+        "min": 0.24410903783331564,
+        "rms": 1.6755806885204032
+      },
+      "ground_penetration_mm": {
+        "max": 5.399619688436302,
+        "mean": 1.0364487870999182,
+        "min": 0.0022536151050855935,
+        "rms": 1.2939998308876568
+      },
       "height_m": {
         "max": 0.2885623574256897,
         "mean": 0.27262343615293505,
@@ -98,6 +112,7 @@
         "rms": 0.27267166068266907
       },
       "iterations": null,
+      "kamino_dvi_settings": null,
       "kamino_dynamics_solver": "padmm",
       "label": "Kamino PADMM",
       "lateral_displacement_m": -0.480160678241762,
@@ -107,29 +122,35 @@
         "min": 0.0009392828868963272,
         "rms": 0.42681767808954224
       },
-      "policy_p50_us": 131.2452368438244,
+      "policy_p50_us": 131.96468353271484,
       "sim_dt_s": 0.004,
       "simulated_time_s": 7.999999999999562,
       "solver": "kamino",
-      "solver_p50_us": 42069.65956836939,
-      "solver_p90_us": 42501.06010586023,
+      "solver_p50_us": 42077.67499610782,
+      "solver_p90_us": 42507.02206045389,
       "stand_time_s": 1.0,
       "status": "complete",
-      "step_p50_us": 42333.96425843239,
+      "step_p50_us": 42339.22529965639,
       "tilt_deg": {
         "max": 5.563290536095348,
         "mean": 1.5351929587453947,
         "min": 0.06442170547855834,
         "rms": 1.7634524858047085
       },
-      "vbd_solve": null
+      "vbd_solve": null,
+      "walk_ground_frame_max_penetration_mm": {
+        "max": 5.399619688436302,
+        "mean": 1.492872684177396,
+        "min": 0.24410903783331564,
+        "rms": 1.7064569466967563
+      }
     },
     {
       "action_l2": {
-        "max": 3.872027635574341,
-        "mean": 2.9359978803992273,
-        "min": 1.5876142978668213,
-        "rms": 2.9639820585891767
+        "max": 4.103134632110596,
+        "mean": 2.671517709493637,
+        "min": 1.5578606128692627,
+        "rms": 2.7133481665295434
       },
       "actuated_dof_indices": [
         0,
@@ -146,18 +167,18 @@
         33
       ],
       "actuated_target_error_rad": {
-        "max": 0.3420872986316681,
-        "mean": 0.12792904602363706,
-        "min": 0.07067597657442093,
-        "rms": 0.1356538342211687
+        "max": 0.3438716530799866,
+        "mean": 0.14294873356819152,
+        "min": 0.05929291248321533,
+        "rms": 0.15544650636193455
       },
       "armature_mode": "native",
       "case": "kamino_dvi",
       "closure_error_um": {
-        "max": 654.0871349765019,
-        "mean": 304.82830877093687,
-        "min": 145.8275436853556,
-        "rms": 327.21510945103057
+        "max": 892.4431092200927,
+        "mean": 314.2319843204251,
+        "min": 106.49338531885718,
+        "rms": 360.5050566866324
       },
       "closure_joint_labels": [
         "/DR_Legs/Joints/j6_l_o",
@@ -167,65 +188,93 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 253.4845843911171,
+      "collision_p50_us": 254.56026196479797,
       "completed_substeps": 2000,
       "contact_count": {
-        "max": 8.0,
-        "mean": 5.2925,
-        "min": 3.0,
-        "rms": 5.584129296497351
+        "max": 5.0,
+        "mean": 1.87,
+        "min": 0.0,
+        "rms": 2.1260291625469296
       },
+      "contact_gap_m": 0.0,
+      "contact_margin_m": 0.0,
       "control_decimation": 5,
       "control_steps_completed": 400,
       "control_steps_requested": 400,
       "device": "cpu",
       "fall_time_s": null,
       "forward_command_mps": 0.2,
-      "forward_displacement_m": 0.6920875196810812,
+      "forward_displacement_m": 1.3754829054232687,
       "forward_velocity_error_mps": {
-        "max": 0.012331546367091023,
-        "mean": -0.10955060095935473,
-        "min": -0.25015510190326556,
-        "rms": 0.12159235946171643
+        "max": 0.0872816822823187,
+        "mean": -0.009804360151995652,
+        "min": -0.22775081565979566,
+        "rms": 0.047180050912809704
       },
       "forward_velocity_mps": {
-        "max": 0.21233154636709103,
-        "mean": 0.09044939904064526,
-        "min": -0.05015510190326554,
-        "rms": 0.10471132458204016
+        "max": 0.2872816822823187,
+        "mean": 0.1901956398480044,
+        "min": -0.02775081565979564,
+        "rms": 0.19571462169019732
+      },
+      "ground_frame_max_penetration_mm": {
+        "max": 8.96330944461564,
+        "mean": 2.4391482820653563,
+        "min": 0.0,
+        "rms": 3.057442152028165
+      },
+      "ground_penetration_mm": {
+        "max": 8.96330944461564,
+        "mean": 1.9374470064837812,
+        "min": 0.005786989673274567,
+        "rms": 2.5446765726453093
       },
       "height_m": {
-        "max": 0.27707788348197937,
-        "mean": 0.2501070810854435,
-        "min": 0.22941701114177704,
-        "rms": 0.25023187234658295
+        "max": 0.28380125761032104,
+        "mean": 0.27433528900146487,
+        "min": 0.2582928240299225,
+        "rms": 0.27436640179029725
       },
       "iterations": null,
+      "kamino_dvi_settings": {
+        "block_iterations": 4,
+        "contact_block_preconditioner": true,
+        "contact_iterations": 6,
+        "contact_jacobi_omega": 0.45,
+        "contact_jacobi_relaxation": 0.9,
+        "contact_stabilization": 0.1
+      },
       "kamino_dynamics_solver": "dvi",
       "label": "Kamino DVI",
-      "lateral_displacement_m": -1.093240375135454,
+      "lateral_displacement_m": -0.035732029442104185,
       "path_error_m": {
-        "max": 1.3024264269499424,
-        "mean": 0.6921305486980103,
-        "min": 0.0006401557779249055,
-        "rms": 0.7888258627270409
+        "max": 0.07935534143218823,
+        "mean": 0.036526364856045934,
+        "min": 0.0007863798168027391,
+        "rms": 0.04137840772359357
       },
-      "policy_p50_us": 119.25492435693741,
+      "policy_p50_us": 122.75530025362968,
       "sim_dt_s": 0.004,
       "simulated_time_s": 7.999999999999562,
       "solver": "kamino",
-      "solver_p50_us": 3876.218106597662,
-      "solver_p90_us": 3912.370651960373,
+      "solver_p50_us": 5257.147364318371,
+      "solver_p90_us": 5311.668012291193,
       "stand_time_s": 1.0,
       "status": "complete",
-      "step_p50_us": 4128.952510654926,
+      "step_p50_us": 5512.952338904142,
       "tilt_deg": {
-        "max": 6.0742293303658075,
-        "mean": 2.5436010641576696,
-        "min": 0.07205794204750553,
-        "rms": 2.8870617627813555
+        "max": 3.291728608153871,
+        "mean": 1.7932338868236577,
+        "min": 0.4231781297239469,
+        "rms": 1.8528951790910777
       },
-      "vbd_solve": null
+      "vbd_solve": null,
+      "walk_ground_frame_max_penetration_mm": {
+        "max": 7.551394065513708,
+        "mean": 2.364801806324854,
+        "min": 0.0,
+        "rms": 2.9013568499230837
+      }
     },
     {
       "action_l2": {
@@ -270,7 +319,7 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 232.24018514156342,
+      "collision_p50_us": 238.31473663449287,
       "completed_substeps": 110,
       "contact_count": {
         "max": 8.0,
@@ -278,6 +327,8 @@
         "min": 4.0,
         "rms": 7.446780878644507
       },
+      "contact_gap_m": 0.0,
+      "contact_margin_m": 0.0,
       "control_decimation": 5,
       "control_steps_completed": 22,
       "control_steps_requested": 400,
@@ -297,6 +348,18 @@
         "min": null,
         "rms": null
       },
+      "ground_frame_max_penetration_mm": {
+        "max": 4.766802372686153,
+        "mean": 3.786181269908863,
+        "min": 1.299511030391772,
+        "rms": 3.8453208839673896
+      },
+      "ground_penetration_mm": {
+        "max": 4.766802372686153,
+        "mean": 2.304729222728693,
+        "min": 0.0074208244586829175,
+        "rms": 2.537475447730252
+      },
       "height_m": {
         "max": 0.27706387639045715,
         "mean": 0.21105681867762047,
@@ -304,6 +367,7 @@
         "rms": 0.21738639144057173
       },
       "iterations": 8,
+      "kamino_dvi_settings": null,
       "kamino_dynamics_solver": null,
       "label": "VBD local, 8 iterations",
       "lateral_displacement_m": -0.01004629439524063,
@@ -313,22 +377,28 @@
         "min": 0.0011907497799907964,
         "rms": 0.059778252117962394
       },
-      "policy_p50_us": 105.97007349133492,
+      "policy_p50_us": 112.7202995121479,
       "sim_dt_s": 0.004,
       "simulated_time_s": 0.44000000000000034,
       "solver": "vbd",
-      "solver_p50_us": 2939.238678663969,
-      "solver_p90_us": 2970.2755622565746,
+      "solver_p50_us": 2918.998245149851,
+      "solver_p90_us": 2947.146166115999,
       "stand_time_s": 1.0,
       "status": "fell",
-      "step_p50_us": 3171.283286064863,
+      "step_p50_us": 3154.5087695121765,
       "tilt_deg": {
         "max": 28.785847436951034,
         "mean": 9.771660072198266,
         "min": 0.05216489829685484,
         "rms": 13.213267684827123
       },
-      "vbd_solve": "local"
+      "vbd_solve": "local",
+      "walk_ground_frame_max_penetration_mm": {
+        "max": null,
+        "mean": null,
+        "min": null,
+        "rms": null
+      }
     },
     {
       "action_l2": {
@@ -373,7 +443,7 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 241.4151094853878,
+      "collision_p50_us": 244.77019906044006,
       "completed_substeps": 120,
       "contact_count": {
         "max": 4.0,
@@ -381,6 +451,8 @@
         "min": 1.0,
         "rms": 1.9685019685029528
       },
+      "contact_gap_m": 0.0,
+      "contact_margin_m": 0.0,
       "control_decimation": 5,
       "control_steps_completed": 24,
       "control_steps_requested": 400,
@@ -400,6 +472,18 @@
         "min": null,
         "rms": null
       },
+      "ground_frame_max_penetration_mm": {
+        "max": 0.9586946167432497,
+        "mean": 0.56210965743309,
+        "min": 0.10456556467702827,
+        "rms": 0.6019861435380521
+      },
+      "ground_penetration_mm": {
+        "max": 0.9586946167432497,
+        "mean": 0.37159796278038165,
+        "min": 0.01718386653105225,
+        "rms": 0.4532612144524042
+      },
       "height_m": {
         "max": 0.27868396043777466,
         "mean": 0.20604287025829157,
@@ -407,6 +491,7 @@
         "rms": 0.2132907820888418
       },
       "iterations": 32,
+      "kamino_dvi_settings": null,
       "kamino_dynamics_solver": null,
       "label": "VBD local, 32 iterations",
       "lateral_displacement_m": -0.028659247298153723,
@@ -416,22 +501,28 @@
         "min": 0.001660722789968106,
         "rms": 0.08881321792433972
       },
-      "policy_p50_us": 112.29515075683594,
+      "policy_p50_us": 114.9945892393589,
       "sim_dt_s": 0.004,
       "simulated_time_s": 0.48000000000000037,
       "solver": "vbd",
-      "solver_p50_us": 11187.33361363411,
-      "solver_p90_us": 11239.41270634532,
+      "solver_p50_us": 11116.883251816034,
+      "solver_p90_us": 11185.899749398232,
       "stand_time_s": 1.0,
       "status": "fell",
-      "step_p50_us": 11425.623204559088,
+      "step_p50_us": 11361.137963831425,
       "tilt_deg": {
         "max": 33.63379694060405,
         "mean": 14.013463088785597,
         "min": 0.09849920161406275,
         "rms": 17.527970341835537
       },
-      "vbd_solve": "local"
+      "vbd_solve": "local",
+      "walk_ground_frame_max_penetration_mm": {
+        "max": null,
+        "mean": null,
+        "min": null,
+        "rms": null
+      }
     },
     {
       "action_l2": {
@@ -476,7 +567,7 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 240.0847151875496,
+      "collision_p50_us": 238.95502090454102,
       "completed_substeps": 2000,
       "contact_count": {
         "max": 5.0,
@@ -484,6 +575,8 @@
         "min": 0.0,
         "rms": 1.7349351572897471
       },
+      "contact_gap_m": 0.0,
+      "contact_margin_m": 0.0,
       "control_decimation": 5,
       "control_steps_completed": 400,
       "control_steps_requested": 400,
@@ -503,6 +596,18 @@
         "min": -0.046277554501604055,
         "rms": 0.2005478441227124
       },
+      "ground_frame_max_penetration_mm": {
+        "max": 3.6992595987788666,
+        "mean": 0.937935032028074,
+        "min": 0.0,
+        "rms": 1.1545874576244424
+      },
+      "ground_penetration_mm": {
+        "max": 3.6992595987788666,
+        "mean": 0.727744805639384,
+        "min": 0.00014328976564309537,
+        "rms": 0.9532103121644337
+      },
       "height_m": {
         "max": 0.2822433114051819,
         "mean": 0.2680036476254463,
@@ -510,6 +615,7 @@
         "rms": 0.2681426867265598
       },
       "iterations": 8,
+      "kamino_dvi_settings": null,
       "kamino_dynamics_solver": null,
       "label": "VBD sparse direct, 8 iterations",
       "lateral_displacement_m": -0.30137142023852714,
@@ -519,22 +625,28 @@
         "min": 0.0010256998856454174,
         "rms": 0.12584971726866398
       },
-      "policy_p50_us": 106.10558092594147,
+      "policy_p50_us": 110.57499796152115,
       "sim_dt_s": 0.004,
       "simulated_time_s": 7.999999999999562,
       "solver": "vbd",
-      "solver_p50_us": 1945.069059729576,
-      "solver_p90_us": 1972.7895967662334,
+      "solver_p50_us": 1907.4189476668835,
+      "solver_p90_us": 1942.7132792770863,
       "stand_time_s": 1.0,
       "status": "complete",
-      "step_p50_us": 2184.273675084114,
+      "step_p50_us": 2145.493868738413,
       "tilt_deg": {
         "max": 10.144890348809115,
         "mean": 4.739424366520003,
         "min": 0.6341113949234276,
         "rms": 5.203408685249608
       },
-      "vbd_solve": "block_sparse_joints"
+      "vbd_solve": "block_sparse_joints",
+      "walk_ground_frame_max_penetration_mm": {
+        "max": 3.504539738474942,
+        "mean": 0.9261670079270599,
+        "min": 0.0,
+        "rms": 1.13989178090139
+      }
     },
     {
       "action_l2": {
@@ -579,7 +691,7 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 240.86004123091698,
+      "collision_p50_us": 243.7550574541092,
       "completed_substeps": 110,
       "contact_count": {
         "max": 2.0,
@@ -587,6 +699,8 @@
         "min": 0.0,
         "rms": 1.1870513506545997
       },
+      "contact_gap_m": 0.0,
+      "contact_margin_m": 0.0,
       "control_decimation": 5,
       "control_steps_completed": 22,
       "control_steps_requested": 400,
@@ -606,6 +720,18 @@
         "min": null,
         "rms": null
       },
+      "ground_frame_max_penetration_mm": {
+        "max": 3.8790978969025502,
+        "mean": 0.7651363919692276,
+        "min": 0.0,
+        "rms": 1.3376129740070666
+      },
+      "ground_penetration_mm": {
+        "max": 3.8790978969025502,
+        "mean": 1.1456309181465627,
+        "min": 0.1050963663585952,
+        "rms": 1.5544582393471997
+      },
       "height_m": {
         "max": 0.2974550724029541,
         "mean": 0.25798733600161294,
@@ -613,6 +739,7 @@
         "rms": 0.2603561256229823
       },
       "iterations": 8,
+      "kamino_dvi_settings": null,
       "kamino_dynamics_solver": null,
       "label": "VBD sparse direct, no armature, 8 iterations",
       "lateral_displacement_m": -0.056798601959260786,
@@ -622,22 +749,28 @@
         "min": 0.0008372044903221898,
         "rms": 0.07178997371730594
       },
-      "policy_p50_us": 108.1051304936409,
+      "policy_p50_us": 116.60018935799599,
       "sim_dt_s": 0.004,
       "simulated_time_s": 0.44000000000000034,
       "solver": "vbd",
-      "solver_p50_us": 1936.0934384167194,
-      "solver_p90_us": 1965.2129150927067,
+      "solver_p50_us": 1914.1687080264091,
+      "solver_p90_us": 1954.9621269106865,
       "stand_time_s": 1.0,
       "status": "fell",
-      "step_p50_us": 2176.678739488125,
+      "step_p50_us": 2155.178692191839,
       "tilt_deg": {
         "max": 60.81616921116682,
         "mean": 27.611557531478358,
         "min": 2.2069483416427214,
         "rms": 34.00379760595522
       },
-      "vbd_solve": "block_sparse_joints"
+      "vbd_solve": "block_sparse_joints",
+      "walk_ground_frame_max_penetration_mm": {
+        "max": null,
+        "mean": null,
+        "min": null,
+        "rms": null
+      }
     }
   ],
   "source": "Newton Disney Research asset package"
