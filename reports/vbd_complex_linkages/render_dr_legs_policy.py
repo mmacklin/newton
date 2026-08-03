@@ -75,6 +75,11 @@ def main() -> int:
     parser.add_argument("--control-steps", type=int, default=400)
     parser.add_argument("--stand-steps", type=int, default=50)
     parser.add_argument("--forward-speed", type=float, default=0.2)
+    parser.add_argument(
+        "--vbd-armature-mode",
+        choices=("isotropic_child_body", "rank_one_child_body", "coupled_joint", "unsupported"),
+        default=None,
+    )
     parser.add_argument("--width", type=int, default=960)
     parser.add_argument("--height", type=int, default=540)
     parser.add_argument(
@@ -97,6 +102,7 @@ def main() -> int:
             control_steps=args.control_steps,
             stand_steps=args.stand_steps,
             forward_speed=args.forward_speed,
+            armature_mode_override=args.vbd_armature_mode,
             on_control_step=capture,
         )
     finally:
@@ -110,6 +116,8 @@ def main() -> int:
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     stem = f"dr_legs_policy_{args.case}"
+    if args.vbd_armature_mode is not None:
+        stem += f"_{args.vbd_armature_mode}"
     video_path = args.output_dir / f"{stem}.mp4"
     poster_path = args.output_dir / f"{stem}.jpg"
     _write_video(video_path, capture.frames, 50)
@@ -119,6 +127,7 @@ def main() -> int:
         "video": f"videos/{video_path.name}",
         "poster": f"videos/{poster_path.name}",
         "rendered_frames": len(capture.frames),
+        "vbd_armature_mode": args.vbd_armature_mode,
         "rollout": result,
     }
     (args.output_dir / f"{stem}.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")

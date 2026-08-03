@@ -440,6 +440,76 @@ def _make_projected_joint_chain_model(joint_kind: str) -> newton.Model:
     return builder.finalize(device="cpu")
 
 
+def _solve_coupled_revolute_armature() -> tuple[float, float, float]:
+    parent_inertia = 0.2
+    child_inertia = 0.3
+    armature = 0.4
+    drive_ke = 1000.0
+    target_angle = 1.0e-3
+    dt = 1.0e-2
+
+    builder = newton.ModelBuilder(gravity=wp.vec3(0.0))
+    parent = builder.add_link(
+        xform=wp.transform(),
+        mass=1.0,
+        inertia=wp.mat33(np.diag([0.25, parent_inertia, 0.35]).astype(np.float32)),
+    )
+    child = builder.add_link(
+        xform=wp.transform(),
+        mass=1.0,
+        inertia=wp.mat33(np.diag([0.4, child_inertia, 0.5]).astype(np.float32)),
+    )
+    root_joint = builder.add_joint_free(child=parent)
+    revolute_joint = builder.add_joint_revolute(
+        parent=parent,
+        child=child,
+        axis=newton.Axis.Y,
+        target_ke=drive_ke,
+        target_kd=0.0,
+        limit_ke=0.0,
+        limit_kd=0.0,
+        armature=armature,
+    )
+    builder.add_articulation([root_joint, revolute_joint])
+    builder.color()
+    model = builder.finalize(device="cpu")
+
+    state_in = model.state()
+    state_out = model.state()
+    control = model.control()
+    target_q = control.joint_target_q.numpy()
+    target_q[int(model.joint_target_q_start.numpy()[revolute_joint])] = target_angle
+    control.joint_target_q.assign(target_q)
+
+    solver = newton.solvers.SolverVBD(
+        model,
+        iterations=1,
+        rigid_articulation_solve="block_sparse_joints",
+        rigid_articulation_relaxation=1.0,
+        rigid_joint_armature=True,
+        rigid_avbd_alpha=0.0,
+        rigid_avbd_beta=0.0,
+        rigid_joint_linear_ke=1.0e5,
+        rigid_joint_angular_ke=1.0e5,
+        rigid_joint_linear_kd=0.0,
+        rigid_joint_angular_kd=0.0,
+        rigid_joint_angular_k_start=drive_ke,
+    )
+    solver.step(state_in, state_out, control, None, dt)
+
+    poses = state_out.body_q.numpy()
+    parent_rotation = poses[parent, 3:7].astype(np.float64)
+    child_rotation = poses[child, 3:7].astype(np.float64)
+    parent_angle = float(_quat_rotvec(parent_rotation)[1])
+    child_angle = float(_quat_rotvec(child_rotation)[1])
+    relative_angle = float(_quat_rotvec(_quat_mul(_quat_inv(parent_rotation), child_rotation))[1])
+
+    reduced_inertia = parent_inertia * child_inertia / (parent_inertia + child_inertia)
+    expected_relative_angle = drive_ke * target_angle / (drive_ke + (reduced_inertia + armature) / (dt * dt))
+    angular_momentum = parent_inertia * parent_angle + child_inertia * child_angle
+    return relative_angle, expected_relative_angle, angular_momentum
+
+
 def _make_cable_rod_model(closed: bool, bend_damping: float = 0.0) -> newton.Model:
     builder = newton.ModelBuilder(gravity=0.0)
     builder.default_shape_cfg.ke = 1.0e2
@@ -771,6 +841,11 @@ class TestVBDSparseArticulation(unittest.TestCase):
         model = _make_single_body_model()
         solver = newton.solvers.SolverVBD(model, iterations=1, rigid_articulation_solve="block_sparse_joints")
         self.assertEqual(solver.rigid_articulation_relaxation, 0.65)
+
+    def test_sparse_articulation_couples_revolute_armature(self):
+        relative_angle, expected_relative_angle, angular_momentum = _solve_coupled_revolute_armature()
+        self.assertAlmostEqual(relative_angle, expected_relative_angle, delta=1.0e-6)
+        self.assertAlmostEqual(angular_momentum, 0.0, delta=1.0e-7)
 
     def test_sparse_articulation_handles_joint_stiffness_ratio(self):
         local_energy = _solve_stiffness_ratio_energy("local")

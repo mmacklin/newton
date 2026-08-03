@@ -1402,6 +1402,7 @@ def assemble_articulation_joints_scalar(
     body_q: wp.array[wp.transform],
     body_q_prev: wp.array[wp.transform],
     body_q_rest: wp.array[wp.transform],
+    body_inertia_q: wp.array[wp.transform],
     body_com: wp.array[wp.vec3],
     joint_type: wp.array[int],
     joint_enabled: wp.array[bool],
@@ -1421,6 +1422,7 @@ def assemble_articulation_joints_scalar(
     joint_rest_angle: wp.array[float],
     joint_target_ke: wp.array[float],
     joint_target_kd: wp.array[float],
+    joint_armature: wp.array[float],
     joint_target_q: wp.array[float],
     joint_target_vel: wp.array[float],
     joint_limit_lower: wp.array[float],
@@ -1432,6 +1434,7 @@ def assemble_articulation_joints_scalar(
     joint_C0_lin: wp.array[wp.vec3],
     joint_C0_ang: wp.array[wp.vec3],
     joint_is_hard: wp.array[wp.int32],
+    enable_joint_armature: bool,
     avbd_alpha: float,
     values_scalar: wp.array[float],
     rhs_scalar: wp.array[float],
@@ -1630,6 +1633,36 @@ def assemble_articulation_joints_scalar(
             ang_alpha,
         )
         has_angular_cache = True
+
+    if enable_joint_armature and jt == JointType.REVOLUTE:
+        armature = joint_armature[qd_start]
+        if armature > 0.0:
+            child_inertia_q = wp.mul(wp.transform_get_rotation(body_inertia_q[child]), wp.transform_get_rotation(X_c))
+            parent_inertia_q = wp.transform_get_rotation(X_p)
+            if parent >= 0:
+                parent_inertia_q = wp.mul(
+                    wp.transform_get_rotation(body_inertia_q[parent]), wp.transform_get_rotation(X_p)
+                )
+            armature_kappa, armature_J_world = compute_kappa_and_jacobian(
+                parent_anchor_q, child_anchor_q, parent_inertia_q, child_inertia_q
+            )
+            axis_local = wp.normalize(joint_axis[qd_start])
+            armature_jacobian_world = armature_J_world * axis_local
+            armature_hessian = armature / (dt * dt)
+            armature_force = armature_hessian * wp.dot(armature_kappa, axis_local)
+            _assemble_angular_axis_row_scalar(
+                values_scalar,
+                rhs_scalar,
+                articulation_block_row_offsets,
+                articulation_block_cols,
+                body_start,
+                parent_local,
+                child_local,
+                parent,
+                armature_jacobian_world,
+                armature_force,
+                armature_hessian,
+            )
 
     if jt == JointType.REVOLUTE:
         dof_idx = qd_start
@@ -2114,6 +2147,7 @@ def solve_articulation_sparse_serial(
     joint_rest_angle: wp.array[float],
     joint_target_ke: wp.array[float],
     joint_target_kd: wp.array[float],
+    joint_armature: wp.array[float],
     joint_target_q: wp.array[float],
     joint_target_vel: wp.array[float],
     joint_limit_lower: wp.array[float],
@@ -2125,6 +2159,7 @@ def solve_articulation_sparse_serial(
     joint_C0_lin: wp.array[wp.vec3],
     joint_C0_ang: wp.array[wp.vec3],
     joint_is_hard: wp.array[wp.int32],
+    enable_joint_armature: bool,
     avbd_alpha: float,
     update_relaxation: float,
     threads_per_articulation: int,
@@ -2365,6 +2400,38 @@ def solve_articulation_sparse_serial(
                 ang_alpha,
             )
             has_angular_cache = True
+
+        if enable_joint_armature and jt == JointType.REVOLUTE:
+            armature = joint_armature[qd_start]
+            if armature > 0.0:
+                child_inertia_q = wp.mul(
+                    wp.transform_get_rotation(body_inertia_q[child]), wp.transform_get_rotation(X_c)
+                )
+                parent_inertia_q = wp.transform_get_rotation(X_p)
+                if parent >= 0:
+                    parent_inertia_q = wp.mul(
+                        wp.transform_get_rotation(body_inertia_q[parent]), wp.transform_get_rotation(X_p)
+                    )
+                armature_kappa, armature_J_world = compute_kappa_and_jacobian(
+                    parent_anchor_q, child_anchor_q, parent_inertia_q, child_inertia_q
+                )
+                axis_local = wp.normalize(joint_axis[qd_start])
+                armature_jacobian_world = armature_J_world * axis_local
+                armature_hessian = armature / (dt * dt)
+                armature_force = armature_hessian * wp.dot(armature_kappa, axis_local)
+                _assemble_angular_axis_row(
+                    values,
+                    rhs,
+                    articulation_block_row_offsets,
+                    articulation_block_cols,
+                    body_start,
+                    parent_local,
+                    child_local,
+                    parent,
+                    armature_jacobian_world,
+                    armature_force,
+                    armature_hessian,
+                )
 
         if jt == JointType.REVOLUTE:
             dof_idx = qd_start

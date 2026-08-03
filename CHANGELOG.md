@@ -34,6 +34,7 @@
 - Add opt-in filtering of static-static, static-kinematic, and kinematic-kinematic contacts during broad-phase collision detection. Set `CollisionPipeline(include_static_kinematic_pairs=False)` to enable filtering; the default preserves existing contact generation. `Model.shape_contact_pairs` remains an unfiltered superset for direct consumers such as `SolverKamino` and hydroelastic SDF setup.
 - Add opt-in `body_frame_origin="com"` to `ModelBuilder.add_rod()` and `ModelBuilder.add_rod_graph()` for COM-centered cable capsule body frames.
 - Add experimental `SolverVBD(rigid_articulation_solve="block_sparse_joints")` mode for block-sparse rigid articulation joint solves on CPU and CUDA.
+- Add opt-in coupled revolute-joint armature to the experimental block-sparse `SolverVBD` articulation solve.
 - Add `ModelBuilder.add_articulation(..., allow_closed_loops=True)` for maximal-coordinate solvers that support loop-closing joints directly.
 - Add URDF importer support for the nonstandard `ball` and `spherical` joint type extensions.
 - Add user-defined pressure laws to hydroelastic SDF contact via `HydroelasticSDF.Config.pressure_func` (a `@wp.func` mapping `(signed_depth, shape_idx, data) -> pressure`) and `pressure_data` (a `@wp.struct` carrying per-shape state). The contact patch is the iso-pressure surface `p_a == p_b`; the default linear law `pressure = -kh * signed_depth` is preserved when no callback is supplied.

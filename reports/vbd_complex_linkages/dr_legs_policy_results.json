@@ -64,7 +64,7 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 260.3549510240555,
+      "collision_p50_us": 262.4448388814926,
       "completed_substeps": 2000,
       "contact_count": {
         "max": 6.0,
@@ -122,15 +122,15 @@
         "min": 0.0009392828868963272,
         "rms": 0.42681767808954224
       },
-      "policy_p50_us": 131.96468353271484,
+      "policy_p50_us": 136.8299126625061,
       "sim_dt_s": 0.004,
       "simulated_time_s": 7.999999999999562,
       "solver": "kamino",
-      "solver_p50_us": 42077.67499610782,
-      "solver_p90_us": 42507.02206045389,
+      "solver_p50_us": 42275.93028917909,
+      "solver_p90_us": 42677.007894963026,
       "stand_time_s": 1.0,
       "status": "complete",
-      "step_p50_us": 42339.22529965639,
+      "step_p50_us": 42538.75510767102,
       "tilt_deg": {
         "max": 5.563290536095348,
         "mean": 1.5351929587453947,
@@ -188,7 +188,7 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 254.56026196479797,
+      "collision_p50_us": 260.7298083603382,
       "completed_substeps": 2000,
       "contact_count": {
         "max": 5.0,
@@ -253,15 +253,15 @@
         "min": 0.0007863798168027391,
         "rms": 0.04137840772359357
       },
-      "policy_p50_us": 122.75530025362968,
+      "policy_p50_us": 125.5297102034092,
       "sim_dt_s": 0.004,
       "simulated_time_s": 7.999999999999562,
       "solver": "kamino",
-      "solver_p50_us": 5257.147364318371,
-      "solver_p90_us": 5311.668012291193,
+      "solver_p50_us": 5355.956964194775,
+      "solver_p90_us": 5411.383882164955,
       "stand_time_s": 1.0,
       "status": "complete",
-      "step_p50_us": 5512.952338904142,
+      "step_p50_us": 5618.096329271793,
       "tilt_deg": {
         "max": 3.291728608153871,
         "mean": 1.7932338868236577,
@@ -319,7 +319,7 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 238.31473663449287,
+      "collision_p50_us": 242.14526638388634,
       "completed_substeps": 110,
       "contact_count": {
         "max": 8.0,
@@ -377,15 +377,15 @@
         "min": 0.0011907497799907964,
         "rms": 0.059778252117962394
       },
-      "policy_p50_us": 112.7202995121479,
+      "policy_p50_us": 116.16433039307594,
       "sim_dt_s": 0.004,
       "simulated_time_s": 0.44000000000000034,
       "solver": "vbd",
-      "solver_p50_us": 2918.998245149851,
-      "solver_p90_us": 2947.146166115999,
+      "solver_p50_us": 2976.7281375825405,
+      "solver_p90_us": 3007.2540044784546,
       "stand_time_s": 1.0,
       "status": "fell",
-      "step_p50_us": 3154.5087695121765,
+      "step_p50_us": 3218.607511371374,
       "tilt_deg": {
         "max": 28.785847436951034,
         "mean": 9.771660072198266,
@@ -443,7 +443,7 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 244.77019906044006,
+      "collision_p50_us": 247.96044453978539,
       "completed_substeps": 120,
       "contact_count": {
         "max": 4.0,
@@ -501,15 +501,15 @@
         "min": 0.001660722789968106,
         "rms": 0.08881321792433972
       },
-      "policy_p50_us": 114.9945892393589,
+      "policy_p50_us": 121.88032269477844,
       "sim_dt_s": 0.004,
       "simulated_time_s": 0.48000000000000037,
       "solver": "vbd",
-      "solver_p50_us": 11116.883251816034,
-      "solver_p90_us": 11185.899749398232,
+      "solver_p50_us": 11388.54818418622,
+      "solver_p90_us": 11473.264917731285,
       "stand_time_s": 1.0,
       "status": "fell",
-      "step_p50_us": 11361.137963831425,
+      "step_p50_us": 11638.527736067772,
       "tilt_deg": {
         "max": 33.63379694060405,
         "mean": 14.013463088785597,
@@ -522,6 +522,130 @@
         "mean": null,
         "min": null,
         "rms": null
+      }
+    },
+    {
+      "action_l2": {
+        "max": 4.054015159606934,
+        "mean": 2.692145784199238,
+        "min": 1.442172884941101,
+        "rms": 2.7438282963505083
+      },
+      "actuated_dof_indices": [
+        0,
+        1,
+        5,
+        6,
+        10,
+        15,
+        18,
+        19,
+        23,
+        24,
+        28,
+        33
+      ],
+      "actuated_target_error_rad": {
+        "max": 0.3371649980545044,
+        "mean": 0.1428087688796222,
+        "min": 0.06702588498592377,
+        "rms": 0.15458737084406624
+      },
+      "armature_mode": "coupled_joint",
+      "case": "sparse_i8",
+      "closure_error_um": {
+        "max": 75.05796533243185,
+        "mean": 8.594576390099693,
+        "min": 0.6204299499894578,
+        "rms": 11.259433364263641
+      },
+      "closure_joint_labels": [
+        "/DR_Legs/Joints/j6_l_o",
+        "/DR_Legs/Joints/j6_r_o",
+        "/DR_Legs/Joints/j9_l_i",
+        "/DR_Legs/Joints/j9_l_o",
+        "/DR_Legs/Joints/j9_r_i",
+        "/DR_Legs/Joints/j9_r_o"
+      ],
+      "collision_p50_us": 242.43537336587906,
+      "completed_substeps": 2000,
+      "contact_count": {
+        "max": 5.0,
+        "mean": 1.65,
+        "min": 0.0,
+        "rms": 1.7748239349298849
+      },
+      "contact_gap_m": 0.0,
+      "contact_margin_m": 0.0,
+      "control_decimation": 5,
+      "control_steps_completed": 400,
+      "control_steps_requested": 400,
+      "device": "cpu",
+      "fall_time_s": null,
+      "forward_command_mps": 0.2,
+      "forward_displacement_m": 1.374731290852651,
+      "forward_velocity_error_mps": {
+        "max": 0.07907279354055835,
+        "mean": -0.0025369429855285805,
+        "min": -0.12728529022663504,
+        "rms": 0.039274774185084196
+      },
+      "forward_velocity_mps": {
+        "max": 0.27907279354055836,
+        "mean": 0.19746305701447145,
+        "min": 0.07271470977336499,
+        "rms": 0.20131500364622087
+      },
+      "ground_frame_max_penetration_mm": {
+        "max": 4.030603259004939,
+        "mean": 0.9388175391345486,
+        "min": 0.0,
+        "rms": 1.1662162657833193
+      },
+      "ground_penetration_mm": {
+        "max": 4.030603259004939,
+        "mean": 0.7408795610678833,
+        "min": 0.00596208137069662,
+        "rms": 0.9786109313947364
+      },
+      "height_m": {
+        "max": 0.28017696738243103,
+        "mean": 0.27410109877586364,
+        "min": 0.2544463276863098,
+        "rms": 0.2741338228359462
+      },
+      "iterations": 8,
+      "kamino_dvi_settings": null,
+      "kamino_dynamics_solver": null,
+      "label": "VBD sparse direct, 8 iterations",
+      "lateral_displacement_m": 0.01822688945719353,
+      "path_error_m": {
+        "max": 0.09213037639139075,
+        "mean": 0.03453608881638214,
+        "min": 0.0005310792572200282,
+        "rms": 0.03834704978183772
+      },
+      "policy_p50_us": 113.60505595803261,
+      "sim_dt_s": 0.004,
+      "simulated_time_s": 7.999999999999562,
+      "solver": "vbd",
+      "solver_p50_us": 1964.3791019916534,
+      "solver_p90_us": 2003.3863373100758,
+      "stand_time_s": 1.0,
+      "status": "complete",
+      "step_p50_us": 2206.2291391193867,
+      "tilt_deg": {
+        "max": 4.567211947883002,
+        "mean": 1.813584972542297,
+        "min": 0.34088366993971,
+        "rms": 1.918114156851006
+      },
+      "vbd_solve": "block_sparse_joints",
+      "walk_ground_frame_max_penetration_mm": {
+        "max": 4.030603259004939,
+        "mean": 0.9367385383881955,
+        "min": 0.0,
+        "rms": 1.1637439267244079
       }
     },
     {
@@ -552,7 +676,7 @@
         "rms": 0.18770368406364402
       },
       "armature_mode": "isotropic_child_body",
-      "case": "sparse_i8",
+      "case": "sparse_isotropic_armature_i8",
       "closure_error_um": {
         "max": 96.1790023327437,
         "mean": 28.585433444493283,
@@ -567,7 +691,7 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 238.95502090454102,
+      "collision_p50_us": 241.3797192275524,
       "completed_substeps": 2000,
       "contact_count": {
         "max": 5.0,
@@ -617,7 +741,7 @@
       "iterations": 8,
       "kamino_dvi_settings": null,
       "kamino_dynamics_solver": null,
-      "label": "VBD sparse direct, 8 iterations",
+      "label": "VBD sparse direct, isotropic armature approximation, 8 iterations",
       "lateral_displacement_m": -0.30137142023852714,
       "path_error_m": {
         "max": 0.3016657720612334,
@@ -625,15 +749,15 @@
         "min": 0.0010256998856454174,
         "rms": 0.12584971726866398
       },
-      "policy_p50_us": 110.57499796152115,
+      "policy_p50_us": 113.40947821736336,
       "sim_dt_s": 0.004,
       "simulated_time_s": 7.999999999999562,
       "solver": "vbd",
-      "solver_p50_us": 1907.4189476668835,
-      "solver_p90_us": 1942.7132792770863,
+      "solver_p50_us": 1947.1589475870132,
+      "solver_p90_us": 1981.1040721833706,
       "stand_time_s": 1.0,
       "status": "complete",
-      "step_p50_us": 2145.493868738413,
+      "step_p50_us": 2188.0632266402245,
       "tilt_deg": {
         "max": 10.144890348809115,
         "mean": 4.739424366520003,
@@ -691,7 +815,7 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 243.7550574541092,
+      "collision_p50_us": 244.90384384989738,
       "completed_substeps": 110,
       "contact_count": {
         "max": 2.0,
@@ -749,15 +873,15 @@
         "min": 0.0008372044903221898,
         "rms": 0.07178997371730594
       },
-      "policy_p50_us": 116.60018935799599,
+      "policy_p50_us": 116.40507727861404,
       "sim_dt_s": 0.004,
       "simulated_time_s": 0.44000000000000034,
       "solver": "vbd",
-      "solver_p50_us": 1914.1687080264091,
-      "solver_p90_us": 1954.9621269106865,
+      "solver_p50_us": 1956.7189738154411,
+      "solver_p90_us": 1986.8014380335808,
       "stand_time_s": 1.0,
       "status": "fell",
-      "step_p50_us": 2155.178692191839,
+      "step_p50_us": 2202.532719820738,
       "tilt_deg": {
         "max": 60.81616921116682,
         "mean": 27.611557531478358,

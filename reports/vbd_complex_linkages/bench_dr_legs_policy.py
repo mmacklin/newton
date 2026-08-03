@@ -73,6 +73,14 @@ CASE_CONFIGS = {
     "local_i8": ModeSpec("VBD local, 8 iterations", "vbd", "cpu", "local", 8, 0.65),
     "local_i32": ModeSpec("VBD local, 32 iterations", "vbd", "cpu", "local", 32, 0.65),
     "sparse_i8": ModeSpec("VBD sparse direct, 8 iterations", "vbd", "cpu", "block_sparse_joints", 8, 0.65),
+    "sparse_isotropic_armature_i8": ModeSpec(
+        "VBD sparse direct, isotropic armature approximation, 8 iterations",
+        "vbd",
+        "cpu",
+        "block_sparse_joints",
+        8,
+        0.65,
+    ),
     "sparse_no_armature_i8": ModeSpec(
         "VBD sparse direct, no armature, 8 iterations",
         "vbd",
@@ -88,7 +96,8 @@ CASE_ARMATURE_MODES = {
     "kamino_dvi": "native",
     "local_i8": "isotropic_child_body",
     "local_i32": "isotropic_child_body",
-    "sparse_i8": "isotropic_child_body",
+    "sparse_i8": "coupled_joint",
+    "sparse_isotropic_armature_i8": "isotropic_child_body",
     "sparse_no_armature_i8": "unsupported",
 }
 
@@ -266,7 +275,7 @@ def build_model(
         _add_child_body_armature(model, rank_one=False)
     elif armature_mode == "rank_one_child_body":
         _add_child_body_armature(model, rank_one=True)
-    elif armature_mode not in ("native", "unsupported"):
+    elif armature_mode not in ("native", "unsupported", "coupled_joint"):
         raise ValueError(f"Unknown armature mode {armature_mode!r}")
 
     body_q = model.body_q.numpy().copy()
@@ -349,7 +358,7 @@ class ObservationState:
         ).astype(np.float32)
 
 
-def _make_solver(model: newton.Model, spec: ModeSpec):
+def _make_solver(model: newton.Model, spec: ModeSpec, *, coupled_joint_armature: bool = False):
     if spec.solver == "kamino":
         return _make_dr_legs_solver(model, spec)
     return newton.solvers.SolverVBD(
@@ -358,6 +367,7 @@ def _make_solver(model: newton.Model, spec: ModeSpec):
         friction_epsilon=1.0e-2,
         rigid_articulation_solve=spec.vbd_solve or "local",
         rigid_articulation_relaxation=spec.relaxation,
+        rigid_joint_armature=coupled_joint_armature,
         rigid_contact_hard=True,
         rigid_avbd_alpha=0.0,
         rigid_avbd_beta=0.0,
@@ -438,7 +448,7 @@ def run_case(
     contacts = pipeline.contacts()
     diagnostic_pipeline = newton.CollisionPipeline(model)
     diagnostic_contacts = diagnostic_pipeline.contacts()
-    solver = _make_solver(model, spec)
+    solver = _make_solver(model, spec, coupled_joint_armature=armature_mode == "coupled_joint")
     pelvis = _body_index(model, "pelvis")
     closure_labels = _cycle_joint_labels(model)
 
@@ -641,7 +651,7 @@ def main() -> int:
     parser.add_argument("--forward-speed", type=float, default=0.2)
     parser.add_argument(
         "--vbd-armature-mode",
-        choices=("isotropic_child_body", "rank_one_child_body", "unsupported"),
+        choices=("isotropic_child_body", "rank_one_child_body", "coupled_joint", "unsupported"),
         default=None,
     )
     parser.add_argument(
