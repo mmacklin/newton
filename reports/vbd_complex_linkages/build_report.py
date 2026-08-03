@@ -237,7 +237,7 @@ main{{max-width:1180px;margin:auto;padding:36px 28px 72px}} h1{{font-size:34px;l
 h2{{font-size:22px;margin:42px 0 14px;border-bottom:1px solid var(--line);padding-bottom:8px;letter-spacing:0}} h3{{font-size:16px;margin:0 0 10px}}
 p{{max-width:850px}} .lede{{font-size:18px;color:#30363b}} .meta,.note{{color:var(--muted)}} .status{{border-left:4px solid var(--accent);padding:12px 16px;background:var(--soft);max-width:900px}}
 .warn{{border-left-color:var(--warn)}} table{{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;display:block;overflow-x:auto}} th,td{{text-align:right;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap}} th:first-child,td:first-child{{text-align:left}} th{{background:var(--soft);font-size:13px}}
-.media-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}} .media{{min-width:0}} video{{display:block;width:100%;aspect-ratio:16/9;background:#111}} code{{background:var(--soft);padding:1px 4px}}
+.media-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}} .media-stack{{display:grid;grid-template-columns:1fr;gap:24px}} .media{{min-width:0}} video{{display:block;width:100%;aspect-ratio:16/9;background:#111}} code{{background:var(--soft);padding:1px 4px}}
 .validation-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}} .validation-grid article{{min-width:0}}
 .pill{{display:inline-block;border:1px solid var(--line);padding:2px 7px;margin-right:5px;font-size:12px}} a{{color:var(--accent)}}
 .section-link{{color:inherit;text-decoration:none}} .section-link::after{{content:" #";color:var(--muted);font-weight:400;opacity:.55}}
@@ -556,7 +556,7 @@ apply_pose_updates(delta, relaxation)</code></pre>
 <tr><td><strong>VBD sparse direct, i8</strong></td><td>complete</td><td><strong>{_fmt(dr_policy_sparse["solver_p50_us"] / 1.0e3, 3)}</strong></td><td>{_fmt(dr_policy_sparse["collision_p50_us"] / 1.0e3, 3)}</td><td><strong>{_fmt(dr_policy_sparse["step_p50_us"] / 1.0e3, 3)}</strong></td><td><strong>{_fmt(dr_policy_kamino["step_p50_us"] / dr_policy_sparse["step_p50_us"], 1)}x</strong></td></tr>
 </tbody></table>
 <p class="note">These policy-run timings use synchronized normal dispatch on Warp's single-threaded CPU backend and exclude the roughly 0.1&ndash;0.15 ms policy inference. Upstream Kamino direct-solver optimizations reduce PADMM's matched solver median from 59.520 ms to 42.341 ms (1.41x). Timing from failed local prefixes is not successful throughput. <a href="kamino_upstream_optimization_results.json">Optimization comparison data</a>.</p>
-<div class="media-grid">
+<div class="media-stack">
 {_video("dr_legs_policy_kamino.mp4", "Kamino PADMM policy rollout", "Native joint armature; completes the full eight-second command sequence.", anchor="kamino-dr-legs-policy")}
 {_video("dr_legs_policy_kamino_dvi.mp4", "Kamino DVI policy rollout", "Matched 250 Hz workload with block-preconditioned contact and stronger penetration stabilization.", anchor="kamino-dvi-dr-legs-policy")}
 {_video("dr_legs_policy_local_i32.mp4", "VBD local, 32 iterations", "The local solve collapses during the one-second standing phase; the final frame is held to make the failure visible.")}
