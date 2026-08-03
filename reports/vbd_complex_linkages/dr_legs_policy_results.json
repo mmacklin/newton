@@ -9,7 +9,7 @@
     "path_deviation_scale": 0.1,
     "pd_armature": 0.01,
     "pd_kd": 0.6,
-    "pd_kp": 15,
+    "pd_kp": 15.0,
     "phase_embedding_k": 2,
     "policy_file": "drlegs_walk.pt",
     "sim_dt": 0.004,
@@ -64,14 +64,15 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 262.17522099614143,
+      "collision_p50_us": 263.2751129567623,
       "completed_substeps": 2000,
       "contact_count": {
-        "max": 6,
+        "max": 6.0,
         "mean": 2.165,
-        "min": 0,
+        "min": 0.0,
         "rms": 2.3906066175763843
       },
+      "control_decimation": 5,
       "control_steps_completed": 400,
       "control_steps_requested": 400,
       "device": "cpu",
@@ -97,7 +98,8 @@
         "rms": 0.27267166068266907
       },
       "iterations": null,
-      "label": "Kamino",
+      "kamino_dynamics_solver": "padmm",
+      "label": "Kamino PADMM",
       "lateral_displacement_m": -0.480160678241762,
       "path_error_m": {
         "max": 0.7675353753840622,
@@ -105,19 +107,123 @@
         "min": 0.0009392828868963272,
         "rms": 0.42681767808954224
       },
-      "policy_p50_us": 136.52443885803223,
+      "policy_p50_us": 131.2452368438244,
+      "sim_dt_s": 0.004,
       "simulated_time_s": 7.999999999999562,
       "solver": "kamino",
-      "solver_p50_us": 42269.95958015323,
-      "solver_p90_us": 42752.74043902755,
-      "stand_time_s": 1,
+      "solver_p50_us": 42069.65956836939,
+      "solver_p90_us": 42501.06010586023,
+      "stand_time_s": 1.0,
       "status": "complete",
-      "step_p50_us": 42536.73041239381,
+      "step_p50_us": 42333.96425843239,
       "tilt_deg": {
         "max": 5.563290536095348,
         "mean": 1.5351929587453947,
         "min": 0.06442170547855834,
         "rms": 1.7634524858047085
+      },
+      "vbd_solve": null
+    },
+    {
+      "action_l2": {
+        "max": 3.872027635574341,
+        "mean": 2.9359978803992273,
+        "min": 1.5876142978668213,
+        "rms": 2.9639820585891767
+      },
+      "actuated_dof_indices": [
+        0,
+        1,
+        5,
+        6,
+        10,
+        15,
+        18,
+        19,
+        23,
+        24,
+        28,
+        33
+      ],
+      "actuated_target_error_rad": {
+        "max": 0.3420872986316681,
+        "mean": 0.12792904602363706,
+        "min": 0.07067597657442093,
+        "rms": 0.1356538342211687
+      },
+      "armature_mode": "native",
+      "case": "kamino_dvi",
+      "closure_error_um": {
+        "max": 654.0871349765019,
+        "mean": 304.82830877093687,
+        "min": 145.8275436853556,
+        "rms": 327.21510945103057
+      },
+      "closure_joint_labels": [
+        "/DR_Legs/Joints/j6_l_o",
+        "/DR_Legs/Joints/j6_r_o",
+        "/DR_Legs/Joints/j9_l_i",
+        "/DR_Legs/Joints/j9_l_o",
+        "/DR_Legs/Joints/j9_r_i",
+        "/DR_Legs/Joints/j9_r_o"
+      ],
+      "collision_p50_us": 253.4845843911171,
+      "completed_substeps": 2000,
+      "contact_count": {
+        "max": 8.0,
+        "mean": 5.2925,
+        "min": 3.0,
+        "rms": 5.584129296497351
+      },
+      "control_decimation": 5,
+      "control_steps_completed": 400,
+      "control_steps_requested": 400,
+      "device": "cpu",
+      "fall_time_s": null,
+      "forward_command_mps": 0.2,
+      "forward_displacement_m": 0.6920875196810812,
+      "forward_velocity_error_mps": {
+        "max": 0.012331546367091023,
+        "mean": -0.10955060095935473,
+        "min": -0.25015510190326556,
+        "rms": 0.12159235946171643
+      },
+      "forward_velocity_mps": {
+        "max": 0.21233154636709103,
+        "mean": 0.09044939904064526,
+        "min": -0.05015510190326554,
+        "rms": 0.10471132458204016
+      },
+      "height_m": {
+        "max": 0.27707788348197937,
+        "mean": 0.2501070810854435,
+        "min": 0.22941701114177704,
+        "rms": 0.25023187234658295
+      },
+      "iterations": null,
+      "kamino_dynamics_solver": "dvi",
+      "label": "Kamino DVI",
+      "lateral_displacement_m": -1.093240375135454,
+      "path_error_m": {
+        "max": 1.3024264269499424,
+        "mean": 0.6921305486980103,
+        "min": 0.0006401557779249055,
+        "rms": 0.7888258627270409
+      },
+      "policy_p50_us": 119.25492435693741,
+      "sim_dt_s": 0.004,
+      "simulated_time_s": 7.999999999999562,
+      "solver": "kamino",
+      "solver_p50_us": 3876.218106597662,
+      "solver_p90_us": 3912.370651960373,
+      "stand_time_s": 1.0,
+      "status": "complete",
+      "step_p50_us": 4128.952510654926,
+      "tilt_deg": {
+        "max": 6.0742293303658075,
+        "mean": 2.5436010641576696,
+        "min": 0.07205794204750553,
+        "rms": 2.8870617627813555
       },
       "vbd_solve": null
     },
@@ -164,14 +270,15 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 240.4400147497654,
+      "collision_p50_us": 232.24018514156342,
       "completed_substeps": 110,
       "contact_count": {
-        "max": 8,
+        "max": 8.0,
         "mean": 7.363636363636363,
-        "min": 4,
+        "min": 4.0,
         "rms": 7.446780878644507
       },
+      "control_decimation": 5,
       "control_steps_completed": 22,
       "control_steps_requested": 400,
       "device": "cpu",
@@ -197,6 +304,7 @@
         "rms": 0.21738639144057173
       },
       "iterations": 8,
+      "kamino_dynamics_solver": null,
       "label": "VBD local, 8 iterations",
       "lateral_displacement_m": -0.01004629439524063,
       "path_error_m": {
@@ -205,14 +313,15 @@
         "min": 0.0011907497799907964,
         "rms": 0.059778252117962394
       },
-      "policy_p50_us": 108.1954687833786,
+      "policy_p50_us": 105.97007349133492,
+      "sim_dt_s": 0.004,
       "simulated_time_s": 0.44000000000000034,
       "solver": "vbd",
-      "solver_p50_us": 2979.903481900692,
-      "solver_p90_us": 3005.38195297122,
-      "stand_time_s": 1,
+      "solver_p50_us": 2939.238678663969,
+      "solver_p90_us": 2970.2755622565746,
+      "stand_time_s": 1.0,
       "status": "fell",
-      "step_p50_us": 3217.617981135845,
+      "step_p50_us": 3171.283286064863,
       "tilt_deg": {
         "max": 28.785847436951034,
         "mean": 9.771660072198266,
@@ -264,14 +373,15 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 248.06521832942963,
+      "collision_p50_us": 241.4151094853878,
       "completed_substeps": 120,
       "contact_count": {
-        "max": 4,
+        "max": 4.0,
         "mean": 1.7916666666666667,
-        "min": 1,
+        "min": 1.0,
         "rms": 1.9685019685029528
       },
+      "control_decimation": 5,
       "control_steps_completed": 24,
       "control_steps_requested": 400,
       "device": "cpu",
@@ -297,6 +407,7 @@
         "rms": 0.2132907820888418
       },
       "iterations": 32,
+      "kamino_dynamics_solver": null,
       "label": "VBD local, 32 iterations",
       "lateral_displacement_m": -0.028659247298153723,
       "path_error_m": {
@@ -305,14 +416,15 @@
         "min": 0.001660722789968106,
         "rms": 0.08881321792433972
       },
-      "policy_p50_us": 114.36035856604576,
+      "policy_p50_us": 112.29515075683594,
+      "sim_dt_s": 0.004,
       "simulated_time_s": 0.48000000000000037,
       "solver": "vbd",
-      "solver_p50_us": 11357.5030118227,
-      "solver_p90_us": 11456.96947351098,
-      "stand_time_s": 1,
+      "solver_p50_us": 11187.33361363411,
+      "solver_p90_us": 11239.41270634532,
+      "stand_time_s": 1.0,
       "status": "fell",
-      "step_p50_us": 11606.468353420496,
+      "step_p50_us": 11425.623204559088,
       "tilt_deg": {
         "max": 33.63379694060405,
         "mean": 14.013463088785597,
@@ -364,14 +476,15 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 237.75454610586166,
+      "collision_p50_us": 240.0847151875496,
       "completed_substeps": 2000,
       "contact_count": {
-        "max": 5,
+        "max": 5.0,
         "mean": 1.585,
-        "min": 0,
+        "min": 0.0,
         "rms": 1.7349351572897471
       },
+      "control_decimation": 5,
       "control_steps_completed": 400,
       "control_steps_requested": 400,
       "device": "cpu",
@@ -397,6 +510,7 @@
         "rms": 0.2681426867265598
       },
       "iterations": 8,
+      "kamino_dynamics_solver": null,
       "label": "VBD sparse direct, 8 iterations",
       "lateral_displacement_m": -0.30137142023852714,
       "path_error_m": {
@@ -405,14 +519,15 @@
         "min": 0.0010256998856454174,
         "rms": 0.12584971726866398
       },
-      "policy_p50_us": 105.28462007641792,
+      "policy_p50_us": 106.10558092594147,
+      "sim_dt_s": 0.004,
       "simulated_time_s": 7.999999999999562,
       "solver": "vbd",
-      "solver_p50_us": 1915.0632433593273,
-      "solver_p90_us": 1941.3070753216743,
-      "stand_time_s": 1,
+      "solver_p50_us": 1945.069059729576,
+      "solver_p90_us": 1972.7895967662334,
+      "stand_time_s": 1.0,
       "status": "complete",
-      "step_p50_us": 2151.5488624572754,
+      "step_p50_us": 2184.273675084114,
       "tilt_deg": {
         "max": 10.144890348809115,
         "mean": 4.739424366520003,
@@ -464,14 +579,15 @@
         "/DR_Legs/Joints/j9_r_i",
         "/DR_Legs/Joints/j9_r_o"
       ],
-      "collision_p50_us": 242.539681494236,
+      "collision_p50_us": 240.86004123091698,
       "completed_substeps": 110,
       "contact_count": {
-        "max": 2,
+        "max": 2.0,
         "mean": 0.8636363636363636,
-        "min": 0,
+        "min": 0.0,
         "rms": 1.1870513506545997
       },
+      "control_decimation": 5,
       "control_steps_completed": 22,
       "control_steps_requested": 400,
       "device": "cpu",
@@ -497,6 +613,7 @@
         "rms": 0.2603561256229823
       },
       "iterations": 8,
+      "kamino_dynamics_solver": null,
       "label": "VBD sparse direct, no armature, 8 iterations",
       "lateral_displacement_m": -0.056798601959260786,
       "path_error_m": {
@@ -505,14 +622,15 @@
         "min": 0.0008372044903221898,
         "rms": 0.07178997371730594
       },
-      "policy_p50_us": 111.07977479696274,
+      "policy_p50_us": 108.1051304936409,
+      "sim_dt_s": 0.004,
       "simulated_time_s": 0.44000000000000034,
       "solver": "vbd",
-      "solver_p50_us": 1920.2935509383678,
-      "solver_p90_us": 1950.5100324749947,
-      "stand_time_s": 1,
+      "solver_p50_us": 1936.0934384167194,
+      "solver_p90_us": 1965.2129150927067,
+      "stand_time_s": 1.0,
       "status": "fell",
-      "step_p50_us": 2161.3487042486668,
+      "step_p50_us": 2176.678739488125,
       "tilt_deg": {
         "max": 60.81616921116682,
         "mean": 27.611557531478358,

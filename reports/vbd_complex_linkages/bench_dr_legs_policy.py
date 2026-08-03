@@ -60,7 +60,13 @@ class PolicyConfig:
 
 
 CASE_CONFIGS = {
-    "kamino": ModeSpec("Kamino", "kamino", "cpu"),
+    "kamino": ModeSpec("Kamino PADMM", "kamino", "cpu"),
+    "kamino_dvi": ModeSpec(
+        "Kamino DVI",
+        "kamino",
+        "cpu",
+        kamino_dynamics_solver="dvi",
+    ),
     "local_i8": ModeSpec("VBD local, 8 iterations", "vbd", "cpu", "local", 8, 0.65),
     "local_i32": ModeSpec("VBD local, 32 iterations", "vbd", "cpu", "local", 32, 0.65),
     "sparse_i8": ModeSpec("VBD sparse direct, 8 iterations", "vbd", "cpu", "block_sparse_joints", 8, 0.65),
@@ -505,8 +511,11 @@ def run_case(
         "case": case,
         "label": spec.label,
         "solver": spec.solver,
+        "kamino_dynamics_solver": spec.kamino_dynamics_solver if spec.solver == "kamino" else None,
         "vbd_solve": spec.vbd_solve,
         "iterations": spec.iterations,
+        "sim_dt_s": config.sim_dt,
+        "control_decimation": config.control_decimation,
         "device": spec.device,
         "armature_mode": armature_mode,
         "status": "complete" if completed_control_steps == control_steps else "fell",

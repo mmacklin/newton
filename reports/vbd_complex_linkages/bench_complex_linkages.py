@@ -53,6 +53,7 @@ class ModeSpec:
     kamino_joint_stabilization: float = 0.01
     cpu_graph: bool = False
     cuda_graph: bool = False
+    kamino_dynamics_solver: str = "padmm"
 
 
 ROBOT_FOOT_MODES = {
@@ -444,7 +445,10 @@ def _make_solver(model: newton.Model, spec: ModeSpec):
 
 def _make_dr_legs_solver(model: newton.Model, spec: ModeSpec):
     if spec.solver == "kamino":
-        config = newton.solvers.SolverKamino.Config.from_model(model)
+        config = newton.solvers.SolverKamino.Config.from_model(
+            model,
+            dynamics_solver=spec.kamino_dynamics_solver,
+        )
         config.use_collision_detector = False
         config.use_fk_solver = False
         config.constraints.delta = 1.0e-3
@@ -452,6 +456,27 @@ def _make_dr_legs_solver(model: newton.Model, spec: ModeSpec):
         config.padmm.primal_tolerance = 1.0e-4
         config.padmm.dual_tolerance = 1.0e-4
         config.padmm.compl_tolerance = 1.0e-4
+        if spec.kamino_dynamics_solver == "dvi":
+            config.integrator = "moreau"
+            config.constraints.alpha = 0.1
+            config.constraints.beta = 0.011
+            config.constraints.gamma = 0.015
+            config.dynamics.preconditioning = False
+            config.dynamics.linear_solver_type = "CR"
+            config.dynamics.linear_solver_kwargs = {"maxiter": 9}
+            config.sparse_dynamics = True
+            config.sparse_jacobian = True
+            config.dvi.max_iterations = 200
+            config.dvi.tolerance = 1.0e-4
+            config.dvi.regularization = 1.0e-5
+            config.dvi.omega = 0.3
+            config.dvi.block_iterations = 4
+            config.dvi.contact_iterations = 2
+            config.dvi.bilateral_solve_period = 1
+            config.dvi.contact_jacobi_omega = 0.45
+            config.dvi.contact_jacobi_relaxation = 0.9
+            config.dvi.contact_block_preconditioner = False
+            config.dvi.contact_warmstart_method = "key_and_position_with_net_force_backup"
         return newton.solvers.SolverKamino(model=model, config=config)
     if spec.contact_normal_stiffness_scale != 1.0:
         model.shape_material_ke.assign(
