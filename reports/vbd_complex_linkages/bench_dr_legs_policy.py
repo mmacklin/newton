@@ -83,6 +83,15 @@ CASE_CONFIGS = {
     ),
 }
 
+CASE_ARMATURE_MODES = {
+    "kamino": "native",
+    "kamino_dvi": "native",
+    "local_i8": "isotropic_child_body",
+    "local_i32": "isotropic_child_body",
+    "sparse_i8": "isotropic_child_body",
+    "sparse_no_armature_i8": "unsupported",
+}
+
 
 def _load_config(asset_path: Path) -> PolicyConfig:
     path = asset_path / "dr_legs" / "rl_policies" / "drlegs_walk.yaml"
@@ -187,10 +196,12 @@ def _body_com_position(model: newton.Model, poses: np.ndarray, body: int) -> np.
     return poses[body, :3] + _quat_rotate(poses[body, 3:7], model.body_com.numpy()[body])
 
 
-def _add_child_body_armature(model: newton.Model) -> None:
-    """Approximate joint armature as isotropic child-link rotational inertia."""
+def _add_child_body_armature(model: newton.Model, *, rank_one: bool) -> None:
+    """Approximate joint armature in each actuated child body's local inertia."""
     inertia = model.body_inertia.numpy().copy()
     joint_child = model.joint_child.numpy()
+    joint_X_c = model.joint_X_c.numpy()
+    joint_axis = model.joint_axis.numpy()
     joint_qd_start = model.joint_qd_start.numpy()
     joint_type = model.joint_type.numpy()
     armature = model.joint_armature.numpy()
@@ -203,7 +214,12 @@ def _add_child_body_armature(model: newton.Model) -> None:
         if joint_type[joint] != int(newton.JointType.REVOLUTE):
             raise ValueError("The DR Legs armature approximation expects revolute actuators")
         child = int(joint_child[joint])
-        inertia[child] += armature[dof] * np.eye(3)
+        if rank_one:
+            axis_child = _quat_rotate(joint_X_c[joint, 3:7], joint_axis[dof].astype(np.float64))
+            axis_child /= np.linalg.norm(axis_child)
+            inertia[child] += armature[dof] * np.outer(axis_child, axis_child)
+        else:
+            inertia[child] += armature[dof] * np.eye(3)
 
     model.body_inertia.assign(inertia.astype(np.float32))
     model.body_inv_inertia.assign(np.linalg.inv(inertia).astype(np.float32))
@@ -247,7 +263,9 @@ def build_model(
     model.joint_armature.assign(np.where(actuated, config.pd_armature, 0.0).astype(np.float32))
     model.joint_damping.zero_()
     if armature_mode == "isotropic_child_body":
-        _add_child_body_armature(model)
+        _add_child_body_armature(model, rank_one=False)
+    elif armature_mode == "rank_one_child_body":
+        _add_child_body_armature(model, rank_one=True)
     elif armature_mode not in ("native", "unsupported"):
         raise ValueError(f"Unknown armature mode {armature_mode!r}")
 
@@ -399,15 +417,12 @@ def run_case(
     control_steps: int,
     stand_steps: int,
     forward_speed: float,
+    armature_mode_override: str | None = None,
     on_control_step: Callable[[newton.Model, newton.State, float, dict[str, float]], None] | None = None,
 ) -> dict[str, Any]:
     spec = CASE_CONFIGS[case]
-    if spec.solver == "kamino":
-        armature_mode = "native"
-    elif "no_armature" in case:
-        armature_mode = "unsupported"
-    else:
-        armature_mode = "isotropic_child_body"
+    armature_mode = armature_mode_override if armature_mode_override is not None and spec.solver == "vbd" else None
+    armature_mode = armature_mode or CASE_ARMATURE_MODES[case]
     model = build_model(
         spec.device,
         config,
@@ -625,6 +640,11 @@ def main() -> int:
     parser.add_argument("--stand-steps", type=int, default=50)
     parser.add_argument("--forward-speed", type=float, default=0.2)
     parser.add_argument(
+        "--vbd-armature-mode",
+        choices=("isotropic_child_body", "rank_one_child_body", "unsupported"),
+        default=None,
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("reports/vbd_complex_linkages/dr_legs_policy_results.json"),
@@ -646,6 +666,7 @@ def main() -> int:
             control_steps=args.control_steps,
             stand_steps=args.stand_steps,
             forward_speed=args.forward_speed,
+            armature_mode_override=args.vbd_armature_mode,
         )
         rows.append(row)
         print(json.dumps(row, indent=2, sort_keys=True), flush=True)
