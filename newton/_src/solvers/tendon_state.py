@@ -15,7 +15,14 @@ import warp as wp
 
 from ..sim import Model
 from ..sim.tendon import TendonLinkFlags, TendonLinkType
-from .tendon_kernels import snapshot_tendon_link_active, update_tendon_attachments, update_tendon_link_active
+from .tendon_kernels import (
+    prepare_tendon_route,
+    snapshot_tendon_link_active,
+    solve_tendon_material,
+    update_tendon_attachments,
+    update_tendon_cone_rows,
+    update_tendon_link_active,
+)
 
 
 def _transform_point_np(pose: np.ndarray, point: np.ndarray) -> np.ndarray:
@@ -141,6 +148,7 @@ class TendonStateMixin:
         if model.tendon_segment_count == 0:
             self.tendon_seg_rest_length = None
             self.tendon_seg_rest_length_step = None
+            self.tendon_seg_route_rest_length = None
             self.tendon_seg_stretch = None
             self.tendon_seg_material_tension = None
             self.tendon_seg_damping_tension = None
@@ -165,6 +173,10 @@ class TendonStateMixin:
             self.tendon_link_active_step = None
             self.tendon_link_route_rest_length = None
             self.tendon_link_seg_left = None
+            self.tendon_link_tendon = None
+            self.tendon_link_cone_seg_l = None
+            self.tendon_link_cone_seg_r = None
+            self.tendon_link_cap_ratio = None
             self.tendon_total_cable = None
             return
 
@@ -200,15 +212,20 @@ class TendonStateMixin:
             self.tendon_link_active = wp.ones(model.tendon_link_count, dtype=bool)
             self.tendon_link_active_step = wp.ones(model.tendon_link_count, dtype=bool)
             self.tendon_link_route_rest_length = wp.zeros(model.tendon_link_count, dtype=float)
+            self.tendon_link_cone_seg_l = wp.full(model.tendon_link_count, -1, dtype=wp.int32)
+            self.tendon_link_cone_seg_r = wp.full(model.tendon_link_count, -1, dtype=wp.int32)
+            self.tendon_link_cap_ratio = wp.ones(model.tendon_link_count, dtype=float)
             self.tendon_total_cable = wp.zeros(model.tendon_count, dtype=float)
 
             tendon_start_np = model.tendon_start.numpy()
             seg_link_l = []
             link_seg_left = np.full(model.tendon_link_count, -1, dtype=np.int32)
+            link_tendon = np.empty(model.tendon_link_count, dtype=np.int32)
             seg = 0
             for t in range(model.tendon_count):
                 start = tendon_start_np[t]
                 end = tendon_start_np[t + 1]
+                link_tendon[start:end] = t
                 for link_idx in range(start, end - 1):
                     seg_link_l.append(link_idx)
                     if link_idx + 1 < end - 1:
@@ -221,12 +238,14 @@ class TendonStateMixin:
                 np.asarray(seg_link_l, dtype=np.int32) + 1, dtype=wp.int32, device=model.device
             )
             self.tendon_link_seg_left = wp.array(link_seg_left, dtype=wp.int32, device=model.device)
+            self.tendon_link_tendon = wp.array(link_tendon, dtype=wp.int32, device=model.device)
 
             rest_np = model.tendon_seg_rest_length.numpy().copy()
             auto_mask = rest_np < 0.0
             rest_np[auto_mask] = 0.0
             self.tendon_seg_rest_length = wp.array(rest_np, dtype=float, device=model.device)
             self.tendon_seg_rest_length_step = wp.array(rest_np.copy(), dtype=float, device=model.device)
+            self.tendon_seg_route_rest_length = wp.array(rest_np.copy(), dtype=float, device=model.device)
             # scratch: per-segment stretch d = len - rest, snapshot+telescoped inside the capstan
             # transport (kept at its own scale so stiff-cable friction transfers survive float32)
             self.tendon_seg_stretch = wp.zeros_like(self.tendon_seg_rest_length)
@@ -285,6 +304,86 @@ class TendonStateMixin:
                 model.tendon_link_axis,
                 self.tendon_activation_tol,
                 self.tendon_link_active,
+            ],
+            device=model.device,
+        )
+
+    def _prepare_tendon_route(
+        self,
+        model: Model,
+        body_q: wp.array[wp.transform],
+        compliance_floor: float = 0.0,
+    ) -> None:
+        """Build the active route and merged segment properties for one solver step."""
+        if model.tendon_segment_count == 0:
+            return
+
+        wp.launch(
+            kernel=prepare_tendon_route,
+            dim=model.tendon_count,
+            inputs=[
+                body_q,
+                model.tendon_start,
+                model.tendon_link_body,
+                model.tendon_link_type,
+                model.tendon_link_flags,
+                model.tendon_link_radius,
+                model.tendon_link_offset,
+                model.tendon_link_axis,
+                self.tendon_seg_rest_length_step,
+                model.tendon_seg_compliance,
+                model.tendon_seg_damping,
+                self.tendon_link_active,
+                self.tendon_link_active_step,
+                self.tendon_link_route_rest_length,
+                self.tendon_seg_attachment_l_local_step,
+                self.tendon_seg_attachment_r_local_step,
+                compliance_floor,
+            ],
+            outputs=[
+                self.tendon_seg_route_rest_length,
+                self.tendon_seg_active,
+                self.tendon_seg_active_link_l,
+                self.tendon_seg_active_link_r,
+                self.tendon_seg_active_compliance,
+                self.tendon_seg_active_damping,
+            ],
+            device=model.device,
+        )
+
+    def _update_tendon_cone_rows(
+        self,
+        model: Model,
+        body_q: wp.array[wp.transform],
+        report_unsupported_wrap: bool,
+    ) -> None:
+        """Cache geometry-dependent segment pairs and capstan ratios for material rows."""
+        wp.launch(
+            kernel=update_tendon_cone_rows,
+            dim=model.tendon_link_count,
+            inputs=[
+                body_q,
+                model.tendon_start,
+                self.tendon_link_tendon,
+                model.tendon_link_body,
+                model.tendon_link_type,
+                model.tendon_link_radius,
+                model.tendon_link_orientation,
+                model.tendon_link_mu,
+                model.tendon_link_offset,
+                model.tendon_link_axis,
+                self.tendon_link_active,
+                self.tendon_seg_active,
+                self.tendon_seg_active_link_l,
+                self.tendon_seg_active_link_r,
+                self.tendon_seg_attachment_l,
+                self.tendon_seg_attachment_r,
+                int(report_unsupported_wrap),
+            ],
+            outputs=[
+                self.tendon_link_cone_seg_l,
+                self.tendon_link_cone_seg_r,
+                self.tendon_link_cap_ratio,
             ],
             device=model.device,
         )
@@ -385,8 +484,42 @@ class TendonStateMixin:
             self.tendon_seg_attachment_l_local = wp.array(att_l_local, dtype=wp.vec3, device=model.device)
             self.tendon_seg_attachment_r_local = wp.array(att_r_local, dtype=wp.vec3, device=model.device)
 
+        self._prepare_tendon_route(model, body_q)
+
         wp.launch(
             kernel=update_tendon_attachments,
+            dim=model.tendon_segment_count,
+            inputs=[
+                body_q,
+                model.tendon_link_body,
+                model.tendon_link_type,
+                model.tendon_link_flags,
+                model.tendon_link_radius,
+                model.tendon_link_orientation,
+                model.tendon_link_offset,
+                model.tendon_link_axis,
+                self.tendon_seg_active,
+                self.tendon_seg_active_link_l,
+                self.tendon_seg_active_link_r,
+                self.tendon_link_active,
+                self.tendon_link_active_step,
+                self.tendon_seg_attachment_l_local_step,
+                self.tendon_seg_attachment_r_local_step,
+                0,
+            ],
+            outputs=[
+                self.tendon_seg_attachment_l,
+                self.tendon_seg_attachment_r,
+                self.tendon_seg_attachment_l_local,
+                self.tendon_seg_attachment_r_local,
+                self.tendon_seg_rolling_delta_l,
+                self.tendon_seg_rolling_delta_r,
+            ],
+            device=model.device,
+        )
+
+        wp.launch(
+            kernel=solve_tendon_material,
             dim=model.tendon_count,
             inputs=[
                 body_q,
@@ -396,18 +529,14 @@ class TendonStateMixin:
                 model.tendon_start,
                 model.tendon_link_body,
                 model.tendon_link_type,
-                model.tendon_link_flags,
                 model.tendon_link_radius,
-                model.tendon_link_orientation,
-                model.tendon_link_mu,
                 model.tendon_link_offset,
                 model.tendon_link_axis,
                 self.tendon_seg_rest_length,
                 self.tendon_seg_rest_length_step,
+                self.tendon_seg_route_rest_length,
                 self.tendon_seg_stretch,
                 self.tendon_seg_damping_tension,
-                model.tendon_seg_compliance,
-                model.tendon_seg_damping,
                 self.tendon_seg_active,
                 self.tendon_seg_active_link_l,
                 self.tendon_seg_active_link_r,
@@ -420,20 +549,19 @@ class TendonStateMixin:
                 self.tendon_seg_attachment_r,
                 self.tendon_seg_attachment_l_local,
                 self.tendon_seg_attachment_r_local,
-                self.tendon_seg_attachment_l_local_step,
-                self.tendon_seg_attachment_r_local_step,
                 self.tendon_seg_rolling_delta_l,
                 self.tendon_seg_rolling_delta_r,
+                self.tendon_link_cone_seg_l,
+                self.tendon_link_cone_seg_r,
+                self.tendon_link_cap_ratio,
                 self.tendon_cone_sweep_count,
                 0,
                 0.0,
                 0,
                 0,
                 0,
-                0,
                 self.tendon_max_sweeps,
                 self.tendon_settle_tol,
-                0.0,
                 self.tendon_sigmoid_ea_low,
                 self.tendon_sigmoid_ea_ratio,
                 self.tendon_sigmoid_transition_strain,

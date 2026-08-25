@@ -2377,7 +2377,7 @@ def test_tendon_slip_uses_true_segment_compliance(test, device):
         mu = 0.1
 
         body_q = wp.array([wp.transform_identity()], dtype=wp.transform)
-        tendon_start = wp.array([0, 3], dtype=int)
+        tendon_link_seg_left = wp.array([-1, 0, -1], dtype=int)
         tendon_link_body = wp.array([0, 0, 0], dtype=int)
         tendon_link_type = wp.array(
             [int(TendonLinkType.ATTACHMENT), int(TendonLinkType.ROLLING), int(TendonLinkType.ATTACHMENT)],
@@ -2392,16 +2392,17 @@ def test_tendon_slip_uses_true_segment_compliance(test, device):
         seg_attachment_l = wp.array([wp.vec3(-1.0, 0.0, -1.0), wp.vec3(1.0, 0.0, 0.0)], dtype=wp.vec3)
         seg_attachment_r = wp.array([wp.vec3(-1.0, 0.0, 0.0), wp.vec3(1.0, 0.0, -1.0)], dtype=wp.vec3)
         seg_compliance = wp.array([compliance_l, compliance_r], dtype=float)
+        seg_material_tension = wp.array([(1.0 - rest_l) / compliance_l, (1.0 - rest_r) / compliance_r], dtype=float)
         seg_damping_tension = wp.zeros(2, dtype=float)
         seg_delta_lambda = wp.array([-1.0, 0.0], dtype=float)
         body_deltas = wp.zeros(1, dtype=wp.spatial_vector)
 
         wp.launch(
             solve_tendon_slip,
-            dim=1,
+            dim=3,
             inputs=[
                 body_q,
-                tendon_start,
+                tendon_link_seg_left,
                 tendon_link_body,
                 tendon_link_type,
                 tendon_link_radius,
@@ -2409,13 +2410,14 @@ def test_tendon_slip_uses_true_segment_compliance(test, device):
                 tendon_link_active,
                 tendon_link_offset,
                 tendon_link_axis,
-                seg_rest_length,
                 seg_attachment_l,
                 seg_attachment_r,
                 seg_compliance,
+                seg_material_tension,
                 seg_damping_tension,
                 seg_delta_lambda,
                 1.0,
+                0.0,
             ],
             outputs=[body_deltas],
         )

@@ -21,7 +21,7 @@ from ...sim import (
 )
 from ..flags import SolverNotifyFlags
 from ..solver import SolverBase
-from ..tendon_kernels import update_tendon_attachments
+from ..tendon_kernels import solve_tendon_material, update_tendon_attachments
 from ..tendon_state import TendonStateMixin
 from ..xpbd.kernels import apply_joint_forces
 from .particle_vbd_kernels import (
@@ -1677,6 +1677,7 @@ class SolverVBD(TendonStateMixin, SolverBase):
         if self.tendon_seg_lambda is not None and state_in.body_q is not None:
             self._snapshot_tendon_step_state()
             self._update_tendon_link_active(self.model, state_in.body_q)
+            self._prepare_tendon_route(self.model, state_in.body_q, 1.0e-8)
             self.tendon_seg_material_tension.zero_()
             if self.iterations == 0 or self.integrate_with_external_rigid_solver:
                 self.tendon_seg_lambda.zero_()
@@ -2427,6 +2428,40 @@ class SolverVBD(TendonStateMixin, SolverBase):
 
         wp.launch(
             kernel=update_tendon_attachments,
+            dim=model.tendon_segment_count,
+            inputs=[
+                state_in.body_q,
+                model.tendon_link_body,
+                model.tendon_link_type,
+                model.tendon_link_flags,
+                model.tendon_link_radius,
+                model.tendon_link_orientation,
+                model.tendon_link_offset,
+                model.tendon_link_axis,
+                self.tendon_seg_active,
+                self.tendon_seg_active_link_l,
+                self.tendon_seg_active_link_r,
+                self.tendon_link_active,
+                self.tendon_link_active_step,
+                self.tendon_seg_attachment_l_local_step,
+                self.tendon_seg_attachment_r_local_step,
+                1,
+            ],
+            outputs=[
+                self.tendon_seg_attachment_l,
+                self.tendon_seg_attachment_r,
+                self.tendon_seg_attachment_l_local,
+                self.tendon_seg_attachment_r_local,
+                self.tendon_seg_rolling_delta_l,
+                self.tendon_seg_rolling_delta_r,
+            ],
+            device=self.device,
+        )
+
+        self._update_tendon_cone_rows(model, state_in.body_q, report_unsupported_wrap)
+
+        wp.launch(
+            kernel=solve_tendon_material,
             dim=model.tendon_count,
             inputs=[
                 state_in.body_q,
@@ -2436,18 +2471,14 @@ class SolverVBD(TendonStateMixin, SolverBase):
                 model.tendon_start,
                 model.tendon_link_body,
                 model.tendon_link_type,
-                model.tendon_link_flags,
                 model.tendon_link_radius,
-                model.tendon_link_orientation,
-                model.tendon_link_mu,
                 model.tendon_link_offset,
                 model.tendon_link_axis,
                 self.tendon_seg_rest_length,
                 self.tendon_seg_rest_length_step,
+                self.tendon_seg_route_rest_length,
                 self.tendon_seg_stretch,
                 self.tendon_seg_damping_tension,
-                model.tendon_seg_compliance,
-                model.tendon_seg_damping,
                 self.tendon_seg_active,
                 self.tendon_seg_active_link_l,
                 self.tendon_seg_active_link_r,
@@ -2460,20 +2491,19 @@ class SolverVBD(TendonStateMixin, SolverBase):
                 self.tendon_seg_attachment_r,
                 self.tendon_seg_attachment_l_local,
                 self.tendon_seg_attachment_r_local,
-                self.tendon_seg_attachment_l_local_step,
-                self.tendon_seg_attachment_r_local_step,
                 self.tendon_seg_rolling_delta_l,
                 self.tendon_seg_rolling_delta_r,
+                self.tendon_link_cone_seg_l,
+                self.tendon_link_cone_seg_r,
+                self.tendon_link_cap_ratio,
                 self.tendon_cone_sweep_count,
                 1,
                 dt,
                 1,
                 1,
-                int(report_unsupported_wrap),
                 1,
                 self.tendon_max_sweeps,
                 self.tendon_settle_tol,
-                1.0e-8,
                 self.tendon_sigmoid_ea_low,
                 self.tendon_sigmoid_ea_ratio,
                 self.tendon_sigmoid_transition_strain,
