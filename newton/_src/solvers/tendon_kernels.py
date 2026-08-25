@@ -575,9 +575,9 @@ def update_tendon_attachments(
     if num_segs < 1:
         return
 
-    seg_offset = int(0)
-    for t in range(tendon_id):
-        seg_offset = seg_offset + (tendon_start[t + 1] - tendon_start[t] - 1)
+    # Each preceding tendon contributes one fewer segment than links, so the
+    # segment prefix is the link prefix minus the number of preceding tendons.
+    seg_offset = link_start - tendon_id
 
     min_rest = 1.0e-6
 
@@ -708,8 +708,13 @@ def update_tendon_attachments(
             new_al = seed_al
             new_ar = seed_ar
             for _iter in range(10):
+                previous_al = new_al
+                previous_ar = new_ar
                 new_ar = tangent_point_circle(new_al, center_r, radius_r, normal_r, orient_r)
                 new_al = tangent_point_circle(new_ar, center_l, radius_l, normal_l, -orient_l)
+                tangent_delta_sq = wp.length_sq(new_al - previous_al) + wp.length_sq(new_ar - previous_ar)
+                if tangent_delta_sq == 0.0:
+                    break
         elif type_l == int(TendonLinkType.ROLLING) and radius_l > 0.0:
             new_ar = center_r
             new_al = tangent_point_circle(center_r, center_l, radius_l, normal_l, -orient_l)
@@ -831,7 +836,7 @@ def update_tendon_attachments(
         settle_tension_reference = float(0.0)
         for material_sweep in range(256):
             if material_sweep >= material_sweep_count or converged != 0:
-                continue
+                break
 
             tendon_cone_sweep_count[tendon_id] = tendon_cone_sweep_count[tendon_id] + 1
             sweep_dtension = float(0.0)
