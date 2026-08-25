@@ -627,6 +627,7 @@ def update_tendon_attachments(
     seg_attachment_r_local: wp.array[wp.vec3],
     seg_rolling_delta_l: wp.array[float],
     seg_rolling_delta_r: wp.array[float],
+    seg_length: wp.array[float],
 ):
     """Update one active free span's tangent geometry."""
     seg = wp.tid()
@@ -637,6 +638,7 @@ def update_tendon_attachments(
         seg_attachment_r[seg] = wp.vec3(0.0, 0.0, 0.0)
         seg_attachment_l_local[seg] = wp.vec3(0.0, 0.0, 0.0)
         seg_attachment_r_local[seg] = wp.vec3(0.0, 0.0, 0.0)
+        seg_length[seg] = 0.0
         return
 
     link_l = seg_active_link_l[seg]
@@ -723,6 +725,7 @@ def update_tendon_attachments(
     seg_attachment_r[seg] = new_ar
     seg_attachment_l_local[seg] = wp.transform_point(wp.transform_inverse(pose_l), new_al)
     seg_attachment_r_local[seg] = wp.transform_point(wp.transform_inverse(pose_r), new_ar)
+    seg_length[seg] = wp.length(new_ar - new_al)
 
 
 @wp.kernel
@@ -743,6 +746,7 @@ def update_tendon_cone_rows(
     seg_active_link_r: wp.array[int],
     seg_attachment_l: wp.array[wp.vec3],
     seg_attachment_r: wp.array[wp.vec3],
+    seg_length: wp.array[float],
     report_unsupported_wrap: int,
     # outputs
     tendon_link_cone_seg_l: wp.array[int],
@@ -801,16 +805,14 @@ def update_tendon_cone_rows(
             if left_candidate >= 0 and seg_left < 0:
                 seg = seg_offset + left_candidate
                 if seg_active[seg] != 0:
-                    length = wp.length(seg_attachment_r[seg] - seg_attachment_l[seg])
-                    if length > 1.0e-5:
+                    if seg_length[seg] > 1.0e-5:
                         seg_left = seg
 
             right_candidate = i + probe
             if right_candidate < num_segs and seg_right < 0:
                 seg = seg_offset + right_candidate
                 if seg_active[seg] != 0:
-                    length = wp.length(seg_attachment_r[seg] - seg_attachment_l[seg])
-                    if length > 1.0e-5:
+                    if seg_length[seg] > 1.0e-5:
                         seg_right = seg
 
     if seg_left < 0 or seg_right < 0:
@@ -926,6 +928,7 @@ def solve_tendon_material(
     tendon_link_route_rest_length: wp.array[float],
     seg_attachment_l: wp.array[wp.vec3],
     seg_attachment_r: wp.array[wp.vec3],
+    seg_length: wp.array[float],
     seg_attachment_l_local: wp.array[wp.vec3],
     seg_attachment_r_local: wp.array[wp.vec3],
     seg_rolling_delta_l: wp.array[float],
@@ -1000,8 +1003,8 @@ def solve_tendon_material(
         if free_rest < 2.0 * min_rest:
             free_rest = 2.0 * min_rest
 
-        len_l = wp.length(seg_attachment_r[seg_left] - seg_attachment_l[seg_left])
-        len_r = wp.length(seg_attachment_r[seg_right] - seg_attachment_l[seg_right])
+        len_l = seg_length[seg_left]
+        len_r = seg_length[seg_right]
         free_len = wp.max(len_l + len_r, 1.0e-8)
         rest_l = wp.max(min_rest, free_rest * len_l / free_len)
         rest_r = wp.max(min_rest, free_rest - rest_l)
@@ -1018,7 +1021,7 @@ def solve_tendon_material(
         for s_snap in range(num_segs):
             seg = seg_offset + s_snap
             if seg_active[seg] != 0:
-                len_snap = wp.length(seg_attachment_r[seg] - seg_attachment_l[seg])
+                len_snap = seg_length[seg]
                 # raw (signed) stretch: negative when the span is slack -- preserved so the
                 # rebuild below conserves total cable length (rest = len - stretch).
                 seg_stretch[seg] = len_snap - seg_rest_length[seg]
@@ -1102,8 +1105,8 @@ def solve_tendon_material(
 
                 cap_ratio = tendon_link_cap_ratio[link_idx]
 
-                len_l = wp.length(seg_attachment_r[seg_left] - seg_attachment_l[seg_left])
-                len_r = wp.length(seg_attachment_r[seg_right] - seg_attachment_l[seg_right])
+                len_l = seg_length[seg_left]
+                len_r = seg_length[seg_right]
                 # Project the same unilateral Kelvin-Voigt tension used by
                 # solve_tendon_stretch, including damping at zero stretch.
                 d_l_raw = seg_stretch[seg_left]
@@ -1311,8 +1314,8 @@ def solve_tendon_material(
                 # Apply only the friction-limited differential mode after relaxation. The common
                 # mode above is independent of friction and already accounts for wrapped material.
                 rolling_delta_diff = 0.5 * (seg_rolling_delta_r[seg_left] - seg_rolling_delta_l[seg_right])
-                len_al = wp.length(seg_attachment_r[seg_left] - seg_attachment_l[seg_left])
-                len_ar = wp.length(seg_attachment_r[seg_right] - seg_attachment_l[seg_right])
+                len_al = seg_length[seg_left]
+                len_ar = seg_length[seg_right]
                 rest_l = len_al - seg_stretch[seg_left]
                 rest_r = len_ar - seg_stretch[seg_right]
                 rolling_transfer = rolling_delta_diff * beta
@@ -1329,5 +1332,5 @@ def solve_tendon_material(
         for s_wb in range(num_segs):
             seg = seg_offset + s_wb
             if seg_active[seg] != 0:
-                len_wb = wp.length(seg_attachment_r[seg] - seg_attachment_l[seg])
+                len_wb = seg_length[seg]
                 seg_rest_length[seg] = wp.max(len_wb - seg_stretch[seg], min_rest)

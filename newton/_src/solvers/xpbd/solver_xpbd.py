@@ -754,6 +754,7 @@ class SolverXPBD(TendonStateMixin, SolverBase):
                                 self.tendon_seg_attachment_r_local,
                                 self.tendon_seg_rolling_delta_l,
                                 self.tendon_seg_rolling_delta_r,
+                                self.tendon_seg_length,
                             ],
                             device=model.device,
                         )
@@ -789,6 +790,7 @@ class SolverXPBD(TendonStateMixin, SolverBase):
                                 self.tendon_link_route_rest_length,
                                 self.tendon_seg_attachment_l,
                                 self.tendon_seg_attachment_r,
+                                self.tendon_seg_length,
                                 self.tendon_seg_attachment_l_local,
                                 self.tendon_seg_attachment_r_local,
                                 self.tendon_seg_rolling_delta_l,

@@ -154,6 +154,7 @@ class TendonStateMixin:
             self.tendon_seg_damping_tension = None
             self.tendon_seg_attachment_l = None
             self.tendon_seg_attachment_r = None
+            self.tendon_seg_length = None
             self.tendon_seg_attachment_l_local = None
             self.tendon_seg_attachment_r_local = None
             self.tendon_seg_attachment_l_local_step = None
@@ -183,6 +184,7 @@ class TendonStateMixin:
         with wp.ScopedDevice(model.device):
             self.tendon_seg_attachment_l = wp.zeros(model.tendon_segment_count, dtype=wp.vec3)
             self.tendon_seg_attachment_r = wp.zeros(model.tendon_segment_count, dtype=wp.vec3)
+            self.tendon_seg_length = wp.zeros(model.tendon_segment_count, dtype=float)
             self.tendon_seg_attachment_l_local = wp.zeros(model.tendon_segment_count, dtype=wp.vec3)
             self.tendon_seg_attachment_r_local = wp.zeros(model.tendon_segment_count, dtype=wp.vec3)
             self.tendon_seg_attachment_l_local_step = wp.zeros(model.tendon_segment_count, dtype=wp.vec3)
@@ -378,6 +380,7 @@ class TendonStateMixin:
                 self.tendon_seg_active_link_r,
                 self.tendon_seg_attachment_l,
                 self.tendon_seg_attachment_r,
+                self.tendon_seg_length,
                 int(report_unsupported_wrap),
             ],
             outputs=[
@@ -514,6 +517,7 @@ class TendonStateMixin:
                 self.tendon_seg_attachment_r_local,
                 self.tendon_seg_rolling_delta_l,
                 self.tendon_seg_rolling_delta_r,
+                self.tendon_seg_length,
             ],
             device=model.device,
         )
@@ -547,6 +551,7 @@ class TendonStateMixin:
                 self.tendon_link_route_rest_length,
                 self.tendon_seg_attachment_l,
                 self.tendon_seg_attachment_r,
+                self.tendon_seg_length,
                 self.tendon_seg_attachment_l_local,
                 self.tendon_seg_attachment_r_local,
                 self.tendon_seg_rolling_delta_l,
