@@ -6,6 +6,10 @@
 
 - Add ten everyday reduced-elastic research examples, their derived assets, and reproducible validation and rendering scripts under `reports/everyday_rom/`.
 
+### Changed
+
+- Increase the everyday hand example's individual finger motion with an updated derived ROM and a 50 ms force withdrawal. Use the new bundled targets together with the new basis; the validated defaults are two substeps and twelve iterations.
+
 <!-- towncrier release notes start -->
 
 ## [1.5.1] - 2026-08-27

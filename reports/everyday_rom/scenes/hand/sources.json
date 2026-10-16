@@ -1,8 +1,13 @@
 {
+  "audit_equilibrium.py": {
+    "source": "https://reports.mmacklin.com/everyday-rom/hand/source/audit_equilibrium.py",
+    "source_sha256": "a1a72bb70779acdf927e325aa5a30dfbb9e83b2599b4f4da17f28ae0b7c9b052",
+    "bundled_sha256": "10d08722b822c5ac37a13c251e1a0317030186b0e3b82b7e40257dcb52e98b01"
+  },
   "expressive.py": {
     "source": "https://reports.mmacklin.com/everyday-rom/hand/source/expressive.py",
-    "source_sha256": "3dbb4730badafca34c0927cbd98b0bfcd8b1cd3cae63e8d90b89943c8ba43683",
-    "bundled_sha256": "7b12d2f7eec06f21ded43c706482b80b447667d9f9cecde3855a6d587fe41842"
+    "source_sha256": "ca185e2744a5dac2f8d7a35b68213601e1d86f53b14358d4e80396aff10ce6f7",
+    "bundled_sha256": "133f9ffe67bdcda3efdfe83c82fa8a5d6b809bf402388d72341c9e65ffa982dd"
   },
   "fit_bounded_targets.py": {
     "source": "https://reports.mmacklin.com/everyday-rom/hand/source/fit_bounded_targets.py",
@@ -33,5 +38,10 @@
     "source": "https://reports.mmacklin.com/everyday-rom/hand/source/test_expressive.py",
     "source_sha256": "c788eeee0da947422f4886dde4dcc30e817b062b050acf9d9be1f801cb971f91",
     "bundled_sha256": "43882cb0248b273cabbe8677349bbf9634326bd1320adcbf5b86f66d773deca1"
+  },
+  "test_release50.py": {
+    "source": "https://reports.mmacklin.com/everyday-rom/hand/source/test_release50.py",
+    "source_sha256": "f331223a352d8fc286e1b735ae11ca008d1fba97c83fedf8f4edeef458596b44",
+    "bundled_sha256": "92199a3f4a6ac967e93f3c8182136d0a4616207b3d118d0220a91081df6c5c2a"
   }
 }

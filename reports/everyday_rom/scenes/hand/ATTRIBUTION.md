@@ -15,8 +15,11 @@ and rendered media, while excluding original NIMBLE model files from Newton
 and report bundles. This uses that explicit authorization, not an inference
 that a software license resolves every separately downloaded asset's terms.
 
-This revision uses 48 modes from the same 160-pose native POD, rest pose 77,
-and unchanged closed surface topology. The 10 MPa/1 mm shell, 0.35 kg lumped
+This revision uses a conditioned 48-mode subspace of a coherent 64-mode POD
+trained on native independent-finger curl families and the 160 native poses,
+with rest pose 77 and unchanged closed surface topology. Five bounded
+whole-surface target shapes are retained exactly alongside 43 complementary
+POD directions. The 10 MPa/1 mm shell, 0.35 kg lumped
 mass, and damping are assumed engineering parameters, not anatomical tissue
 calibration. Offline NIMBLE-informed targets are fitted within surface-strain
 bounds. At runtime, prescribed modal forces shift the elastic rest coordinate;

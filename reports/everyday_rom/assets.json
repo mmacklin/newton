@@ -5,12 +5,12 @@
     "description": "Procedural ordered-POD peel ROM and modal path"
   },
   "scenes/hand/assets/rom-48.npz": {
-    "sha256": "46c77313b079ec339f3513f9efaea3f845735f61af751ed08f164b115031b03e",
+    "sha256": "526d8f3d1f9ffc2e2979429036250b7bfaaca6f81923f9c850b3e45d4944daea",
     "source": "https://reports.mmacklin.com/everyday-rom/hand/inputs/rom-48.npz",
-    "description": "Attributed derived 48-mode ROM, not original NIMBLE model data"
+    "description": "Attributed conditioned 48-mode ROM preserving five bounded curl targets, not original NIMBLE model data"
   },
   "scenes/hand/assets/targets.npz": {
-    "sha256": "09b9815492753fc4bf2820e4749e9f6c3a15631295db8d9c487888a99cb5bf57",
+    "sha256": "7eafaf8c51a4992d137d38fb874fea24004e54ec0c04ba15c89d79828f641610",
     "source": "https://reports.mmacklin.com/everyday-rom/hand/inputs/targets.npz",
     "description": "Five derived modal-force targets, not raw native poses"
   },

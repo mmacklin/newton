@@ -14,6 +14,8 @@ from pathlib import Path
 
 import numpy as np
 import warp as wp
+from audit_equilibrium import audit as audit_equilibrium
+from audit_equilibrium import audit_saved
 from hand_contact import HandContact, digest, recover
 from individual import FINGERS, finger_patches
 
@@ -21,9 +23,9 @@ import newton
 
 STARTS = 0.5 + np.arange(5) * 2.2
 DURATION = 12.0
-AMPLITUDE = 0.8
-RELEASE_DURATION = 1 / 60
-MODEL_REVISION = "expressive-hand-20261016"
+AMPLITUDE = 1.0
+RELEASE_DURATION = 3 / 60
+MODEL_REVISION = "larger-motion-hand-release50-20261016"
 
 
 def target_path(targets, duration=DURATION, amplitude=AMPLITUDE, step_hz=240):
@@ -69,8 +71,8 @@ class Example(HandContact):
         audited=True,
         duration=DURATION,
         amplitude=AMPLITUDE,
-        substeps=4,
-        iterations=20,
+        substeps=2,
+        iterations=12,
     ):
         self.targets_path = Path(targets)
         self.actuation_enabled = actuation_enabled
@@ -157,7 +159,7 @@ class Example(HandContact):
         (output / "metrics.json").write_text(json.dumps(result, indent=2) + "\n")
         meta = json.loads((output / "scene.json").read_text())
         meta.update(
-            slug="hand-expressive-finger-actuation",
+            slug="hand-larger-motion-finger-actuation",
             private=False,
             poster_frame=round(STARTS[1] * 60 + 45),
             sequence=[
@@ -252,6 +254,7 @@ def benchmark(args):
             iterations=args.iterations,
         )
         assert e.graph is not None and e.force_trace is None
+        assert not e.audited and not hasattr(e, "audit")
         wp.synchronize_device(e.model.device)
         t = time.perf_counter()
         for _ in range(e.frames):
@@ -281,8 +284,8 @@ def main():
     p.add_argument("--targets", type=Path, default=assets / "targets.npz")
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--amplitude", type=float, default=AMPLITUDE)
-    p.add_argument("--substeps", type=int, default=4)
-    p.add_argument("--iterations", type=int, default=20)
+    p.add_argument("--substeps", type=int, default=2)
+    p.add_argument("--iterations", type=int, default=12)
     p.add_argument("--common-manifest", type=Path)
     args = p.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
@@ -330,6 +333,13 @@ def main():
         )
     if args.action in ("validate", "qualify"):
         rows = paired(args.output / "actuated", args.output / "no-actuation")
+        equilibrium = audit_equilibrium(args.output, args.targets)
+        (args.output / "equilibrium.json").write_text(json.dumps(equilibrium, indent=2) + "\n")
+        schedule = audit_saved(args.output, STARTS, RELEASE_DURATION)
+        (args.output / "schedule-audit.json").write_text(json.dumps(schedule, indent=2) + "\n")
+        for row, hold in zip(rows, equilibrium["rows"], strict=True):
+            row["hold_max_distal_vertex_displacement_m"] = row["hold_distal_response_m"]
+            row["hold_distal_centroid_displacement_m"] = hold["solved_local_centroid_travel_m"]
         e.paired_checks = [all(row["checks"].values()) for row in rows]
         try:
             e.test_final()
@@ -337,7 +347,10 @@ def main():
         except AssertionError:
             paired_final = False
         result = {
-            "test_passed": all(r["geometry_passed"] for r in results) and all(all(r["checks"].values()) for r in rows),
+            "test_passed": all(r["geometry_passed"] for r in results)
+            and all(all(r["checks"].values()) for r in rows)
+            and equilibrium["all_checks_passed"]
+            and schedule["passed"],
             "negative_control_passed": results[1]["geometry_passed"],
             "paired_test_final_passed": paired_final,
             "arms": results,
@@ -345,6 +358,8 @@ def main():
             "model_revision": MODEL_REVISION,
             "solver_substeps": args.substeps,
             "solver_iterations": args.iterations,
+            "equilibrium_checks_passed": equilibrium["all_checks_passed"],
+            "schedule_checks_passed": schedule["passed"],
         }
         (args.output / "results.json").write_text(json.dumps(result, indent=2) + "\n")
         print(json.dumps({"test_passed": result["test_passed"], "fingers": rows}), flush=True)
