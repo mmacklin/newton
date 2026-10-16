@@ -10,7 +10,7 @@
     "bundled_sha256": "133f9ffe67bdcda3efdfe83c82fa8a5d6b809bf402388d72341c9e65ffa982dd"
   },
   "fit_bounded_targets.py": {
-    "source": "https://reports.mmacklin.com/everyday-rom/hand/source/fit_bounded_targets.py",
+    "source": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/hand-pre-larger-release50-20261016/source/fit_bounded_targets.py",
     "source_sha256": "e8b90c809f89ba9151e1122d4cb583e07c8549fa24910ea6c86ce9dc7c1a27b9",
     "bundled_sha256": "e6050d0f643eec73eaf0bd1c5e4f3a7d1bb8703d208f26c9b14a1313b0c77014"
   },
@@ -35,7 +35,7 @@
     "bundled_sha256": "dc031071fe77b309b0ffdf32f7ee76eeba9c769c6d041490e3f4a5684fc5f977"
   },
   "test_expressive.py": {
-    "source": "https://reports.mmacklin.com/everyday-rom/hand/source/test_expressive.py",
+    "source": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/hand-pre-larger-release50-20261016/source/test_expressive.py",
     "source_sha256": "c788eeee0da947422f4886dde4dcc30e817b062b050acf9d9be1f801cb971f91",
     "bundled_sha256": "43882cb0248b273cabbe8677349bbf9634326bd1320adcbf5b86f66d773deca1"
   },
