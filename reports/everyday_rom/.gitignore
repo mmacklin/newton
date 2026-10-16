@@ -1,0 +1,13 @@
+# Generated simulation, rendering and publication artifacts stay outside Git.
+__pycache__/
+*.pyc
+output/
+*.mp4
+*.m4v
+*.mov
+*.usdc
+*.usd
+*.html
+*.log
+*.zip
+validation-before-*.json

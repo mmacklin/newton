@@ -1,0 +1,171 @@
+{
+  "scene": "drink-bottle",
+  "runtime_pin": "8228bf6f690fff4dbb359d5de6447b09cb77c1e7",
+  "published_scene_url": "https://reports.mmacklin.com/everyday-rom/drink-bottle/",
+  "published_provenance": {
+    "scene.json": {
+      "origin": "/home/horde/reports/everyday-rom/drink-bottle/scene.json",
+      "sha256": "93bc491c06f2f2551c9a5f4c99d69e374c56f44576d3763dd1d5a0860bc2a52c"
+    },
+    "metrics.json": {
+      "origin": "/home/horde/reports/everyday-rom/drink-bottle/metrics.json",
+      "sha256": "84f1a1dee8ed6bc34b3424b60eedc83edc3932a2708d3e970eeace0d148c5021"
+    }
+  },
+  "published_settings": {
+    "slug": "drink-bottle",
+    "substeps": 4,
+    "iterations": 16,
+    "contact_enabled": true,
+    "pad_radius": 0.012,
+    "pad_half_height": 0.02,
+    "indentation": 0.005,
+    "contact_ke": 3000.0,
+    "contact_kd": 0.002,
+    "contact_gap": 0.00035,
+    "ground_detection_gap": 0.005,
+    "friction": 0.4,
+    "damping_ratio": 0.2,
+    "drop_height": 0.06,
+    "relaxation": 0.25,
+    "compliant_alm": true,
+    "frames": 360
+  },
+  "local_modules": [
+    "bottles",
+    "bottle_geometry",
+    "contact_capacity"
+  ],
+  "files": {
+    "bottle_geometry.py": {
+      "origin": "/home/horde/reports/everyday-rom/drink-bottle/source/bottle_geometry.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/drink-bottle/source/bottle_geometry.py",
+      "origin_sha256": "48cc819caf3d31c1c5d0eb5b1a5811e89e571e5c1d48a4c2f3a9c76f1b58d604",
+      "packaged_sha256": "48cc819caf3d31c1c5d0eb5b1a5811e89e571e5c1d48a4c2f3a9c76f1b58d604",
+      "bytes": 15349,
+      "exact_copy": true,
+      "published_hash_verified": true,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "_smooth_profile": "90615c3145e706b8ab29c030242b9aad60fcfc5db68475ed25ea38b75668a196",
+        "build_shell": "ef69dfeee83a1bc090fa1ae1717c0cc97bbd543b1d926d0ce645fcec9101a42d",
+        "cavity_volume": "3496640891996bbdf21204bf7799d887d74dac92c6430e1e8b0ab70a2ce8e80e",
+        "signed_volume": "0641dd7a3fcf050e19483557aa569961bc4fa1aaa43db2d2d0b6133380e0ffdc",
+        "ovalization_fields": "41d36ec9e4f886e0b9be0b7f3376424f4715010c56b9a982880a22cd392b77cb",
+        "triangle_reference": "f58a47b8ff77bb6db0f8aed24c6e53a7a541fa61fd6c2a20bd3512036657efec",
+        "triangle_stretches": "330badf1acc431a25d62ad2f4a628b092f953adffcca7e335d4ed6a1377ec2d1",
+        "build_bottle_rom": "e0b61e8d0e99fc8d55b405ab532fb3e9db25c47c1447d0b0d6755c0ef88f7b6f",
+        "capsule_mesh": "8493b13436b3fa0e68bc4babfea2d6c72e869df60a6fa3cdd2657e96582f54db",
+        "box_mesh": "5c80512335a7306c3ccfe5b7ab5401d911956e83948fc6f139e0c4f3502e83fb"
+      }
+    },
+    "bottles.py": {
+      "origin": "/home/horde/reports/everyday-rom/drink-bottle/source/bottles.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/drink-bottle/source/bottles.py",
+      "origin_sha256": "a92729cf0f01a1e877fd83fb015560560f214ed206855b1e38ac058bba94a0a5",
+      "packaged_sha256": "7d9a1a6268dd84beadc1bb88a95ccac57ab6a4bc2d77821d945cb62597967fdc",
+      "bytes": 46529,
+      "exact_copy": false,
+      "published_hash_verified": true,
+      "changed_functions": [
+        "export",
+        "main"
+      ],
+      "unchanged_function_ast_sha256": {
+        "ramp": "160724db4fcfc931fac034b3758f07018917c4ca67a286614b0c5c1f5833987d",
+        "pad_distance": "801119d529d95e8f6aab941c5e9144f3c6f6f0e3f4d0271adb683c754751b816",
+        "drive_pads": "e4d9531741da26493d083ee53753b4a31e874cbfb9442f0e11bc4c1df8c8af88",
+        "drive_shelves": "d1422664c5a30b1ea9bc7682549cf53cdec68d34deea6b558a27461ae8425c34",
+        "advance_clock": "5a2556b9722cc5c9aa48cdfe24a98bf475732fa8592c66468dc9419b62d6d903",
+        "transform_points": "a985e976edbf69b6ee6004449915eba67123bdd00858af0f3663404fee27a7b1",
+        "capsule_sdf": "2fe512784640641e3ec72e9d0751492ee7db2f2087becccaea555b286425e7a1",
+        "box_sdf": "fd27ec95323c45c1afb7ce42e564fc5fef82b62f462b187ca46ba320a256e72b",
+        "shape_config": "229be6423ea1d81f47c28083ea19ed52ee9ff641c1a39bc8004981bf53b52864",
+        "Example.__init__": "887ecc29430b954f0816aefd142c0c2ea977a1ba80efb49f77cda11be9d1b011",
+        "Example.simulate": "19c882d2a78a40e071b9fa82b08366ec648f02eb2ff7fe5d5df47922ca292ab2",
+        "Example.step": "d4770058cea174b67207429132f1c3f87cd734454eb45f2fe550687589e80499",
+        "Example.update_metrics": "4400d10662e6e2976eb45b6e4847e47998cd232bf64bc8156dd7cd56d7efd228",
+        "Example.render": "63a9f25b259becc5f8ce9d0dad94c9aef3575c0f1310730ad0f4fd6a42cb852e",
+        "Example.summary": "437a1668f6bfb3dd38fe085689eca0cbffefd186d88389ddf4d768ed1218519e",
+        "Example.test_final": "7feaadf2cee5186c7ae3cdf4eb45137e5c0886eb1c3ae9ca96cd082c230c6444",
+        "compare_control": "ad9fc27715831132ec32795d58ed9c4bad2ab801bc70163601bfb3b7f9367092",
+        "limitations": "7e2d840962085803ee0d2b951c762834b30551f8f32db03bf6dcf202b95f0991",
+        "shell_render_parts": "77de448c782d24566b9268b94efc327ee89706f6ddeeccac27f7cd0b39f60c32",
+        "verify_surface_recovery": "b62e3f718389d8208856457aacbd1ddda97fc9f130d8823856636909c7e01fd6",
+        "render_notes": "a5f05931002a409f54586a6df9902678be63c3664999524024cda7e56e67fcc2",
+        "refresh_render": "5861b79a8c89a868872af94d1becc1f0e723f0142088a9b2b2dc86352f96cd7f",
+        "run": "88ffae2cf88fb32026dd1a5369e327bc2469956e22ea1cb02e70036a9556685a"
+      }
+    },
+    "contact_capacity.py": {
+      "origin": "/home/horde/reports/everyday-rom/drink-bottle/source/contact_capacity.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/drink-bottle/source/contact_capacity.py",
+      "origin_sha256": "72d025df425b0a36e537ced2068425b57bd78812945aefed3abd5fc8818813b9",
+      "packaged_sha256": "4f4e3a1d375901f15a57c8371acc415f7d9204c648d1e1c3a4fdfbcda2139e79",
+      "bytes": 5079,
+      "exact_copy": false,
+      "published_hash_verified": true,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "before_solve": "58bdda9dd6339fd8881d71e1d7b07104b6667d123d4b59795c089454852c8fa0",
+        "after_solve": "b0b8051f82eb59904e811804d3265db87f0c58b14117a0249110ba68f5ca4a57",
+        "validate_trace": "7f26cecf1a5ab8714d9e5d775bf8b64248c940d5e630d90eb00ac04ede49644e",
+        "ContactTrace.__init__": "e7dce6e7dabb9973590411d68843498d5477521167fe6178895a2c4636245165",
+        "ContactTrace.collision": "095807f375ed3f165fc157a544fb0f0300925c3a114e7c660fecc24431db83e9",
+        "ContactTrace.solved": "5fd868d71e88a0adc11bbd3db62c1e3cecdf157f2b9210948af9537412051b9a",
+        "ContactTrace.data": "92650c6d740c714ea85b28fba403c67845a7644ba091617dc47b253124d1f32e",
+        "ContactTrace.check": "ffa06c7dfdddbd6f2f3673cdcc64c7e7211e3383ed953c2ecbfc62c3b5408603",
+        "ContactTrace.save": "95e38e32b6a0931a93f6109e920a0f5ae0189fe4b079e6817ff3279b6c009fec"
+      }
+    },
+    "test_bottles.py": {
+      "origin": "/home/horde/reports/everyday-rom/drink-bottle/source/test_bottles.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/drink-bottle/source/test_bottles.py",
+      "origin_sha256": "9e6be0a6ae8d24a6f8248319a6662b2cf5dcd3719cf5fd38a0cba385aaf9daae",
+      "packaged_sha256": "99596fb632a6994b7b6f687165ddc6ded714e48748189dc198d4b6cb6687de4c",
+      "bytes": 15372,
+      "exact_copy": false,
+      "published_hash_verified": true,
+      "changed_functions": [
+        "TestBottleExports.test_cuda_trajectories_and_surface_recovery",
+        "TestBottleExports.test_rejected_runs_fail_principal_stretch_gate"
+      ],
+      "unchanged_function_ast_sha256": {
+        "TestBottleGeometry.test_material_boundaries_follow_complete_rings": "88095176b8ced7b195e97d9a77307d689e059887327625a930a2c62e44b184e2",
+        "TestBottleGeometry.test_closed_material_shell_open_cavity": "614aeb2c0ee9509e03ccbf806e466caa7719a0b19e59cf9d360b23efca05ce24",
+        "TestBottleGeometry.test_modes_are_local_and_mass_orthogonal": "f816627482b7e6f4abfc63ea44cae9a6487a3135184d1aa39424d2a2c897cc6e",
+        "TestBottleGeometry.test_compensated_ring_bending_at_six_mm": "60084b370bc6e39bdba4fa7d334d3a3e28d76bbfdd13c8e5a43c6d82010b04af",
+        "TestBottleGeometry.test_triangle_principal_stretch_and_rigid_invariance": "b810e392810358aa90dacbf36389b8412dd6580cfe010437a7b13751692f690d",
+        "TestBottleGeometry.test_floating_frame_mass_and_coupling_are_positive": "d3732a139a56f976c62d1a6334d156d02f6a12f004af34acc6c91da6b94d1100",
+        "TestBottleGeometry.test_capsule_matches_analytic_contact": "0948bd3bea08d8da3e1933efa0ab5763997f20622ca24f9160886b794b66b390"
+      }
+    },
+    "test_contact_capacity.py": {
+      "origin": "/home/horde/reports/everyday-rom/drink-bottle/source/test_contact_capacity.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/drink-bottle/source/test_contact_capacity.py",
+      "origin_sha256": "e29167af72728074e9ff53113726eb3ac710d0ddb6ef0da83c029dc884d3b6f5",
+      "packaged_sha256": "6f5b3bfdc4ed0671c6d1445a8efee0acb958193e8ec08ceab5938aac8bc99117",
+      "bytes": 2112,
+      "exact_copy": false,
+      "published_hash_verified": false,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "TestContactCapacity.data": "c40b865d5c66dcec92f253fe9c2674b20c4c4a88ce490ac65a6a8f1740707b63",
+        "TestContactCapacity.check": "8f6d356067e83b443bbff8f299cfc13b7dddacb88830001b7c15382d69609cfe",
+        "TestContactCapacity.test_complete": "49972c395d03220855c20e07a7cff6fa846a59ff93bd99da15edd0152410b007",
+        "TestContactCapacity.test_global_overflow_between_saved_frames": "c9453bbe9415bade7d4b53081521103e2516421c4d86040c754b5b4568b10fe2",
+        "TestContactCapacity.test_body_overflow": "bf616d9688a2c9ce53b967d08a82ec797c75b850ee29bd423ea87192d7c41cf9",
+        "TestContactCapacity.test_missing_collision_or_solve": "3fef5a9dc12284e26b906e022f34c7335c66bd682c96774dbd471cc218958986",
+        "TestContactCapacity.test_missing_settling": "f21c17b1abe1b38f8b6f684f063c3cabe42785fcc8b4be608303d07f22f0d533",
+        "TestContactCapacity.test_truncated_storage": "8397c6b253adf7711721b60e25ee2f578d963c51fe8db16a748f961d73ceda7d",
+        "TestContactCapacity.test_time_gap": "cd3fd48bf71c4418305df1e0941c520782a2532ada792d1172db908888e0d3ba",
+        "TestContactCapacity.test_solver_overflow_flag": "256ce9c1a5d47dc862f2802194b7f4392a6074c52e5f25bec3a619f9c91c6e31"
+      }
+    }
+  },
+  "modifications": "Output paths, generated reproduction commands, and test fixture/launcher paths only. See portability.patch.",
+  "runtime_notes": "Uses public newton imports; capacity and modal diagnostics read SolverVBD implementation arrays. No experimental native kernels included.",
+  "excluded": "Saved trajectories, images, videos, HTML, raw private data, performance experiments and archived debug checkpoints.",
+  "validation_scope": "CPU tests and CLI help only; no fresh full GPU trajectory or renderer qualification.",
+  "packaging_hygiene": "Repository-pinned Ruff formatting/lint and Warp array-annotation normalization applied after portability.patch. Original provenance hashes are preserved; packaged hashes describe the final source. No force law or physical threshold changed."
+}

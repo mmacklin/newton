@@ -1,0 +1,280 @@
+{
+  "scene": "toothbrush",
+  "runtime_pin": "8228bf6f690fff4dbb359d5de6447b09cb77c1e7",
+  "published_scene_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/",
+  "published_provenance": {
+    "scene.json": {
+      "origin": "/home/horde/reports/everyday-rom/toothbrush/scene.json",
+      "sha256": "f2b875b298707e74edf186d313207d3ca12b750630ec575bc102f7c3084e892f"
+    },
+    "metrics.json": {
+      "origin": "/home/horde/reports/everyday-rom/toothbrush/metrics.json",
+      "sha256": "d3b23258e82edc2a926aa7c624630359673c6f8bb591cafc66474c76300e443d"
+    }
+  },
+  "published_settings": {
+    "substeps": 4,
+    "iterations": 24,
+    "contact_enabled": true,
+    "contact_ke": 3000.0,
+    "contact_kd": 0.0,
+    "friction": 0.2,
+    "contact_gap": 0.00015,
+    "elastic_relaxation": 0.3
+  },
+  "local_modules": [
+    "toothbrush",
+    "brush_glove_geometry",
+    "capacity_audit",
+    "field_coverage",
+    "subdivision",
+    "refine_render"
+  ],
+  "files": {
+    "brush_glove_geometry.py": {
+      "origin": "/home/horde/reports/everyday-rom/toothbrush/source/brush_glove_geometry.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/brush_glove_geometry.py",
+      "origin_sha256": "3ee2d5d54adf9dbd4f59db0fc31048ab213bf8b214ccb36eaca2c74a5993b379",
+      "packaged_sha256": "5b3ebf2b57ccce10b8ffa5c2d40684b3944a483b7a441b49d5346c9b8dfb50c8",
+      "bytes": 50698,
+      "exact_copy": false,
+      "published_hash_verified": true,
+      "changed_functions": [
+        "reproduce",
+        "run_cli"
+      ],
+      "unchanged_function_ast_sha256": {
+        "shape_config": "67656bdb165425a8f846b7aa2aacb81cbeb19929357fb864958dbbab97171e4d",
+        "join_meshes": "492afca53a9e6889760f1500c9769dbabcc0a73467f871cd7567509bad8318fb",
+        "loft": "d0217a6bdad994d66da86eec86594e8cf8fde605754f8b2840f4dea513f25050",
+        "ellipsoid": "8d180ef18aea9fe967db17c7d87f27c8e6cb5959565866ea9b1852c4b922e5c8",
+        "ellipse_ring": "c43c2531de7c3b048b4e2484bcb090e60e2f5cab59447e1acaec9c98e48e2d56",
+        "capsule_y": "a591a6b47d9047afe54b125811afd93581e73657345ac17af4093d55c179379b",
+        "surface_mass": "b50a92288ec1bb28e7968e30779b335d8e28ba99e3649675ea843cf3700c1112",
+        "sampled_mass_properties": "2b2d353cac4df252d83d7263ff199a6f8e8f8a1bc922169187772d128fe7b1bf",
+        "coupled_mass_audit": "7ee13c0a8ac4401cd72e8a9a839c8af7e295bf2c252dd8c3b0d8da18f08fe993",
+        "brush_tuft": "d3e3359a0bf4cafbd1c5185363577f6761e0e702885d7f076dd503c899d36350",
+        "brush_handle": "ebbb944a1d7eb43b7b56520c56f23431d4db09b6e0db56c9612426ca1339bc88",
+        "brush_head_rom": "76de7a6d7ae5b7cf5d5512eaa10d8bd8044f9791b9cc662f43739b0898c1b662",
+        "glove_surface": "1470b46740dff82909ec209e660b6eec10d25db60f654f887b5bad3aed4210af",
+        "glove_rom": "5c2f135558ff1f707e3bd0edede55751e1cf7ecd12feaecde398fb25b4311c8e",
+        "transform_points": "98d94498ded4281db767bea2a791d6d2399d3543122b8909dd3dd2204c9cd367",
+        "gravity_equilibrium": "3e56732e70af4d63d588b6bf6b10733ab8a7b6b13e9d005c7b8ab5c77289ee02",
+        "smooth": "6331a874366929ba367378a8258ed3a77aa0d1517637e0bb3226d5659e529760",
+        "actuator_position": "2fe96dc09656f24bd6a086c256b42f8dac6e4701d82e7e0982ddb90fe6c695ed",
+        "drive_actuator": "eec71b940b5b12bad8b63d96a3350cbb387238e16b10c6a5d07c53516d7deff7",
+        "advance_clock": "5a2556b9722cc5c9aa48cdfe24a98bf475732fa8592c66468dc9419b62d6d903",
+        "record_contact_peak": "23a60321daf41039cb69559039d037d349eb685154d2e55a97b7d01bbbf4e1fe",
+        "CapturedExample.begin": "55a187e116d2f5b196baefaaf652dc01983048feb31b7598458018981c35eddc",
+        "CapturedExample.add_visual": "a8b9337fc60cf953895b8fa7ade03c929ba01e5d6bf7871facd9054fcd4d7ff4",
+        "CapturedExample.add_elastic": "8dcb15237a5d529e43e48aed75b047262f1efcfbd67ff2cbcc79b43cf134e7bf",
+        "CapturedExample.add_sphere_actuator": "bdd5c24283fe6309bc971ea6aa6765ef30e40893eb74e06c20dbe7b148a802a8",
+        "CapturedExample.finish": "5f7fcf730ad2c58685a45aa83931d4b134435891c49fc861e670e96323098dbe",
+        "CapturedExample.simulate": "8b7925314601c89d855bc3241a3fd1fde308d6807467524b0670fb94caa9dddd",
+        "CapturedExample.solver_options": "d2d35be2f87c9323785fd92738baec87f32ed9508584c8b51d6786707851f22e",
+        "CapturedExample.step": "b52160977ccbdf0078fc410b72f35e210b6e1feb48987e25d8ca6da647b10163",
+        "CapturedExample.update_metrics": "45f7119049f6ce3055a9508a72759948b96081e08dc0eb28dbfa5c5869e4a055",
+        "CapturedExample.object_metrics": "63efaba25438d6380fd84401596f095941a122d6df825c6b1305bce18da86eb0",
+        "CapturedExample.render": "63a9f25b259becc5f8ce9d0dad94c9aef3575c0f1310730ad0f4fd6a42cb852e",
+        "CapturedExample.summary": "f36cf9dcb98cbcaad323f85703e291475a89a6d3cd4bb0c04cda8f1cc7c0a13a",
+        "CapturedExample.test_final": "b887c8e929282e8d7cc254251aaa6a46dc69c68117d301963f259319d9421aad",
+        "CapturedExample.test_object": "2fc8ab1861cc7b2e57d571584c6e693d9cf2522f7400e50cc1e8ead06f7682b9",
+        "CapturedExample.validate_negative_control": "312357203270421f7e6501d475ebd0e376c00184dfd076a299cb398a10fb65de",
+        "CapturedExample.export": "d74b2aa78591e8276751a906a2b10d4a4ae6083af4102c28d847c0e797affe03"
+      }
+    },
+    "capacity_audit.py": {
+      "origin": "/home/horde/reports/everyday-rom/toothbrush/source/capacity_audit.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/capacity_audit.py",
+      "origin_sha256": "5fe7a44d48b4121b9bf46742395655a88155233ba16702d3fc1f83dbc95fcb53",
+      "packaged_sha256": "143fec5c6d88bff254ac42471f8735af05f88dc6b95e555169920456f9f15213",
+      "bytes": 7549,
+      "exact_copy": false,
+      "published_hash_verified": true,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "observe_collision": "b313a1ea0280644bb94954c182baccfddcd58b46af9d6feddb8e675e0c76f394",
+        "observe_solve": "c5477841a41c40766f9dda51c5c16c17c0d82cbe3bb93e36ca52d396480c9158",
+        "validate": "62c66708886fed701ae13a9bb3236344f82eb8c626243626ab99b2ef283afdb2",
+        "CapacityAudit.__init__": "4b811ecf9dc3a9d24fd26779fd1c717e301bf4f298b78905d26da09bf07f3e8b",
+        "CapacityAudit.after_collide": "d0fa1d087913409e490a26bda60d890b00921b57f0dc1d8909f43af6b766d68f",
+        "CapacityAudit.after_solve": "f85a5ea6ea14deeeb724c83e254288a6e95388b55900132e9dc14cf3a488caa3",
+        "CapacityAudit.data": "6ebbea816c3d453af9e0592ef40cfb446eb8ce64724762aebfefabe06603dbfa",
+        "CapacityAudit.check": "f170e08583b50aebe626a56f02b6cdecde4bdc1bdb3723f39c047bd8d24dad50",
+        "CapacityAudit.export": "0568f45f549c61f8ae8064a99d72d1a980bb5b4ab5141d3e5263e1afba1bcc02"
+      }
+    },
+    "field_coverage.py": {
+      "origin": "/home/horde/reports/everyday-rom/toothbrush/source/field_coverage.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/field_coverage.py",
+      "origin_sha256": "937f9d8b990fe81db974569e3f4e7ce3eb6be11654ff67e7c92df985e5a1191a",
+      "packaged_sha256": "88341e7e10c0641fc5735ee97917911e31c719e07ceaecac0e315351c1dab18e",
+      "bytes": 4441,
+      "exact_copy": false,
+      "published_hash_verified": true,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "record_tuft_contacts": "aa32683c3ff1ef98c17b043936ad2d6925ec25fb481f5718e4a78fbfa5b5cbfd",
+        "coverage_summary": "de5d467456434f0651c1f18c5109a5c6977d36f8f5fd6c0ddf096abc41016669",
+        "require_field_coverage": "8acdb19d0b0c6cd2a537977b8e08770cbc56a70be420cc5a2e2f2ae267c433af",
+        "FieldAudit.__init__": "5ea1870a2a78b73e4821d579211f878c39a548ec79baf60c3813fe29a141d6a5",
+        "FieldAudit.observe": "db3ce7f27b242e03c0bf3f0c146084dc6b1054869b930a6b95d0dd4f8a4b7ef8",
+        "FieldAudit.last_frame": "9b27ce689ebd8e4e099700f65f7d26e833301a15cdedd690712797ff72ed9530",
+        "FieldAudit.export": "7e8b89f379aa3a37f75a4452bffb9aaabc8962c39ba407c7e3f0f47c337a7087"
+      }
+    },
+    "frozen/basis.npz": {
+      "origin": "/home/horde/reports/everyday-rom/toothbrush/frozen/basis.npz",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/frozen/basis.npz",
+      "origin_sha256": "857c030c0d0b34f4da0ac2ada0c797523b916e5da20ecbdc1480ee7182a6b974",
+      "packaged_sha256": "857c030c0d0b34f4da0ac2ada0c797523b916e5da20ecbdc1480ee7182a6b974",
+      "bytes": 472130,
+      "exact_copy": true,
+      "role": "Archived derived 40-mode reference used only by test_toothbrush_scrub; not a runtime simulation input or current render export.",
+      "derivation": "None during packaging: exact file copy, no field trimming or recompression. Do not substitute the different toothbrush/basis.npz current export.",
+      "published_hash_verified": false
+    },
+    "frozen/scene.json": {
+      "origin": "/home/horde/reports/everyday-rom/toothbrush/frozen/scene.json",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/frozen/scene.json",
+      "origin_sha256": "ea33b1071f653741a0fbaa0539bd5302d8c3307b426d0411a9a40a5fe1898cfe",
+      "packaged_sha256": "ea33b1071f653741a0fbaa0539bd5302d8c3307b426d0411a9a40a5fe1898cfe",
+      "bytes": 12491,
+      "exact_copy": true,
+      "published_hash_verified": false
+    },
+    "test_brush_glove.py": {
+      "origin": "/home/horde/reports/everyday-rom/toothbrush/source/test_brush_glove.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/test_brush_glove.py",
+      "origin_sha256": "219e00bd2b38eb2691337a6d1f996262fb67da0783bef6d078f91cdc7d3f4f4a",
+      "packaged_sha256": "219e00bd2b38eb2691337a6d1f996262fb67da0783bef6d078f91cdc7d3f4f4a",
+      "bytes": 20844,
+      "exact_copy": true,
+      "published_hash_verified": true,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "check_mesh": "75076ff52509b9fcacad58f003810c2dac7971ce5e4384d49d5a324d70f512a6",
+        "GeometryTests.test_contact_peak_catches_intermediate_overflow": "1d3fa9ce483d04823275fcbea4c52e63f225c63cdba407e67709e127d68e36e0",
+        "GeometryTests.test_dynamic_brush_topology_and_control": "42db83fef565be53c7800756aa3b3473d8167fccc2fd722f3e59bd058043daec",
+        "GeometryTests.test_physical_head_mass_and_independent_fields": "9d74a4ab2b00b9a499b4d64db3265a03d06426a090aab69fb2d3058714b7935b",
+        "GeometryTests.test_actual_head_implicit_coupling_enabled": "0045f2941f1baaa9809892fb4779753d637060b44568a17b34c25b3ced0f6044",
+        "GeometryTests.test_brush_beam": "92d000cf72ab79e2fe7f9941df79fc4e3b9044c9d3b0390b84ab11b05375c4b1",
+        "GeometryTests.test_rigid_geometry": "55fd832e3c9ea772f3f6ffb45fa67244b443115d3a51c9653d6c1954ea36ee68",
+        "GeometryTests.test_validation_requires_both_tests": "3d3e1fdf6d5eecc8ba1d12eb283bbbd035a8007ce6f267c32e9c9a92f98f59ec",
+        "GeometryTests.test_glove_basis": "45edb93ea00345afcb4c56bc6d505d02c86eefa8d5049a65585f018580cf9fd6",
+        "GeometryTests.test_glove_gravity_equilibrium": "0acbf1b184b08b0b3f34bfca1d1321bf2a5e17affb94c3bd35af336862f1f9f7",
+        "verify_export": "9c2b2a200b9aa45198880998a5e0fa6ec47338f17d59da4f754fa2b19df626d3",
+        "verify_dynamic_assembly": "72fed8cbbdc28a635f6d795429faf13a13488bd7863bcffa69fdd3d36c5b116b"
+      }
+    },
+    "test_toothbrush_scrub.py": {
+      "origin": "/home/horde/reports/everyday-rom/toothbrush/source/test_toothbrush_scrub.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/test_toothbrush_scrub.py",
+      "origin_sha256": "07679781376515f24b02549e5ab00cb6347e56d4dd2c7db13fbdaaaaf7bc413b",
+      "packaged_sha256": "65805af87d893390923cd116b6d3fd548cbb4a558fafec168801cf3d68f4fa08",
+      "bytes": 24431,
+      "exact_copy": false,
+      "published_hash_verified": false,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "sample_motion": "25064e1c48cbe9381d7260aaace60d8d9e77e0c851f0b1d42f33cb56ee4c9c15",
+        "motion_samples": "c3268143f2d40d765bf6b7e164539bd7b36f53b5a45a33a9cc40e89c77468ac2",
+        "finish_without_simulation": "766f30a8dce135768aa887a5767d8b6081d40efcb9e5ff250e436e9c469deda5",
+        "capsule_distance": "cc68dea258d13321a13cd63a817158104495fdd27ed8951d877cd5afe6771e56",
+        "scrub_strokes": "313c09de8c830703bf1647a885b3b705d6d2dd5f0dc5735781dad623170a4bab",
+        "compare_export_physics": "778fe5092626da7ab839b2a05a8061fb8bcbcf9a46599072b00c8e527e8357b0",
+        "ScrubCPUTests.setUpClass": "9217ac426fe5b8b2edb4e9f8e68ed44ea31fb24eadef0479258b645c290c1e43",
+        "ScrubCPUTests._check_sweeping_visible_capsule": "6a19fa5235b8738b54fd13ebb05cf44f1c8fdc6ca8fd86b4522ff991faa71877",
+        "ScrubCPUTests.test_pickup_precedes_approach_and_scrub_reverses": "521317a62f40642aa94cbc555faa73933af1ba8677a7e19f5151672ea9994ee0",
+        "ScrubCPUTests.test_driver_does_not_prescribe_dynamic_object": "596bbf5f575ded5b893bd3764892dc2059a542786cd9269c0f29daf4f30d1543",
+        "ScrubCPUTests.test_contact_exposes_tips_not_plate_or_roots": "d095e7a4881b2c0874770b2b1ccf425f1a8e61368d2d764fa3e1c6efc05906cf",
+        "ScrubCPUTests.test_original_forty_mode_physics_is_unchanged": "720d40920ddb07f0c8f3343d33cf9f753b4feb6b23441ea84ee8ace378403f9e",
+        "ScrubCPUTests._check_dynamic_topology_and_matched_control_filter": "af0071240ce83481f40948719a65fc1ae5dd01e051b42bde457edbc03c6a043d",
+        "ScrubCPUTests._check_tool_contact_metrics_filter": "97bf2146bdb69607d61f35495f95f10db40a655ac6aca7ee7afa3f4ee258d6d1",
+        "ScrubCPUTests._check_real_cpu_solver_enables_implicit_mass_coupling": "29ff8d4602f8cdf7d1a27bf9a36bff927bfe294ee7ccc3f6f52dd861405b0300",
+        "ScrubCPUTests._check_motion_detector_rejects_stationary_and_monotonic_handles": "232511caa142e501d4c92d0e96bffcbd053d73f77dd1eebc027100c5a921f685",
+        "verify_export": "c7a840709200be032bf96047f7b112ab11c38f2913b98e1d3db2704b5d53024a"
+      }
+    },
+    "toothbrush.py": {
+      "origin": "/home/horde/reports/everyday-rom/toothbrush/source/toothbrush.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/toothbrush.py",
+      "origin_sha256": "b5252c7640c6b349b737cee40fe03ec4f8d15fb07ae668633e3d4011803e98f5",
+      "packaged_sha256": "13f8394094f5b026d9191023294c9446470a7d33ae4f7319bfa7fbf283abb774",
+      "bytes": 22716,
+      "exact_copy": false,
+      "published_hash_verified": true,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "nominal_handle": "8c38848587e42dd8a99b1594409643a7624d4e7200b81a5acb184cd8714ec65f",
+        "mechanism_position": "df2ec8270ab81623be7777829beec509378e456dd48a47d397d2dd8aacc899be",
+        "drive_mechanism": "10d82c44909ed992657b549097bb52430d40eb265f3246047a282a24d156a25b",
+        "Example.__init__": "da18495cae8d8b7a9ab7cecb5df1b50c70778131ca47ff76a10c4607b3f2a5ef",
+        "Example.mass_audit": "78c189b28e6caa72df5fca27c426d5c0f559985adef388cea55ac3a946fcd08a",
+        "Example.solver_options": "7110f996e7e8f79845d50e4e35490f9b6318a07392ac3268b6b9e956df847545",
+        "Example.simulate": "25c2a4db5da981b07109f80903cceeb420f548e335357feb85b280d0bbece0c8",
+        "Example.setup_audits": "82134a29b154bb2524b478c51af8b0aa84a81ad0a16a663914c7c374da65a026",
+        "Example.update_metrics": "0bc225fe631c26aa9274bf69c620495c6db8dfacfc6b8b5ba52b46a75986f370",
+        "Example.object_metrics": "1057bb01e71e2935db09dec10569cf28c67da8a38fa6d67ba3c425276425493a",
+        "Example.summary": "039a5fc34027bf2c1a704222902018ce2ea132047f691f0fbd00c28d43580e6b",
+        "Example.test_final": "6eb08171d5323fc6322a57271d087d5fe243d664b221a7177b893cff06f7501b",
+        "Example.validate_negative_control": "8ebc45d159c08531781bcf513baa8a5b1da541e06babe58b1a12cf6cc27f8b1c",
+        "Example.scene_metadata": "c145c1d8a3d699070bbb9f4755578de7722b6b990092af4045785842d6360afa"
+      }
+    },
+    "subdivision.py": {
+      "origin": "/home/horde/reports/everyday-rom/toothbrush/reproduction/assets/refine_render.original.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/reproduction/assets/refine_render.original.py",
+      "origin_sha256": "0fe76a548c2842c5da4bfbcace833b9cb5fb7464baaffe198852a58154239cdd",
+      "packaged_sha256": "61c8400266e44bb08b551ee05d9b590fca36b7722984881c5335ac067a31b9e8",
+      "bytes": 3144,
+      "exact_copy": false,
+      "published_hash_verified": false,
+      "unchanged_function_ast_sha256": {
+        "subdivision_embedding": "3d5f5dd9921bd7fb68042a97349111e150e35b48ff3e54d7d44c1299087c4169",
+        "refined_plastic": "b556349a3247c27473677d96badd0dc265afd76b89ca6c5d33576907278154d1"
+      },
+      "derivation": "Extract exactly the two named function definitions; replace the archived absolute-path driver with a local NumPy-only module. Both function ASTs are unchanged."
+    },
+    "refine_render.py": {
+      "origin": "/home/horde/reports/everyday-rom/toothbrush/reproduction/portable_refinement.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/reproduction/portable_refinement.py",
+      "origin_sha256": "e29238d5e0e1273d1067646b9e8f684689963c60d9c17a285ae52bab039788ee",
+      "packaged_sha256": "213e7584badd79cc44f878a920a51e75f453d592dabbda2c9614f97b690d0a56",
+      "bytes": 7895,
+      "exact_copy": false,
+      "published_hash_verified": false,
+      "unchanged_function_ast_sha256": {
+        "transform_points": "59106bf07863c86f3df642990693518b5fbe7b8f2f211a36365aca404da08353"
+      },
+      "derivation": "Adapt published CPU refinement to fresh local exports: local imports, source/gate binding instead of archived equilibrium basis hash, local I/O helpers and CLI. Preserve subdivision, quaternion arithmetic, 450-frame checks and 5e-8 m mapping limit."
+    },
+    "presentation.json": {
+      "origin": "/home/horde/reports/everyday-rom/toothbrush/reproduction/assets/presentation.json",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/reproduction/assets/presentation.json",
+      "origin_sha256": "1ae728e75f47be60eff80d67d0db58fce3e44c2d920c95f2da5e32a50c2f8ff9",
+      "packaged_sha256": "1ae728e75f47be60eff80d67d0db58fce3e44c2d920c95f2da5e32a50c2f8ff9",
+      "bytes": 261,
+      "exact_copy": true,
+      "published_hash_verified": false,
+      "derivation": "Exact published presentation copy."
+    }
+  },
+  "modifications": "Simulation source changes remain output/command/fixture paths only. Add published render-only subdivision functions and a local fresh-export adapter; no simulation arithmetic, physical gates, materials or discretization changes. See portability.patch.",
+  "runtime_notes": "Uses public newton imports; capacity and modal diagnostics read SolverVBD implementation arrays. No experimental native kernels included.",
+  "excluded": "Saved trajectories, images, videos, HTML, raw private data, performance experiments and archived debug checkpoints.",
+  "validation_scope": "CPU tests and CLI help only; no fresh full GPU trajectory or renderer qualification.",
+  "refinement_contract": {
+    "inputs": "Fresh local 450-frame positive/control export, original passing gates and matching producer source hashes; no saved gallery trajectory required.",
+    "render_triangles": {
+      "ivory_handle": 14080,
+      "ivory_plastic_head": 8960
+    },
+    "embedding_error_bound_m": 5e-08,
+    "physics_modified": false,
+    "nonplastic_mesh_arrays": "Copied unchanged.",
+    "basis_asset_role": "frozen/basis.npz remains the exact archived CPU invariant reference, not the latest smooth render basis.",
+    "fresh_vs_archived_guard": "Replace the archived full NPZ/equilibrium-coordinate identity check with exact local producer-source binding. Original simulator gates and per-frame surface embedding checks remain unchanged."
+  },
+  "packaging_hygiene": "Repository-pinned Ruff formatting/lint and Warp array-annotation normalization applied after portability.patch. Original provenance hashes are preserved; packaged hashes describe the final source. No force law or physical threshold changed."
+}

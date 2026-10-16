@@ -1,0 +1,193 @@
+--- published/brush_glove_geometry.py
++++ packaged/brush_glove_geometry.py
+@@ -1081,13 +1081,12 @@
+ 
+ def reproduce(slug):
+     helpers = Path(__file__).resolve().parent
+-    root = helpers.parent
++    root = Path(newton.__file__).resolve().parents[1]
+     return (
+-        "cd /tmp && flock -w 1800 /tmp/newton-everyday-rom-gpu.lock timeout 8m env "
+-        f"PYTHONPATH=/home/horde/newton-reduced-pr:{helpers} OPENBLAS_NUM_THREADS=1 PYTHONDONTWRITEBYTECODE=1 "
+-        f"WARP_CACHE_PATH={root}/warp-cache "
+-        "uv run --offline --no-sync --project /home/horde/newton-reduced-pr "
+-        f"python {helpers}/run_simulation.py --device cuda:0 --negative-control --output {root}/reproduced"
++        "flock -w 1800 /tmp/newton-everyday-rom-gpu.lock timeout 8m env "
++        f'PYTHONPATH="{root}" OPENBLAS_NUM_THREADS=1 PYTHONDONTWRITEBYTECODE=1 '
++        f'uv run --project "{root}" python "{helpers}/{slug}.py" '
++        f'--device cuda:0 --negative-control --output "output/{slug}"'
+     )
+ 
+ 
+@@ -1095,7 +1094,7 @@
+     parser = argparse.ArgumentParser(description=example_class.__doc__)
+     parser.add_argument("--device", default="cuda:0")
+     parser.add_argument("--frames", type=int, default=450)
+-    parser.add_argument("--output", type=Path, default=Path("/home/horde/reports/everyday-rom") / example_class.slug)
++    parser.add_argument("--output", type=Path, default=Path("output") / example_class.slug)
+     parser.add_argument("--negative-control", action="store_true")
+     parser.add_argument("--no-contact", action="store_true")
+     parser.add_argument("--no-test", action="store_true")
+--- published/test_toothbrush_scrub.py
++++ packaged/test_toothbrush_scrub.py
+@@ -22,7 +22,7 @@
+ import newton
+ import newton.solvers
+ 
+-REFERENCE = Path(__file__).resolve().parents[1] / 'frozen'
++REFERENCE = Path(__file__).resolve().parent / 'frozen'
+ PHYSICS_KEYS = ("mode_mass", "mode_stiffness", "mode_damping", "mode_coupling_linear", "mode_coupling_angular")
+ MODEL_KEYS = ("body_mass", "body_com", "body_inertia", "body_flags", "joint_parent", "joint_child", "joint_type")
+ 
+--- published/reproduction/portable_refinement.py
++++ packaged/refine_render.py
+@@ -1,31 +1,45 @@
++# SPDX-FileCopyrightText: Copyright (c) 2026 The Newton Developers
++# SPDX-License-Identifier: Apache-2.0
+ """CPU-only, single-application brush refinement from its physical basis.
+ 
+-The two subdivision functions are loaded from the hash-verified frozen source
+-without importing that module's old absolute-path driver. Quaternion conversion
++The two subdivision functions are extracted unchanged into local subdivision.py.
++This adapter consumes a fresh local simulator export, never saved gallery states.
++Quaternion conversion
+ preserves the float32 operation order of Warp 1.17's host builtin using NumPy;
+ no Warp import, device arrays, kernels, simulation, or CUDA probe is needed.
+ """
+ 
+ from __future__ import annotations
+ 
+-import ast
++import argparse
++import hashlib
+ import json
+ import shutil
+ from pathlib import Path
+ 
+ import numpy as np
+-from portable_reproduce import digest, fresh_output, write_json
++from subdivision import refined_plastic
+ 
+ 
+-def subdivision_functions(path):
+-    tree = ast.parse(Path(path).read_text())
+-    names = {"subdivision_embedding", "refined_plastic"}
+-    nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names]
+-    if {n.name for n in nodes} != names:
+-        raise ValueError("Missing frozen subdivision functions")
+-    namespace = {"np": np}
+-    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), "exec"), namespace)
+-    return namespace["refined_plastic"]
++def digest(path):
++    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
++
++
++def write_json(path, value):
++    Path(path).write_text(json.dumps(value, indent=2) + "\n")
++
++
++def fresh_output(path, inputs):
++    path = Path(path).absolute()
++    if any(p.is_symlink() for p in (path, *path.parents)):
++        raise ValueError("Output must not contain symlink components")
++    for source in inputs:
++        source = Path(source).resolve()
++        if path.is_relative_to(source) or source.is_relative_to(path):
++            raise ValueError("Output must not overlap inputs")
++    if path.exists() and (not path.is_dir() or any(path.iterdir())):
++        raise ValueError("Output must be absent or empty")
++    return path
+ 
+ 
+ def transform_points(points, pose):
+@@ -48,37 +62,33 @@
+     return (points @ rotation.T + pose[:3]).astype(np.float32)
+ 
+ 
+-def validate_physical(root, expected_basis_sha256, reference_basis=None):
++def validate_physical(root):
+     root = Path(root)
+     meta = json.loads((root / "scene.json").read_text())
+     if meta.get("render_refinement"):
+         raise ValueError("Refuse double refinement: scene already has render_refinement")
+-    if digest(root / "basis.npz") != expected_basis_sha256:
+-        # NPZ container compression may differ between environments; the actual
+-        # reference arrays, including dtype and ordering, must still be exact.
+-        if reference_basis is None or digest(reference_basis) != expected_basis_sha256:
+-            raise ValueError("Require the exact frozen coarse physical basis, not the public render basis")
+-        with (
+-            np.load(root / "basis.npz", allow_pickle=False) as actual,
+-            np.load(reference_basis, allow_pickle=False) as ref,
+-        ):
+-            if set(actual.files) != set(ref.files):
+-                raise ValueError("Physical basis fields differ")
+-            for name in ref.files:
+-                if actual[name].dtype != ref[name].dtype:
+-                    raise ValueError(f"Physical basis dtype differs: {name}")
+-                np.testing.assert_array_equal(actual[name], ref[name], err_msg=f"Physical basis differs: {name}")
++    metrics = json.loads((root / "metrics.json").read_text())
++    if not (metrics.get("test_passed") and metrics.get("negative_control_passed")):
++        raise ValueError("Require a fresh positive/control export passing its original simulation gates")
++    # Fresh settling coordinates can differ from an archived run. Bind the
++    # producer instead of requiring the old run's complete basis container.
++    for name in ("toothbrush.py", "brush_glove_geometry.py", "field_coverage.py", "capacity_audit.py"):
++        if metrics.get("source_sha256", {}).get(name) != digest(Path(__file__).with_name(name)):
++            raise ValueError(f"Fresh simulation source differs: {name}")
+     with np.load(root / "basis.npz", allow_pickle=False) as basis:
+-        for i, count in ((0, 880), (3, 560)):
++        for i, count, name in ((0, 880, "ivory_handle"), (3, 560, "ivory_plastic_head")):
++            if meta["meshes"][i]["name"] != name:
++                raise ValueError("Unexpected plastic mesh ordering")
+             if len(basis[f"faces_{i}"]) != count:
+                 raise ValueError("Not the accepted coarse topology")
+     return meta
+ 
+ 
+-def refine(physical, output, assets, expected_basis_sha256):
+-    physical, assets = Path(physical), Path(assets)
+-    output = fresh_output(output, (physical, assets))
+-    meta = validate_physical(physical, expected_basis_sha256, assets / "physics/basis.npz")
++def refine(physical, output):
++    physical, assets = Path(physical), Path(__file__).resolve().parent
++    output = fresh_output(output, (physical, assets / "subdivision.py", assets / "presentation.json", Path(__file__)))
++    meta = validate_physical(physical)
++    expected_basis_sha256 = digest(physical / "basis.npz")
+     with np.load(physical / "basis.npz", allow_pickle=False) as data:
+         basis = dict(data)
+     with np.load(physical / "state.npz", allow_pickle=False) as data:
+@@ -89,7 +99,7 @@
+     np.testing.assert_allclose(states["times"], np.arange(1, 451) / 60, rtol=0, atol=1e-12)
+     for i, mesh in enumerate(meta["meshes"]):
+         np.testing.assert_array_equal(original[mesh["faces"]], basis[f"faces_{i}"])
+-    refined = subdivision_functions(assets / "refine_render.original.py")(basis, meta)
++    refined = refined_plastic(basis, meta)
+     arrays, embedding = dict(original), {}
+     render_basis = {
+         key: basis[key]
+@@ -130,11 +140,12 @@
+         },
+         "all_frame_checks": checks,
+         "unchanged_mesh_arrays_bit_identical": True,
+-        "frozen_subdivision_source_sha256": digest(assets / "refine_render.original.py"),
++        "subdivision_source_sha256": digest(assets / "subdivision.py"),
++        "fresh_source_hashes": metrics["source_sha256"],
+     }
+     presentation = json.loads((assets / "presentation.json").read_text())
+     meta.update(camera=presentation["camera"], poster_frame=presentation["poster_frame"], render_refinement=audit)
+-    meta["reproduce"] = "See companion REPRODUCE.md; never refine the already-refined public basis"
++    meta["reproduce"] = "See companion README.md; refine only a fresh coarse simulator export"
+     metrics["render_refinement"] = audit
+     np.savez_compressed(output / "scene.npz", **arrays)
+     np.savez_compressed(output / "basis.npz", **render_basis)
+@@ -147,3 +158,11 @@
+     write_json(output / "metrics.json", metrics)
+     write_json(output / "geometry_audit.json", audit)
+     return audit
++
++
++if __name__ == "__main__":
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--physical", type=Path, required=True, help="Fresh 450-frame positive/control simulation output")
++    parser.add_argument("--output", type=Path, required=True, help="New, separate smooth-render output directory")
++    args = parser.parse_args()
++    print(json.dumps(refine(args.physical, args.output), indent=2))

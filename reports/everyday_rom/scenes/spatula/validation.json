@@ -1,0 +1,32 @@
+{
+  "newton_module": "/home/horde/newton-everyday-rom-publish/newton/__init__.py",
+  "runtime_head": "8228bf6f690fff4dbb359d5de6447b09cb77c1e7",
+  "source_manifest_sha256": "f91c78c7857103c9adf1027ff38fef2f6349f73fd420baa2263752f26cd77223",
+  "cpu_only": true,
+  "fresh_gpu_physics_validated": false,
+  "jobs": {
+    "cpu": {
+      "command": [
+        "/home/horde/newton-reduced-pr/.venv/bin/python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "/home/horde/newton-everyday-rom-publish/reports/everyday_rom/scenes/spatula",
+        "-p",
+        "test_*.py",
+        "-v"
+      ],
+      "returncode": 0
+    },
+    "help": {
+      "command": [
+        "/home/horde/newton-reduced-pr/.venv/bin/python3",
+        "/home/horde/newton-everyday-rom-publish/reports/everyday_rom/scenes/spatula/spatula.py",
+        "--help"
+      ],
+      "returncode": 0
+    }
+  },
+  "passed": true
+}

@@ -1,0 +1,284 @@
+{
+  "schema": "portable-everyday-rom-scene-v1",
+  "scene": "banana",
+  "authoritative_source": "/home/horde/reports/everyday-rom/banana/source",
+  "authoritative_metadata": {
+    "path": "/home/horde/reports/everyday-rom/banana/scene.json",
+    "sha256": "7eda4ad071b7742379d108f9cbeb9b260581ae49f326fa579c129c4793e6232b",
+    "bytes": 5124
+  },
+  "tested_newton_base": "8228bf6f690fff4dbb359d5de6447b09cb77c1e7",
+  "scope": "Current original-runtime scene, required procedural/derived model assets and tests only; no trajectories/videos/HTML/raw NIMBLE/fast runtime.",
+  "physics_ast_checks_passed": true,
+  "files": {
+    ".gitignore": {
+      "packaged_sha256": "d379cd8c64dd082d3d5fb426d42829ad35fe4a82eb279a15a90a2d8277454aa6",
+      "bytes": 26,
+      "origins": [],
+      "changes": "Packaging-authored documentation, tests, or portability changes; no physics change."
+    },
+    "README.md": {
+      "packaged_sha256": "e6835d124614eda5969dc4517bf896c683e4049993477ba90914675b3d2884b1",
+      "bytes": 4035,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/scene.json",
+          "sha256": "7eda4ad071b7742379d108f9cbeb9b260581ae49f326fa579c129c4793e6232b",
+          "bytes": 5124
+        }
+      ],
+      "changes": "Portable reproduction commands, unchanged research-extension contract, limitations and package scope.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "assets/ordered_rom.npz": {
+      "packaged_sha256": "5c7766fe2b931f3cbc06914378484933a451c832dbd7fa7296c248bb25c19f77",
+      "bytes": 5098356,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/ordered_rom.npz",
+          "sha256": "5c7766fe2b931f3cbc06914378484933a451c832dbd7fa7296c248bb25c19f77",
+          "bytes": 5098356
+        }
+      ],
+      "changes": "Exact published derived model asset, not a simulation trajectory."
+    },
+    "banana.py": {
+      "packaged_sha256": "b165e46bb3d584ad653946b87876e8af951524828849fcc6293e2d2cb32dee64",
+      "bytes": 3057,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/source/banana.py",
+          "sha256": "35339765a2f94c1d4f9877fd8cc4ab9a2a75d24b4be1b1ebebdb2c3bed6eab60",
+          "bytes": 22227,
+          "symbols": [
+            "grip_pose",
+            "drive_grippers",
+            "peel_progression"
+          ]
+        }
+      ],
+      "changes": "Extract unchanged required helpers; omit the historical scene/driver.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "build_banana_path.py": {
+      "packaged_sha256": "baf3331c55bebff3fe7c0b4c7bf38a941c6a5bf717f6499afd6f9079bd640f7d",
+      "bytes": 6988,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/source/build_banana_path.py",
+          "sha256": "525cde02c56844fb3f754599ae9bf97fe39cfe7efa817a83a9d94ef708cc1159",
+          "bytes": 6890
+        }
+      ],
+      "changes": "Replace hard-coded training directories with required explicit --sources inputs; fitting/strain/override math unchanged.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "ordered_pod.py": {
+      "packaged_sha256": "3b2fc7c80ca6aea39e2503d382d41dcec389d93dba4f995b8ef1bd7d7aa10e71",
+      "bytes": 4061,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/source/ordered_pod.py",
+          "sha256": "3b2fc7c80ca6aea39e2503d382d41dcec389d93dba4f995b8ef1bd7d7aa10e71",
+          "bytes": 4061
+        }
+      ],
+      "changes": "Unchanged authoritative source copy."
+    },
+    "path_banana.py": {
+      "packaged_sha256": "b5f7e0636b1d85ae74ec4617885c7de1b5e2ba4c879087beb6b814c07e4ddf0d",
+      "bytes": 16991,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/source/path_banana.py",
+          "sha256": "29fb38d9f073cf22a33a207b333f11fd607378a0c607e1822a73d1b691ce1854",
+          "bytes": 17086
+        }
+      ],
+      "changes": "Only export helper-copy path changed from an author worktree to the local script directory.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "peel_case_geometry.py": {
+      "packaged_sha256": "6e0ab563eb172b3c59387bf1611920ec25dba3059eb6d957bb93c6c5bad1bfc4",
+      "bytes": 43094,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/source/peel_case_geometry.py",
+          "sha256": "8f7af8d706cecdf2e11ee96a36e5433725d772a75b1e3c5bddd720e356e3b957",
+          "bytes": 43196
+        }
+      ],
+      "changes": "Authoritative source with repository formatting and documented lint-only edits.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "pod_path_energy.py": {
+      "packaged_sha256": "69e8d903e58c210a45f2f92f9e974cc70ef624832d5b1404dd09b856f544d45d",
+      "bytes": 4071,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/source/pod_path_energy.py",
+          "sha256": "69e8d903e58c210a45f2f92f9e974cc70ef624832d5b1404dd09b856f544d45d",
+          "bytes": 4071
+        }
+      ],
+      "changes": "Unchanged authoritative source copy; original AST also verified.",
+      "original_ast_sha256": "c7809c32076483620b0a0a74491a83d1e814ab04f76c6c02c60c3d9270a00ad2",
+      "packaged_ast_sha256": "c7809c32076483620b0a0a74491a83d1e814ab04f76c6c02c60c3d9270a00ad2",
+      "ast_normalization": "ast.dump(include_attributes=False); normalize only ast.arg annotations wp.array/array2d/array3d/array4d(dtype=T) to the matching subscript form. No body, dtype, dimension, import, or runtime-constructor normalization."
+    },
+    "retained_geometry.py": {
+      "packaged_sha256": "647b47da9020fb919868122b55a7e935f835b6d8d215318087873a8d6364dcef",
+      "bytes": 937,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/source/check_path_retention.py",
+          "sha256": "4ef509207b8d72d1638aa15ed6c1337f08ba7dc33c97ef0721d87bf88a3aca3c",
+          "bytes": 3689,
+          "symbols": [
+            "retained_band_max"
+          ]
+        },
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/source/refine_retained_snapshot.py",
+          "sha256": "b8b518fca7ae4db8db937c116bf275f88ba433bc1bc9209e725ea3ca1b096bfa",
+          "bytes": 3744,
+          "symbols": [
+            "retained_constraints"
+          ]
+        }
+      ],
+      "changes": "Extract unchanged pure helpers for retained tests, without historical full-order drivers."
+    },
+    "solver_vbd_modal_path.py": {
+      "packaged_sha256": "753a3c3c172a54cfdd8e416375cb3adf7c3047017a0daa8c4d5b7b0306a790b4",
+      "bytes": 8682,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/source/solver_vbd_modal_path.py",
+          "sha256": "3a231be12b49d5a2fce6e49a82345766a9d26ddcd046b09da493694225d817c1",
+          "bytes": 8772
+        }
+      ],
+      "changes": "Verified original AST with only Warp argument-annotation call/subscript normalization; kernel bodies and all other syntax are strict. Not a byte-identical copy after the repository hook.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes.",
+      "original_ast_sha256": "d43990c186224c6ac1308ed3108a51ffe85960e1a812e1d515d92327e1fd903b",
+      "packaged_ast_sha256": "d43990c186224c6ac1308ed3108a51ffe85960e1a812e1d515d92327e1fd903b",
+      "ast_normalization": "ast.dump(include_attributes=False); normalize only ast.arg annotations wp.array/array2d/array3d/array4d(dtype=T) to the matching subscript form. No body, dtype, dimension, import, or runtime-constructor normalization."
+    },
+    "test_banana_path_overrides.py": {
+      "packaged_sha256": "a8ba51364ec406fd40076ca16af5008ec8454ac21e40234945c2ea41a1f03c8e",
+      "bytes": 1993,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/source/test_banana_path_overrides.py",
+          "sha256": "a8ba51364ec406fd40076ca16af5008ec8454ac21e40234945c2ea41a1f03c8e",
+          "bytes": 1993
+        }
+      ],
+      "changes": "Unchanged authoritative source copy."
+    },
+    "test_modal_path_gpu.py": {
+      "packaged_sha256": "86704eb4458a000725e0b4f9ee4772ed7270708389b12fb786bf820e488df9b0",
+      "bytes": 4132,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/source/test_modal_path_gpu.py",
+          "sha256": "86704eb4458a000725e0b4f9ee4772ed7270708389b12fb786bf820e488df9b0",
+          "bytes": 4132
+        }
+      ],
+      "changes": "Unchanged authoritative source copy."
+    },
+    "test_modal_path_integration.py": {
+      "packaged_sha256": "b131619fd649853d4ba8b39af2ba74efd5cfd55ec1a7b3003c08a8a7f2e5c29e",
+      "bytes": 2849,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/source/test_modal_path_integration.py",
+          "sha256": "b131619fd649853d4ba8b39af2ba74efd5cfd55ec1a7b3003c08a8a7f2e5c29e",
+          "bytes": 2849
+        }
+      ],
+      "changes": "Unchanged authoritative source copy."
+    },
+    "test_ordered_pod.py": {
+      "packaged_sha256": "36310368682cc3023b0d4f1a52d71ebc8439ea4213ca159a62522f562322e0a1",
+      "bytes": 2154,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/source/test_ordered_pod.py",
+          "sha256": "36310368682cc3023b0d4f1a52d71ebc8439ea4213ca159a62522f562322e0a1",
+          "bytes": 2154
+        }
+      ],
+      "changes": "Unchanged authoritative source copy."
+    },
+    "test_packaging.py": {
+      "packaged_sha256": "0a72a97391c540604f289b69eded41c077a55be1d5338990891438eff3b1a19a",
+      "bytes": 4459,
+      "origins": [],
+      "changes": "Packaging-authored documentation, tests, or portability changes; no physics change.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "test_peel_case.py": {
+      "packaged_sha256": "c44ef862dcb21d04b4008bcc54a483acd018c3245ad5ed0cd67c9ad41e5f091e",
+      "bytes": 9317,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/source/test_peel_case.py",
+          "sha256": "4f72e97adf05dd250a68b0c9596a8ce748ef4e1c7f5bca566446ae39f002c636",
+          "bytes": 9145
+        }
+      ],
+      "changes": "Authoritative source with repository formatting and documented lint-only edits.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "test_pod_path_energy.py": {
+      "packaged_sha256": "a845db2e79e2a6dc65b5442a4b674d4f06ea3a2ff5ae7e625234c007f049b3cd",
+      "bytes": 3427,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/source/test_pod_path_energy.py",
+          "sha256": "a845db2e79e2a6dc65b5442a4b674d4f06ea3a2ff5ae7e625234c007f049b3cd",
+          "bytes": 3427
+        }
+      ],
+      "changes": "Unchanged authoritative source copy."
+    },
+    "test_retained_snapshot.py": {
+      "packaged_sha256": "decf09f74a51575f176125c1feaa4a55dee1769a9d80c392b3520d009fdb4b31",
+      "bytes": 2077,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/source/test_retained_snapshot.py",
+          "sha256": "719585445ea61eefa29da5e3e28fc351287e05e1d3da1e202f6abb72c9bd804e",
+          "bytes": 2116
+        }
+      ],
+      "changes": "Only helper imports redirected to retained_geometry; all tests unchanged."
+    }
+  },
+  "binary_inventory": {
+    "assets/ordered_rom.npz": {
+      "packaged_sha256": "5c7766fe2b931f3cbc06914378484933a451c832dbd7fa7296c248bb25c19f77",
+      "bytes": 5098356,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/banana/ordered_rom.npz",
+          "sha256": "5c7766fe2b931f3cbc06914378484933a451c832dbd7fa7296c248bb25c19f77",
+          "bytes": 5098356
+        }
+      ],
+      "changes": "Exact published derived model asset, not a simulation trajectory."
+    }
+  },
+  "excluded_source_files": [
+    "check_path_retention.py",
+    "refine_retained_snapshot.py"
+  ],
+  "formatting_note": "Refresh packaged_sha256 after formatting. Preserve original origins/hashes; sources.json intentionally does not hash itself.",
+  "private_extension_ast_equivalent": true,
+  "private_extension_ast_normalization": "ast.dump(include_attributes=False); normalize only ast.arg annotations wp.array/array2d/array3d/array4d(dtype=T) to the matching subscript form. No body, dtype, dimension, import, or runtime-constructor normalization.",
+  "private_extension_byte_identical": false,
+  "physics_ast_checks_scope": "Initial packaging physics-symbol audit; post-format private extension whole-module AST verified with annotation-only normalization, plus unchanged case geometry construction symbols. Other documented lint idioms are covered by retained CPU numerical tests, not claimed strict AST equality."
+}

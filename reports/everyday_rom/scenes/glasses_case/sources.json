@@ -1,0 +1,358 @@
+{
+  "schema": "portable-everyday-rom-scene-v1",
+  "scene": "glasses-case",
+  "authoritative_source": "/home/horde/reports/everyday-rom/glasses-case/source",
+  "authoritative_metadata": {
+    "path": "/home/horde/reports/everyday-rom/glasses-case/scene.json",
+    "sha256": "c338f44aa969609084b24e95daf156e1a6b6dab779ca4362815d82deb19ff4d7",
+    "bytes": 5703
+  },
+  "tested_newton_base": "8228bf6f690fff4dbb359d5de6447b09cb77c1e7",
+  "scope": "Current original-runtime scene, required procedural/derived model assets and tests only; no trajectories/videos/HTML/raw NIMBLE/fast runtime.",
+  "physics_ast_checks_passed": true,
+  "files": {
+    ".gitignore": {
+      "packaged_sha256": "d379cd8c64dd082d3d5fb426d42829ad35fe4a82eb279a15a90a2d8277454aa6",
+      "bytes": 26,
+      "origins": [],
+      "changes": "Packaging-authored documentation, tests, or portability changes; no physics change."
+    },
+    "README.md": {
+      "packaged_sha256": "2d848bb9dee167a3dfe64c7a02735d4c2c459a3b510673d3028429da31adf8fc",
+      "bytes": 4557,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/scene.json",
+          "sha256": "c338f44aa969609084b24e95daf156e1a6b6dab779ca4362815d82deb19ff4d7",
+          "bytes": 5703
+        },
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/README.md",
+          "sha256": "de7a8e16a628f111a924a7f0176ca5251c2197018858dfed4447beff20a7bc8c",
+          "bytes": 1984
+        }
+      ],
+      "changes": "Portable reproduction commands, unchanged research-extension contract, limitations and package scope.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "audit_clamped.py": {
+      "packaged_sha256": "6b3869f628b06bd35a2311b88223fed42366273b9489b48df6283881d2e28c87",
+      "bytes": 9124,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/audit_clamped.py",
+          "sha256": "3e0367359b25a374c1621725a5e2db29b698141abaf0a08d454de37cb06159ee",
+          "bytes": 8328
+        }
+      ],
+      "changes": "Authoritative source with repository formatting and documented lint-only edits.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "audit_revision.py": {
+      "packaged_sha256": "4ecfcfd71a5eb02c0f0ca0d337bf7e14627cf9c67598e2b063f845f5895fb340",
+      "bytes": 4792,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/audit_revision.py",
+          "sha256": "283d7260ecf238181d661afd78fe176159bb7c3c66ceea73df363d1b0ee1a0c9",
+          "bytes": 4695
+        }
+      ],
+      "changes": "Authoritative source with repository formatting and documented lint-only edits.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "audit_surface_strain.py": {
+      "packaged_sha256": "3ee823c4dc448ca004e8d7e10136712796f9b9c8cad33245308de6489fcd2967",
+      "bytes": 4046,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/audit_surface_strain.py",
+          "sha256": "3ee823c4dc448ca004e8d7e10136712796f9b9c8cad33245308de6489fcd2967",
+          "bytes": 4046
+        }
+      ],
+      "changes": "Unchanged authoritative source copy."
+    },
+    "banana.py": {
+      "packaged_sha256": "64e04d6c3230444a1ff553e58b20231a600e19f777e6038f878d6d450ba2e07b",
+      "bytes": 2169,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/banana.py",
+          "sha256": "13ff3fdc45579d0ae78eca7ef6c4befff4258435a4aa6bfcd2d61839580aaba4",
+          "bytes": 22198,
+          "symbols": [
+            "peel_progression"
+          ]
+        }
+      ],
+      "changes": "Extract unchanged required helpers; omit the historical scene/driver."
+    },
+    "bottle_geometry_local.py": {
+      "packaged_sha256": "48cc819caf3d31c1c5d0eb5b1a5811e89e571e5c1d48a4c2f3a9c76f1b58d604",
+      "bytes": 15349,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/bottle_geometry_local.py",
+          "sha256": "48cc819caf3d31c1c5d0eb5b1a5811e89e571e5c1d48a4c2f3a9c76f1b58d604",
+          "bytes": 15349
+        }
+      ],
+      "changes": "Unchanged authoritative source copy."
+    },
+    "clamped_case.py": {
+      "packaged_sha256": "adfce803c6dd5be49925c382348ee55a144ff8dc42a40524ffdbf637a6d282cd",
+      "bytes": 16306,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/clamped_case.py",
+          "sha256": "1c05d5bb66e53368495908e8f24fc5e1c2b4362acb42147e4e9430e8eb94366c",
+          "bytes": 13452
+        }
+      ],
+      "changes": "Portable Git metadata/cache/device arguments; source snapshot avoids recursion; export source list omits old preflight. Physics/config/tests unchanged.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "clamped_geometry.py": {
+      "packaged_sha256": "f69db59b5fccf68fce684c607f3ec20a51286416f0accaf4e4a2c88c04e7c4ec",
+      "bytes": 6698,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/clamped_geometry.py",
+          "sha256": "08cfe20cab7d7e6900bbe518bc94ecb979eeb7d60cb1f06e1f30a4b68743120c",
+          "bytes": 6132
+        }
+      ],
+      "changes": "Authoritative source with repository formatting and documented lint-only edits.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes.",
+      "original_geometry_ast_verified_symbols": [
+        "shell_geometry",
+        "material_segments",
+        "flap_half_width",
+        "keyframe",
+        "root_skin_ids",
+        "flap_basis",
+        "angle_between"
+      ]
+    },
+    "contact_capacity.py": {
+      "packaged_sha256": "4f4e3a1d375901f15a57c8371acc415f7d9204c648d1e1c3a4fdfbcda2139e79",
+      "bytes": 5079,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/contact_capacity.py",
+          "sha256": "72d025df425b0a36e537ced2068425b57bd78812945aefed3abd5fc8818813b9",
+          "bytes": 4955
+        }
+      ],
+      "changes": "Authoritative source with repository formatting and documented lint-only edits.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "glasses_case.py": {
+      "packaged_sha256": "d0406afd4dc1722e9e71f435e5da65046d1a26bab85c896ba3260d52b770b494",
+      "bytes": 705,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/glasses_case.py",
+          "sha256": "d3021c02b4ca5ecc675e09dc60b3597a290cc2edd3f694e1dfc03841049abc15",
+          "bytes": 25848,
+          "symbols": [
+            "Example.wall_trial_modes"
+          ]
+        }
+      ],
+      "changes": "Extract unchanged authored wall field; omit the historical scene/driver."
+    },
+    "opening_coverage.py": {
+      "packaged_sha256": "16d10f7d2a1d2c80ea91bbca18a6fd82168e27168cb009ad184299dacc1c4d47",
+      "bytes": 1669,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/opening_coverage.py",
+          "sha256": "16d10f7d2a1d2c80ea91bbca18a6fd82168e27168cb009ad184299dacc1c4d47",
+          "bytes": 1669
+        }
+      ],
+      "changes": "Unchanged authoritative source copy."
+    },
+    "peel_case_geometry.py": {
+      "packaged_sha256": "1ce33c4addc2a6d6c4bfe51c08bbe71ff57c0cfea26057ced92d291448939561",
+      "bytes": 43769,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/peel_case_geometry.py",
+          "sha256": "7115cd3d73ff04d1317f15ac97eb20c57234ab73d236d920a8aab143ae3e1b99",
+          "bytes": 43878
+        }
+      ],
+      "changes": "Authoritative source with repository formatting and documented lint-only edits.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "pod_path_energy.py": {
+      "packaged_sha256": "69e8d903e58c210a45f2f92f9e974cc70ef624832d5b1404dd09b856f544d45d",
+      "bytes": 4071,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/pod_path_energy.py",
+          "sha256": "69e8d903e58c210a45f2f92f9e974cc70ef624832d5b1404dd09b856f544d45d",
+          "bytes": 4071
+        }
+      ],
+      "changes": "Unchanged authoritative source copy; original AST also verified.",
+      "original_ast_sha256": "c7809c32076483620b0a0a74491a83d1e814ab04f76c6c02c60c3d9270a00ad2",
+      "packaged_ast_sha256": "c7809c32076483620b0a0a74491a83d1e814ab04f76c6c02c60c3d9270a00ad2",
+      "ast_normalization": "ast.dump(include_attributes=False); normalize only ast.arg annotations wp.array/array2d/array3d/array4d(dtype=T) to the matching subscript form. No body, dtype, dimension, import, or runtime-constructor normalization."
+    },
+    "solver_vbd_modal_path.py": {
+      "packaged_sha256": "0d78fd12aee09c1934c9dc25791445d7555cd04fb314933db816f5dffd266e59",
+      "bytes": 8455,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/solver_vbd_modal_path.py",
+          "sha256": "032f0cf95008b330449442c402b6019c006d37c50d2fc154ee66f7ae3febae45",
+          "bytes": 8545
+        }
+      ],
+      "changes": "Verified original AST with only Warp argument-annotation call/subscript normalization; kernel bodies and all other syntax are strict. Not a byte-identical copy after the repository hook.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes.",
+      "original_ast_sha256": "62adad59b10c80bcd6ef8cd572ee5662d1842daceb0c2578bc3224afe19ac8d8",
+      "packaged_ast_sha256": "62adad59b10c80bcd6ef8cd572ee5662d1842daceb0c2578bc3224afe19ac8d8",
+      "ast_normalization": "ast.dump(include_attributes=False); normalize only ast.arg annotations wp.array/array2d/array3d/array4d(dtype=T) to the matching subscript form. No body, dtype, dimension, import, or runtime-constructor normalization."
+    },
+    "test_clamped_evidence.py": {
+      "packaged_sha256": "4937bc5213d25810f82fa4d03477fef265433e2334366351aadf1a0ce35dedd7",
+      "bytes": 5186,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/test_clamped_evidence.py",
+          "sha256": "1aec0cf0f8e413c468cb526d587f0fab3ab80bbd13f875dccf9a5876cb1239cc",
+          "bytes": 4526
+        }
+      ],
+      "changes": "Two historical-artifact checks retained as explicit optional tests via CASE_HISTORY_ROOT; no bundled trajectories.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "test_contact_capacity.py": {
+      "packaged_sha256": "6f5b3bfdc4ed0671c6d1445a8efee0acb958193e8ec08ceab5938aac8bc99117",
+      "bytes": 2112,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/test_contact_capacity.py",
+          "sha256": "e29167af72728074e9ff53113726eb3ac710d0ddb6ef0da83c029dc884d3b6f5",
+          "bytes": 2039
+        }
+      ],
+      "changes": "Authoritative source with repository formatting and documented lint-only edits.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "test_modal_path_gpu.py": {
+      "packaged_sha256": "86704eb4458a000725e0b4f9ee4772ed7270708389b12fb786bf820e488df9b0",
+      "bytes": 4132,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/test_modal_path_gpu.py",
+          "sha256": "86704eb4458a000725e0b4f9ee4772ed7270708389b12fb786bf820e488df9b0",
+          "bytes": 4132
+        }
+      ],
+      "changes": "Unchanged authoritative source copy."
+    },
+    "test_modal_path_integration.py": {
+      "packaged_sha256": "5ad0b321df61642a2806b110699d12d85b99c64b87bd4c08a8d2e04acee18089",
+      "bytes": 2771,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/test_modal_path_integration.py",
+          "sha256": "6885e57aa498230b562670b82d4dbb9a3ef84c8c53aa46fab532ee583bedcb4e",
+          "bytes": 2795
+        }
+      ],
+      "changes": "Authoritative source with repository formatting and documented lint-only edits.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "test_opening_coverage.py": {
+      "packaged_sha256": "15851d0a19d5f8559cc0069326cdee12a5d7bd89f96ee6b950a950df90cc90ee",
+      "bytes": 1164,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/test_opening_coverage.py",
+          "sha256": "15851d0a19d5f8559cc0069326cdee12a5d7bd89f96ee6b950a950df90cc90ee",
+          "bytes": 1164
+        }
+      ],
+      "changes": "Unchanged authoritative source copy."
+    },
+    "test_packaging.py": {
+      "packaged_sha256": "08fa753504fb94c1daefe385a75c41d0665af34e6948a0767841081bd223df2e",
+      "bytes": 4040,
+      "origins": [],
+      "changes": "Packaging-authored documentation, tests, or portability changes; no physics change.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "test_peel_case.py": {
+      "packaged_sha256": "54f2f0c27a3240a7177350618d13aa8b6c2850c2d9afd53b6dc3a0faf6fe8016",
+      "bytes": 17713,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/test_peel_case.py",
+          "sha256": "54f2f0c27a3240a7177350618d13aa8b6c2850c2d9afd53b6dc3a0faf6fe8016",
+          "bytes": 17713
+        }
+      ],
+      "changes": "Unchanged authoritative source copy."
+    },
+    "test_pod_path_energy.py": {
+      "packaged_sha256": "a845db2e79e2a6dc65b5442a4b674d4f06ea3a2ff5ae7e625234c007f049b3cd",
+      "bytes": 3427,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/test_pod_path_energy.py",
+          "sha256": "a845db2e79e2a6dc65b5442a4b674d4f06ea3a2ff5ae7e625234c007f049b3cd",
+          "bytes": 3427
+        }
+      ],
+      "changes": "Unchanged authoritative source copy."
+    },
+    "test_scalloped_geometry.py": {
+      "packaged_sha256": "6f4dd0f8da514e52722efea5254b889228b26b581a1b5522883fe462efec8c13",
+      "bytes": 3392,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/test_scalloped_geometry.py",
+          "sha256": "4c234ec4f51a909cde0dfaf2047ab7463d00ee9ec85b1ef4561b6beff9e45998",
+          "bytes": 3378
+        }
+      ],
+      "changes": "Authoritative source with repository formatting and documented lint-only edits.",
+      "packaging_cleanup": "Pinned Ruff 0.15.20 formatting/imports; repository Warp annotation modernization. Case-only lint idioms: lambda to def, dict literals, unused locals, pairwise, and moving contact_capacity imports to module scope. No numeric or gate changes."
+    },
+    "test_surface_strain.py": {
+      "packaged_sha256": "49621d762ad25e856f59d759f70dba827b29601323bbc910d5498813ba429bf0",
+      "bytes": 1570,
+      "origins": [
+        {
+          "path": "/home/horde/reports/everyday-rom/glasses-case/source/test_surface_strain.py",
+          "sha256": "49621d762ad25e856f59d759f70dba827b29601323bbc910d5498813ba429bf0",
+          "bytes": 1570
+        }
+      ],
+      "changes": "Unchanged authoritative source copy."
+    }
+  },
+  "binary_inventory": {},
+  "excluded_source_files": [
+    "audit_tip_clamp.py",
+    "benchmark_revision.py",
+    "clamped_preflight.py",
+    "render_scene.py",
+    "seal_revision.py",
+    "test_render_scene.py",
+    "test_wrap_case.py",
+    "wrap_geometry.py"
+  ],
+  "formatting_note": "Refresh packaged_sha256 after formatting. Preserve original origins/hashes; sources.json intentionally does not hash itself.",
+  "private_extension_ast_equivalent": true,
+  "private_extension_ast_normalization": "ast.dump(include_attributes=False); normalize only ast.arg annotations wp.array/array2d/array3d/array4d(dtype=T) to the matching subscript form. No body, dtype, dimension, import, or runtime-constructor normalization.",
+  "private_extension_byte_identical": false,
+  "physics_ast_checks_scope": "Initial packaging physics-symbol audit; post-format private extension whole-module AST verified with annotation-only normalization, plus unchanged case geometry construction symbols. Other documented lint idioms are covered by retained CPU numerical tests, not claimed strict AST equality."
+}

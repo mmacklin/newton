@@ -20,6 +20,8 @@ repos:
     hooks:
       - id: check-added-large-files
         args: [--maxkb=500]
+        # Reviewed derived ROMs; raw NIMBLE model data is not included.
+        exclude: ^reports/everyday_rom/scenes/(hand/assets/rom-48|banana/assets/ordered_rom)\.npz$
       - id: check-case-conflict
       - id: check-illegal-windows-names
       - id: check-json

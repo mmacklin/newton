@@ -1,0 +1,32 @@
+{
+  "newton_module": "/home/horde/newton-everyday-rom-publish/newton/__init__.py",
+  "runtime_head": "8228bf6f690fff4dbb359d5de6447b09cb77c1e7",
+  "source_manifest_sha256": "4a0f494e85b167f9e675db33c5c722a94e269ed74cc93ed1a5b6561fcccd29c4",
+  "cpu_only": true,
+  "fresh_gpu_physics_validated": false,
+  "jobs": {
+    "cpu": {
+      "command": [
+        "/home/horde/newton-reduced-pr/.venv/bin/python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "/home/horde/newton-everyday-rom-publish/reports/everyday_rom/scenes/straw",
+        "-p",
+        "test_*.py",
+        "-v"
+      ],
+      "returncode": 0
+    },
+    "help": {
+      "command": [
+        "/home/horde/newton-reduced-pr/.venv/bin/python3",
+        "/home/horde/newton-everyday-rom-publish/reports/everyday_rom/scenes/straw/straw.py",
+        "--help"
+      ],
+      "returncode": 0
+    }
+  },
+  "passed": true
+}

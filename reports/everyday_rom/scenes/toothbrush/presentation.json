@@ -1,0 +1,20 @@
+{
+  "camera": {
+    "position": [
+      0.0,
+      0.036,
+      0.215
+    ],
+    "target": [
+      0.042,
+      0.036,
+      0.14
+    ],
+    "fov": 32,
+    "track_meshes": [
+      "teal_tuft_plate"
+    ],
+    "reference_frame": 189
+  },
+  "poster_frame": 249
+}

@@ -1,0 +1,39 @@
+--- published/wearable_geometry.py
++++ packaged/wearable_geometry.py
+@@ -895,18 +895,19 @@
+         for name, mesh, color in self.static_meshes:
+             mesh_entry(name, mesh[0], mesh[1], color)
+         np.savez_compressed(output / "scene.npz", **arrays)
+-        root = Path(__file__).resolve().parents[2]
++        root = Path(newton.__file__).resolve().parents[1]
++        helpers = Path(__file__).resolve().parent
+         slug = self.spec["slug"]
+         environment = (
+-            f"env PYTHONPATH={root} OPENBLAS_NUM_THREADS=1 "
++            f'env PYTHONPATH="{root}" OPENBLAS_NUM_THREADS=1 '
+             "PYTHONDONTWRITEBYTECODE=1 WARP_CACHE_PATH=/tmp/newton-everyday-wearables-warp "
+-            "uv run --offline --no-sync --project /home/horde/newton-reduced-pr python "
+-        )
+-        job = f"flock /tmp/newton-everyday-rom-gpu.lock timeout 5m {environment}{root}/reports/everyday_rom/{slug}.py"
++            f'uv run --project "{root}" python '
++        )
++        job = f'flock /tmp/newton-everyday-rom-gpu.lock timeout 5m {environment}"{helpers}/{slug}.py"'
+         commands = [
+-            job,
+-            f"{job} --no-contact --output /home/horde/reports/everyday-rom/{slug}/negative-control",
+-            f"{environment}{root}/reports/everyday_rom/test_wearables.py --validate-pair /home/horde/reports/everyday-rom/{slug}",
++            f'{job} --output "{output}"',
++            f'{job} --no-contact --output "{output}/negative-control"',
++            f'{environment}"{helpers}/test_wearables.py" --validate-pair "{output}"',
+         ]
+         scene = {
+             "slug": slug,
+@@ -935,7 +936,7 @@
+ 
+ def run_cli(example_class, slug):
+     parser = argparse.ArgumentParser(description=example_class.__doc__)
+-    parser.add_argument("--output", type=Path, default=Path(f"/home/horde/reports/everyday-rom/{slug}"))
++    parser.add_argument("--output", type=Path, default=Path("output") / slug)
+     parser.add_argument("--device", default="cuda:0")
+     parser.add_argument("--frames", type=int, default=360)
+     parser.add_argument("--iterations", type=int, default=Config.iterations)

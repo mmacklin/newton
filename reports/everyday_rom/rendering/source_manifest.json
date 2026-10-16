@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "origin": {
+    "workspace": "newton-rom-strain-replay",
+    "directory": "reports/everyday_rom",
+    "git_head": "8228bf6f690fff4dbb359d5de6447b09cb77c1e7",
+    "snapshot_date": "2026-10-16",
+    "uncommitted_snapshots": true,
+    "note": "Workspace identifier is provenance, not a runtime path. These source files were untracked at the base revision; individual hashes identify the copied snapshots."
+  },
+  "scope": "Source-only rendering/replay package. No physics/core edits, simulation, GPU rendering, publication, or new timing qualification.",
+  "copied_snapshots": {
+    "render_strain_replay.py": {
+      "origin_sha256": "34655a07926c274762de3c4df445ee3f16cf96c70115e3c3157ff2f7dac79e80",
+      "adaptations": [
+        "Support package-relative and standalone imports",
+        "Extract CPU input gate for testing; retain original physics and overlay gates",
+        "Explicit offline-bundle source-verification scope recorded in render audit",
+        "Validate preview bounds and output dimensions before GPU import",
+        "Allow argv injection for generic rendering wrapper"
+      ]
+    },
+    "strain_adapters.py": {
+      "origin_sha256": "8edabd961fee982cd01d6ffaf089645c5e4c6228e3546cd5b5576a35c37a3631",
+      "adaptations": []
+    },
+    "strain_overlay.py": {
+      "origin_sha256": "6509e2b69f0225089af18c0e37d1620a04e4b533bce3a8dd05c1494e51ac81f3",
+      "adaptations": [
+        "Support package-relative and standalone imports",
+        "Expose existing width/height arguments on CLI to match renderer resolution"
+      ]
+    },
+    "strain_publication.py": {
+      "origin_sha256": "ab4a1d536aeef2ea6709afa7d70a2eb86c8a671c1efb59e5e16df829fe1f1642",
+      "adaptations": [
+        "Support package-relative and standalone imports; local staging/package verification only"
+      ]
+    },
+    "strain_replay.py": {
+      "origin_sha256": "72480aed88759ad33a9e5fc7f946e3b9eb7cab78bab4b5fa36c6f8c9a5f997b8",
+      "adaptations": [
+        "Support package-relative and standalone imports",
+        "Explicit offline-bundle option for combine-scene; default source checks unchanged",
+        "Label historical implementation pin as implementation_base_commit, not input runtime identity",
+        "Replace obsolete approval-state wording with factual unrendered export status"
+      ]
+    },
+    "strain_video.py": {
+      "origin_sha256": "6daddcc5dc93dd1b1c4db0fb499d6d741f5d8946c10927f3ded0fda33e3ef52b",
+      "adaptations": [
+        "Support package-relative and standalone imports",
+        "Generic trajectory provenance refers to original metrics instead of asserting every input is an accepted native trajectory"
+      ]
+    },
+    "surface_strain.py": {
+      "origin_sha256": "cb5dc153affb01bea5ca891b673bf10afc6a698313aacc605488f9b6a40a51b8",
+      "adaptations": []
+    },
+    "test_strain_overlay.py": {
+      "origin_sha256": "e5088a7e76065872f72c9d2ad4c1941870b10940b5b3bea5281e2e28351b963b",
+      "adaptations": [
+        "Support package-relative and standalone test imports"
+      ]
+    },
+    "test_strain_publication.py": {
+      "origin_sha256": "c42e5638c0934ef2976925c06c51f16b5e078eb77522a770fd2304a05be968b2",
+      "adaptations": [
+        "Support package-relative and standalone test imports",
+        "Bind mocks to imported module objects"
+      ]
+    },
+    "test_strain_replay.py": {
+      "origin_sha256": "f60ee97d35e5875eae47df3a95542d62f38a748717cb4ec2b01122de3e332d09",
+      "adaptations": [
+        "Support package-relative and standalone test imports"
+      ]
+    },
+    "test_strain_video.py": {
+      "origin_sha256": "8cace45a1cee3774d134ad72f6e085159c06401f116449c41698dcb0025be8d3",
+      "adaptations": [
+        "Support package-relative and standalone test imports",
+        "Bind mocks to imported module objects",
+        "Update provenance text assertion to require explicit unknown-runtime and original-metrics limitations; acceptance gates unchanged"
+      ]
+    }
+  },
+  "new_files": {
+    "__init__.py": "Lightweight package marker",
+    "render_scene.py": "Generic fresh-output wrapper around retained staging and exact-state renderer",
+    "verify_sources.py": "Portable package hash verification",
+    "test_portable_rendering.py": "CPU relocation, generic entrypoint and preserved gate regression checks",
+    "README.md": "Portable setup, normal-to-strain commands, provenance and limitations"
+  },
+  "packaged_sha256": {
+    "README.md": "cfc789f587bc3af121add835515e9853e8fce66384ae38049475f6925398162f",
+    "__init__.py": "0da0d19d9a06c52317ef353c540a61b958d1de0bc95d55215cb1468b0cd7306f",
+    "render_scene.py": "3906670f7e66e90bfbfd6c2af3b7bed4dab37cd37bb5adc7945b2194c46967f5",
+    "render_strain_replay.py": "a9bb5576ace485ab5abef2d3e9d04b4222cae05e3e66bad0bfc8d13572333293",
+    "strain_adapters.py": "8edabd961fee982cd01d6ffaf089645c5e4c6228e3546cd5b5576a35c37a3631",
+    "strain_overlay.py": "25465ebf18127f3bf97468a06d80e7bdfd17769a0a4e6d714d046c1719e068ef",
+    "strain_publication.py": "376c9235a9f821f114b2b1d8a8349358d19e26d81323e5004b93fa1649ee81fc",
+    "strain_replay.py": "08ef6a809e7df21cb279a232f104627d7332374bd28de3ed6e7036e940787365",
+    "strain_video.py": "227527035ebde96a87ccb6a2bd398d57e403c28fe0533cec9ab60da78fec1c18",
+    "surface_strain.py": "cb5dc153affb01bea5ca891b673bf10afc6a698313aacc605488f9b6a40a51b8",
+    "test_portable_rendering.py": "8a16f16ce81eae4bb8e2a34a8e757034404ed1de72581f6a28e2837075a1d818",
+    "test_strain_overlay.py": "0bc0b2b58f1645846f2c767bd8235e3fbc23d4d7a56221092bacca4310571d92",
+    "test_strain_publication.py": "4cf1b83a1450969f9e6673344d8a515cb16a95e8b519ebfed3d57b3becc3c71e",
+    "test_strain_replay.py": "f2777f83c0e0d7e95a55f1883616053c33f1348cf4898d6720e21b8bf5bf107d",
+    "test_strain_video.py": "f3148ede622c07d8692c10e7bf5087a330729e478c50f4791921bd08ba05dc45",
+    "verify_sources.py": "ee2fcd69cafa37d6399ae0822da9952e432c58d0dd36fd3bb9c5497960e166b8"
+  }
+}

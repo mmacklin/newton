@@ -1,0 +1,32 @@
+{
+  "newton_module": "/home/horde/newton-everyday-rom-publish/newton/__init__.py",
+  "runtime_head": "8228bf6f690fff4dbb359d5de6447b09cb77c1e7",
+  "source_manifest_sha256": "d6103b8d4e124394fb4ac61a2b4a7e47b719c970317f4b98697afbfaf592b8c1",
+  "cpu_only": true,
+  "fresh_gpu_physics_validated": false,
+  "jobs": {
+    "cpu": {
+      "command": [
+        "/home/horde/newton-reduced-pr/.venv/bin/python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "/home/horde/newton-everyday-rom-publish/reports/everyday_rom/scenes/clog",
+        "-p",
+        "test_*.py",
+        "-v"
+      ],
+      "returncode": 0
+    },
+    "help": {
+      "command": [
+        "/home/horde/newton-reduced-pr/.venv/bin/python3",
+        "/home/horde/newton-everyday-rom-publish/reports/everyday_rom/scenes/clog/clog.py",
+        "--help"
+      ],
+      "returncode": 0
+    }
+  },
+  "passed": true
+}

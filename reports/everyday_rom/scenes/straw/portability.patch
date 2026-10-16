@@ -1,0 +1,110 @@
+--- published/straw.py
++++ packaged/straw.py
+@@ -348,7 +348,7 @@
+     """Curved floating-frame straw with contact bending and releasable root support."""
+ 
+     slug, title, kind = "straw", "Rubber drinking straw", 0
+-    default_output = Path("/home/horde/reports/everyday-rom/straw")
++    default_output = Path("output/straw")
+     elastic_color = (0.035, 0.48, 0.43)
+     camera: ClassVar[dict] = {"position": [0.10, -0.50, 0.38], "target": [-0.065, 0.0, 0.105], "fov": 32}
+     description = "A hollow straw with a short 30-degree bent tip is deflected by a coral roller. Its support jaws open, releasing the entire straw to recoil and drop under gravity."
+--- published/test_utensils.py
++++ packaged/test_utensils.py
+@@ -74,7 +74,7 @@
+         self.assertGreater(np.linalg.norm(psi), 1)
+ 
+     def test_control_status_requires_both_assertion_suites(self):
+-        root = Path("/home/horde/.cache/newton-everyday-rom/capacity-reruns/utensils/test-temp")
++        root = Path(__file__).resolve().parent
+         root.mkdir(parents=True, exist_ok=True)
+         for primary_passed, control_passed in ((False, False), (True, False), (False, True), (True, True)):
+             with (
+@@ -291,7 +291,7 @@
+ 
+ def check_outputs(slug, straight=False, output=None):
+     if output is None:
+-        output = straw.Example.default_output if slug == "straw" else Path("/home/horde/reports/everyday-rom") / slug
++        output = straw.Example.default_output if slug == "straw" else Path("output") / slug
+     if straight:
+         output /= "straight-baseline"
+     result = compare_negative_control(output)
+@@ -299,7 +299,7 @@
+     assert result["graph_enabled"] and result["negative_control"]["deformation_ratio"] < 0.25
+     verify_export(output)
+     # Reuse the coordinator's exact schema validator if present, without RTX.
+-    path = Path(__file__).parents[1] / "shared/render_scene.py"
++    path = Path(__file__).with_name("render_scene.py")
+     if path.exists():
+         spec = importlib.util.spec_from_file_location("everyday_scene_validator", path)
+         module = importlib.util.module_from_spec(spec)
+@@ -713,7 +713,7 @@
+ 
+ def compare_straw_boosts():
+     """Compare intrinsic motion under a uniform inertial-frame velocity boost."""
+-    output = Path("/home/horde/reports/everyday-rom/straw/debug")
++    output = Path("output/straw/debug")
+     with (
+         np.load(output / "elastic-boost-zero-inputs.npz") as a,
+         np.load(output / "elastic-boost-z-inputs.npz") as b,
+@@ -768,7 +768,7 @@
+ 
+ def diagnose_straw(case):
+     """CPU inertia audit or one lock-coordinated replay of a pre-failure state."""
+-    output = Path("/home/horde/reports/everyday-rom/straw/debug")
++    output = Path("output/straw/debug")
+     cfg = straw.Config(floating_basis=False)
+     vertices, _faces, basis, _audit = straw.build_straw(cfg)
+     x, weights, phi = vertices.astype(float), np.asarray(basis.sample_mass, dtype=float), basis.sample_phi.astype(float)
+@@ -923,7 +923,7 @@
+         source = Path(__file__).resolve().parent
+         env = dict(
+             os.environ,
+-            PYTHONPATH=str(source.parents[1]),
++            PYTHONPATH=str(Path(straw.newton.__file__).resolve().parents[1]),
+             OPENBLAS_NUM_THREADS="1",
+             PYTHONDONTWRITEBYTECODE="1",
+             WARP_CACHE_PATH="/tmp/newton-everyday-utensils-warp",
+@@ -935,13 +935,7 @@
+                     "/tmp/newton-everyday-rom-gpu.lock",
+                     "timeout",
+                     "5m",
+-                    "uv",
+-                    "run",
+-                    "--offline",
+-                    "--no-sync",
+-                    "--project",
+-                    "/home/horde/newton-reduced-pr",
+-                    "python",
++                    sys.executable,
+                     str(source / (args.simulation + ".py")),
+                     *(["--straight"] if args.straight else []),
+                     *(["--output", str(args.output)] if args.output else []),
+--- published/utensil_geometry.py
++++ packaged/utensil_geometry.py
+@@ -567,12 +567,12 @@
+ 
+ 
+ def reproduction_command(slug):
+-    worktree = Path(__file__).resolve().parents[2]
++    worktree = Path(newton.__file__).resolve().parents[1]
++    helpers = Path(__file__).resolve().parent
+     return (
+-        f"env PYTHONPATH={worktree} "
++        f'env PYTHONPATH="{worktree}" '
+         "OPENBLAS_NUM_THREADS=1 PYTHONDONTWRITEBYTECODE=1 WARP_CACHE_PATH=/tmp/newton-everyday-utensils-warp "
+-        "uv run --offline --no-sync --project /home/horde/newton-reduced-pr python "
+-        f"{worktree}/reports/everyday_rom/test_utensils.py --simulation {slug}"
++        f'uv run --project "{worktree}" python "{helpers}/test_utensils.py" --simulation {slug}'
+     )
+ 
+ 
+@@ -662,7 +662,7 @@
+ 
+ def run_cli(example_class, config_class, slug):
+     parser = argparse.ArgumentParser(description=example_class.__doc__)
+-    default_output = getattr(example_class, "default_output", Path("/home/horde/reports/everyday-rom") / slug)
++    default_output = getattr(example_class, "default_output", Path("output") / slug)
+     parser.add_argument("--output", type=Path, default=default_output)
+     parser.add_argument("--frames", type=int, default=390)
+     parser.add_argument("--device", default="cuda:0")

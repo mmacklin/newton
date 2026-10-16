@@ -1,0 +1,519 @@
+{
+  "title": "Toothbrush: contact-driven bristle scrubbing",
+  "camera": {
+    "position": [
+      0.0,
+      0.036,
+      0.215
+    ],
+    "target": [
+      0.042,
+      0.036,
+      0.14
+    ],
+    "fov": 32,
+    "track_meshes": [
+      "teal_tuft_plate"
+    ],
+    "reference_frame": 189
+  },
+  "floor_z": -0.0001,
+  "dynamic_assembly": true,
+  "single_physical_head": true,
+  "description": "The lifted brush scrubs back and forth against a stationary enamel-colored surface. Friction bends the tuft tips in opposite directions; withdrawing the brush lets them recover before the handle is released.",
+  "model": "One physical elastic head with 20 independent two-mode tuft fields, attached by one fixed neck joint to an 18 g dynamic handle. A 2 g zero-Phi plastic head plate supplies physical floating-frame inertia; 140 visible nylon strands retain the original modal mass, stiffness and damping.",
+  "driven": "The visible jaw carriage is kinematic; the rounded surface stays fixed. The grasp joint enables at 0.35 s and disables at 5.2 s; both object frames and all 40 modal coordinates are solved by Newton VBD with implicit mass coupling enabled. The close-up camera tracks the saved head position without changing geometry.",
+  "limitations": [
+    "Visible jaws indicate an ideal switchable fixed-joint grasp, not a frictional grasp simulation; jaw geometry has no collision.",
+    "Grouped strands share one beam field per tuft; individual-filament splay and bristle-bristle contact are not resolved.",
+    "Linear small-deflection beam ROM with root strain clamped in each dynamic frame; no inextensibility or nonlinear filament model.",
+    "Assumed nylon density 1150 kg/m^3 and modulus 1.3 GPa. Plastic mass is explicitly assumed 18 g handle plus 2 g head plate; a surface-area-lumped mass distribution supplies consistent mass, COM and inertia, not a calibrated solid-volume density model.",
+    "Head plate and tuft roots have zero modal displacement; plate bending is omitted. No inertia regularization or runtime cutoff modification is used.",
+    "Rounded tool is an analytic capsule proxy, not anatomical tooth geometry. No cleaning, toothpaste or fluid model.",
+    "Separate handle and joined head/tuft collision meshes; decorative handle grip ribs do not add collision geometry. Floor material friction 0.5, bristle and tool material friction 0.2. Floor contact-generation gap 8 mm covers impact travel per substep; rest margin remains zero, with no geometry inflation. Tool gap is 0.15 mm."
+  ],
+  "slug": "toothbrush",
+  "status": "validated prototype",
+  "fps": 60,
+  "meshes": [
+    {
+      "name": "ivory_handle",
+      "vertices": "vertices_0",
+      "faces": "faces_0",
+      "color": [
+        0.86,
+        0.92,
+        0.91
+      ],
+      "roughness": 0.28,
+      "metallic": 0.0,
+      "body_index": 0,
+      "q_start": null,
+      "elastic_vertex_start": null
+    },
+    {
+      "name": "teal_grip",
+      "vertices": "vertices_1",
+      "faces": "faces_1",
+      "color": [
+        0.025,
+        0.4,
+        0.4
+      ],
+      "roughness": 0.55,
+      "metallic": 0.0,
+      "body_index": 0,
+      "q_start": null,
+      "elastic_vertex_start": null
+    },
+    {
+      "name": "grip_ribs",
+      "vertices": "vertices_2",
+      "faces": "faces_2",
+      "color": [
+        0.06,
+        0.6,
+        0.54
+      ],
+      "roughness": 0.5,
+      "metallic": 0.0,
+      "body_index": 0,
+      "q_start": null,
+      "elastic_vertex_start": null
+    },
+    {
+      "name": "ivory_plastic_head",
+      "vertices": "vertices_3",
+      "faces": "faces_3",
+      "color": [
+        0.86,
+        0.92,
+        0.91
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 0
+    },
+    {
+      "name": "teal_tuft_plate",
+      "vertices": "vertices_4",
+      "faces": "faces_4",
+      "color": [
+        0.05,
+        0.46,
+        0.43
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 282
+    },
+    {
+      "name": "tuft_0_0",
+      "vertices": "vertices_5",
+      "faces": "faces_5",
+      "color": [
+        0.04,
+        0.55,
+        0.55
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 1004
+    },
+    {
+      "name": "tuft_0_1",
+      "vertices": "vertices_6",
+      "faces": "faces_6",
+      "color": [
+        0.8,
+        0.89,
+        0.87
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 1522
+    },
+    {
+      "name": "tuft_0_2",
+      "vertices": "vertices_7",
+      "faces": "faces_7",
+      "color": [
+        0.8,
+        0.89,
+        0.87
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 2040
+    },
+    {
+      "name": "tuft_0_3",
+      "vertices": "vertices_8",
+      "faces": "faces_8",
+      "color": [
+        0.04,
+        0.55,
+        0.55
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 2558
+    },
+    {
+      "name": "tuft_1_0",
+      "vertices": "vertices_9",
+      "faces": "faces_9",
+      "color": [
+        0.04,
+        0.55,
+        0.55
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 3076
+    },
+    {
+      "name": "tuft_1_1",
+      "vertices": "vertices_10",
+      "faces": "faces_10",
+      "color": [
+        0.8,
+        0.89,
+        0.87
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 3594
+    },
+    {
+      "name": "tuft_1_2",
+      "vertices": "vertices_11",
+      "faces": "faces_11",
+      "color": [
+        0.8,
+        0.89,
+        0.87
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 4112
+    },
+    {
+      "name": "tuft_1_3",
+      "vertices": "vertices_12",
+      "faces": "faces_12",
+      "color": [
+        0.04,
+        0.55,
+        0.55
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 4630
+    },
+    {
+      "name": "tuft_2_0",
+      "vertices": "vertices_13",
+      "faces": "faces_13",
+      "color": [
+        0.04,
+        0.55,
+        0.55
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 5148
+    },
+    {
+      "name": "tuft_2_1",
+      "vertices": "vertices_14",
+      "faces": "faces_14",
+      "color": [
+        0.8,
+        0.89,
+        0.87
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 5666
+    },
+    {
+      "name": "tuft_2_2",
+      "vertices": "vertices_15",
+      "faces": "faces_15",
+      "color": [
+        0.8,
+        0.89,
+        0.87
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 6184
+    },
+    {
+      "name": "tuft_2_3",
+      "vertices": "vertices_16",
+      "faces": "faces_16",
+      "color": [
+        0.04,
+        0.55,
+        0.55
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 6702
+    },
+    {
+      "name": "tuft_3_0",
+      "vertices": "vertices_17",
+      "faces": "faces_17",
+      "color": [
+        0.04,
+        0.55,
+        0.55
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 7220
+    },
+    {
+      "name": "tuft_3_1",
+      "vertices": "vertices_18",
+      "faces": "faces_18",
+      "color": [
+        0.8,
+        0.89,
+        0.87
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 7738
+    },
+    {
+      "name": "tuft_3_2",
+      "vertices": "vertices_19",
+      "faces": "faces_19",
+      "color": [
+        0.8,
+        0.89,
+        0.87
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 8256
+    },
+    {
+      "name": "tuft_3_3",
+      "vertices": "vertices_20",
+      "faces": "faces_20",
+      "color": [
+        0.04,
+        0.55,
+        0.55
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 8774
+    },
+    {
+      "name": "tuft_4_0",
+      "vertices": "vertices_21",
+      "faces": "faces_21",
+      "color": [
+        0.04,
+        0.55,
+        0.55
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 9292
+    },
+    {
+      "name": "tuft_4_1",
+      "vertices": "vertices_22",
+      "faces": "faces_22",
+      "color": [
+        0.8,
+        0.89,
+        0.87
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 9810
+    },
+    {
+      "name": "tuft_4_2",
+      "vertices": "vertices_23",
+      "faces": "faces_23",
+      "color": [
+        0.8,
+        0.89,
+        0.87
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 10328
+    },
+    {
+      "name": "tuft_4_3",
+      "vertices": "vertices_24",
+      "faces": "faces_24",
+      "color": [
+        0.04,
+        0.55,
+        0.55
+      ],
+      "roughness": 0.42,
+      "metallic": 0.0,
+      "body_index": 1,
+      "q_start": 14,
+      "elastic_vertex_start": 10846
+    },
+    {
+      "name": "rounded_contact_tool",
+      "vertices": "vertices_25",
+      "faces": "faces_25",
+      "color": [
+        0.95,
+        0.94,
+        0.88
+      ],
+      "roughness": 0.22,
+      "metallic": 0.0,
+      "body_index": 2,
+      "q_start": null,
+      "elastic_vertex_start": null
+    },
+    {
+      "name": "rigid_floor",
+      "vertices": "vertices_26",
+      "faces": "faces_26",
+      "color": [
+        0.36,
+        0.4,
+        0.43
+      ],
+      "roughness": 0.72,
+      "metallic": 0.0,
+      "body_index": -1,
+      "q_start": null,
+      "elastic_vertex_start": null
+    },
+    {
+      "name": "gripper_part_1",
+      "vertices": "vertices_27",
+      "faces": "faces_27",
+      "color": [
+        0.16,
+        0.19,
+        0.22
+      ],
+      "roughness": 0.35,
+      "metallic": 0.3,
+      "body_index": 3,
+      "q_start": null,
+      "elastic_vertex_start": null
+    },
+    {
+      "name": "gripper_part_2",
+      "vertices": "vertices_28",
+      "faces": "faces_28",
+      "color": [
+        0.78,
+        0.29,
+        0.12
+      ],
+      "roughness": 0.35,
+      "metallic": 0.3,
+      "body_index": 4,
+      "q_start": null,
+      "elastic_vertex_start": null
+    },
+    {
+      "name": "gripper_part_3",
+      "vertices": "vertices_29",
+      "faces": "faces_29",
+      "color": [
+        0.78,
+        0.29,
+        0.12
+      ],
+      "roughness": 0.35,
+      "metallic": 0.3,
+      "body_index": 5,
+      "q_start": null,
+      "elastic_vertex_start": null
+    }
+  ],
+  "poster_frame": 250,
+  "mode_count": 40,
+  "parameters": {
+    "substeps": 4,
+    "iterations": 24,
+    "contact_enabled": true,
+    "contact_ke": 3000.0,
+    "contact_kd": 0.0,
+    "friction": 0.2,
+    "contact_gap": 0.00015,
+    "elastic_relaxation": 0.3
+  },
+  "gravity_m_s2": [
+    0,
+    0,
+    -9.81
+  ],
+  "contact_tool": {
+    "shape": "capsule_y",
+    "radius_m": 0.012,
+    "half_length_m": 0.035
+  },
+  "initial_condition": "1 s Newton settling from analytic gravity equilibrium K q = S g, tool parked clear; no per-step modal actuation",
+  "source_files": [
+    "toothbrush.py",
+    "brush_glove_geometry.py",
+    "test_brush_glove.py"
+  ],
+  "reproduce": "flock /tmp/newton-everyday-rom-gpu.lock timeout 5m env PYTHONPATH=/home/horde/newton-everyday-rom OPENBLAS_NUM_THREADS=1 PYTHONDONTWRITEBYTECODE=1 WARP_CACHE_PATH=/tmp/newton-everyday-brush-glove-warp uv run --offline --no-sync --project /home/horde/newton-reduced-pr python /home/horde/newton-everyday-rom/reports/everyday_rom/toothbrush.py --device cuda:0 --negative-control"
+}

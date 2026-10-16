@@ -1,0 +1,137 @@
+{
+  "scene": "headphones",
+  "runtime_pin": "8228bf6f690fff4dbb359d5de6447b09cb77c1e7",
+  "published_scene_url": "https://reports.mmacklin.com/everyday-rom/headphones/",
+  "published_provenance": {
+    "scene.json": {
+      "origin": "/home/horde/reports/everyday-rom/headphones/scene.json",
+      "sha256": "ab3f5db92c4daec8c21e000741179e1d55130e52dcaef3a04c1292353cb46169"
+    },
+    "metrics.json": {
+      "origin": "/home/horde/reports/everyday-rom/headphones/metrics.json",
+      "sha256": "2b52ca65ad50f162ce3fa34827e36dc893baa8956dfab897426ec9784fd95dde"
+    }
+  },
+  "published_settings": {
+    "substeps": 4,
+    "iterations": 20,
+    "contact_enabled": true,
+    "cable": true,
+    "device": "cuda:0",
+    "duration": 15.0
+  },
+  "local_modules": [
+    "headphones",
+    "headphone_geometry",
+    "capacity_audit"
+  ],
+  "files": {
+    "capacity_audit.py": {
+      "origin": "/home/horde/reports/everyday-rom/headphones/capacity_audit.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/headphones/capacity_audit.py",
+      "origin_sha256": "948f514fb2ef7b64a8f36be7ccb732150a55fb0d2c930706017fb731aa6a9c83",
+      "packaged_sha256": "6ae7d1bcd37468a67e65b0d596986f88e3f7fb57cfd8b8d98a4eda517d818848",
+      "bytes": 7483,
+      "exact_copy": false,
+      "published_hash_verified": false,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "observe_collision": "b313a1ea0280644bb94954c182baccfddcd58b46af9d6feddb8e675e0c76f394",
+        "observe_solve": "c5477841a41c40766f9dda51c5c16c17c0d82cbe3bb93e36ca52d396480c9158",
+        "validate": "332c09fc197eb4778af8ce4f3e386b76c6775e7b780e16e4dca4880b6dbaf89d",
+        "CapacityAudit.__init__": "4b811ecf9dc3a9d24fd26779fd1c717e301bf4f298b78905d26da09bf07f3e8b",
+        "CapacityAudit.after_collide": "d0fa1d087913409e490a26bda60d890b00921b57f0dc1d8909f43af6b766d68f",
+        "CapacityAudit.after_solve": "f85a5ea6ea14deeeb724c83e254288a6e95388b55900132e9dc14cf3a488caa3",
+        "CapacityAudit.data": "6ebbea816c3d453af9e0592ef40cfb446eb8ce64724762aebfefabe06603dbfa",
+        "CapacityAudit.check": "f170e08583b50aebe626a56f02b6cdecde4bdc1bdb3723f39c047bd8d24dad50",
+        "CapacityAudit.export": "0568f45f549c61f8ae8064a99d72d1a980bb5b4ab5141d3e5263e1afba1bcc02"
+      }
+    },
+    "headphone_geometry.py": {
+      "origin": "/home/horde/reports/everyday-rom/headphones/headphone_geometry.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/headphones/headphone_geometry.py",
+      "origin_sha256": "52e9a78b95348e510165a80e2f411949ac12baeb4c8ada8e5a23ca0428970774",
+      "packaged_sha256": "52e9a78b95348e510165a80e2f411949ac12baeb4c8ada8e5a23ca0428970774",
+      "bytes": 8401,
+      "exact_copy": true,
+      "published_hash_verified": true,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "orient": "77e864194f7d223b153c40b98a358d59f0e14d2eeec46477eced2c35f692d459",
+        "ring_surface": "bd95c5fec9af9c5040a2fd11b0697071cf7b4bf32de45fbe011ae1e79aca7f32",
+        "ellipsoid": "9d2ff47a1bacdf8d8c8011404a25d3e823e77c7247516f555d3358ad55ee5b21",
+        "cushion": "7bb28cb97689b57ea4f6306ced63489f1f40829e9da634e241fea5921f20b68b",
+        "box": "66e9f6e5c2edaeb498d47d5992154e28b54595e87555b42d37e2b052cfe1d6a2",
+        "capsule": "5d8743f5f461141777a51025a75dcabe2d1f402846c5c10bb95146f2b2cce6d9",
+        "transform_points": "1afd191a7882928fa5edb3b90aedd2c6a8354d880fe31f275a0ffa74cb3f0c3d",
+        "headband_fields": "ab911ba764c22e233c9943ff7ad9a2515ccc8d1df5b74c45b1c1a239d877f44c",
+        "build_headband": "a710900f83324c82c00bbd65b65fb00c52dee31a3f245f8036394e296df4263b"
+      }
+    },
+    "headphones.py": {
+      "origin": "/home/horde/reports/everyday-rom/headphones/headphones.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/headphones/headphones.py",
+      "origin_sha256": "6f6e2c3b9f1f8cc7049cf9b7f9697b388ad631f13e270b8870a1c9821a1d0fff",
+      "packaged_sha256": "0c0568d9847a6d42a8f72fcf0c863283816acd3d584babf9e989304e15554f61",
+      "bytes": 46956,
+      "exact_copy": false,
+      "published_hash_verified": true,
+      "changed_functions": [
+        "reproduction_command",
+        "main"
+      ],
+      "unchanged_function_ast_sha256": {
+        "smooth": "6331a874366929ba367378a8258ed3a77aa0d1517637e0bb3226d5659e529760",
+        "paddle_x": "497f85891133db67ac72555f57986b8ebc0a86229d5269922f0f132c17369277",
+        "drive_paddles": "c851b49444bc49b3b5d432ed91ffaa7a4322d4697ec054dcc85bfc530ffa8316",
+        "tick": "e209f24d32b9b34144e480b7904c647ef8bc3916a4d764323fce462faa565c48",
+        "gripper_position": "78b9397a9bfe12f8762f5a495da04324020e5b6a64ef3210733296663bb1bdb8",
+        "drive_gripper": "0c81ae664b7fea280fb45818b0f15e1ccd4c663d81cc460b7859bef1a76785e1",
+        "pose": "eb22138866d453511e1d8ceb695ae6cd391c17d84975bfb4cb1192f9f6f52df6",
+        "shape_config": "9a0ec550c61bdf45c66ca8b191ce4d2a15f97b8f723883872d60ea7026dc503a",
+        "box_sdf": "b4425078400af67535b913188c01bfec5fc7d458e16e387479d1ccc5d989824b",
+        "Example.__init__": "3801a9d9f8b67175eff8c3a43f7d6db1f1c76dca8e8fcbebc227308b917613ce",
+        "Example.release": "77485145c054722a2d9c622f879fc83f7737b3999d30a85f83a5fffcb95d0ddc",
+        "Example.add_mesh": "b88681e948f5aca9331b9291e7cd97b08c9d8c15ad9ae94d592681154ad2938b",
+        "Example.build_cable": "bd0366d932441921b4884e15bd3f9eb3207cbc3cd92769280e696702709d9c09",
+        "Example.simulate": "4233c55a2482700f4671b6757d5a08a4712600797db3633e7be6e4df245c7bb7",
+        "Example.step": "27e066e2827daf4fe6ccc9ef2a421a668b11caebd1fff16362a1b1d6a0d4a1c9",
+        "Example.render": "63a9f25b259becc5f8ce9d0dad94c9aef3575c0f1310730ad0f4fd6a42cb852e",
+        "Example.world_mesh": "d3c0fad6a2dca4dc851400d8d3359fbbec8a0909d80c3c2cc7b2cabd3f0a6a5a",
+        "Example.joint_gap": "0bd18885d47119db36ded88ca5b2b64fa08aa50070625b158f3247ec3925c928",
+        "Example.clearances": "dcee53cf90f0a0da77b10069315bbf58a8da6809b6a2c48cbe5e657d3e1a9996",
+        "Example.record": "d3b9376c0d53089ee3ab030ffb10bd9fbe285f30665f2aca5c5e45c2a35c8ad1",
+        "Example.summary": "2d6c168840ad2a20922eef4384200e240d7648451e47a4da79640196ef701bf4",
+        "Example.test_final": "3547dec10446fa8682c7b625c8d5d233b9ba76cb13a01f9ce69bf127fae170c7",
+        "Example.export": "59942f2849b70f960767c6572b5b0461ccf09c96aa5fc802fdd68e19a5b45acc",
+        "run": "a47425a1b12717f0e4733a2430f19fc3a6c031847c0327a23305a5df38c9c89b"
+      }
+    },
+    "test_headphones.py": {
+      "origin": "/home/horde/reports/everyday-rom/headphones/test_headphones.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/headphones/test_headphones.py",
+      "origin_sha256": "bbcc7cbe2e277f213a2e32b004457fd2a26864776d19cba8771275b2a1ce0c97",
+      "packaged_sha256": "bbcc7cbe2e277f213a2e32b004457fd2a26864776d19cba8771275b2a1ce0c97",
+      "bytes": 11166,
+      "exact_copy": true,
+      "published_hash_verified": false,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "assert_closed_mesh": "ffee283ee520fd5ec88860bb2dc00de0a8a2db1cf60f364aceeb3d1965da53a1",
+        "GeometryTests.test_closed_surfaces": "f5f993d22d88172f6fa3516bb0dc7ca5b2815f7331dd1f3be7de19e49336cde2",
+        "GeometryTests.test_mass_and_inertia": "51cce9544048dc85d5a75fece85a77b2b0345d74312e9079344dccfa4cbc8a76",
+        "GeometryTests.test_crown_and_pivots": "e5c1a02c4a8e9eef9f6e5f3cc73326ca9adccf14459b98e39ad35f61c71fcba6",
+        "GeometryTests.test_initial_clearance": "dd72ad17f0287e5c776b6bfc86bc895011dc7efcc4d52412c6d8d746f959e14f",
+        "GeometryTests.test_public_api_and_actuation": "2cbfcbc988d81e0f0b0bd41876a7ff4755d07c80e51e6a233b87a07d408d0587",
+        "rotation_matrix": "f16522526b591f81801e8ad79cb15ed5b175a0229493636a72c13b695a57a41b",
+        "audit_export": "25b8aeefa57e163807ec0f4662d87753dcfef43af349568ca042f57119019e84",
+        "audit_rejects_corruption": "636a312440c5f4c7a0a8cba7ee452964399f9626b1f61e8a59db335638213f2d"
+      }
+    }
+  },
+  "modifications": "Output paths, generated reproduction commands, and test fixture/launcher paths only. See portability.patch.",
+  "runtime_notes": "Uses public newton imports; capacity and modal diagnostics read SolverVBD implementation arrays. No experimental native kernels included.",
+  "excluded": "Saved trajectories, images, videos, HTML, raw private data, performance experiments and archived debug checkpoints.",
+  "validation_scope": "CPU tests and CLI help only; no fresh full GPU trajectory or renderer qualification.",
+  "packaging_hygiene": "Repository-pinned Ruff formatting/lint and Warp array-annotation normalization applied after portability.patch. Original provenance hashes are preserved; packaged hashes describe the final source. No force law or physical threshold changed."
+}

@@ -1,0 +1,2 @@
+# A unified diff uses one significant space for an empty context line.
+scenes/*/portability.patch whitespace=-blank-at-eol

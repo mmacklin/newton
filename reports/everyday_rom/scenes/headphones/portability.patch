@@ -1,0 +1,28 @@
+--- published/headphones.py
++++ packaged/headphones.py
+@@ -905,13 +905,12 @@
+ 
+ def reproduction_command(directory):
+     script = Path(__file__).resolve()
+-    root = script.parents[2]
++    root = Path(newton.__file__).resolve().parents[1]
+     return (
+         "flock /tmp/newton-everyday-rom-gpu.lock timeout 5m env "
+-        f"PYTHONPATH={root} OPENBLAS_NUM_THREADS=1 PYTHONDONTWRITEBYTECODE=1 "
++        f'PYTHONPATH="{root}" OPENBLAS_NUM_THREADS=1 PYTHONDONTWRITEBYTECODE=1 '
+         "WARP_CACHE_PATH=/tmp/newton-everyday-headphones-warp "
+-        "uv run --offline --no-sync --project /home/horde/newton-reduced-pr "
+-        f"python {script} --output {directory}"
++        f'uv run --project "{root}" python "{script}" --output "{directory}"'
+     )
+ 
+ 
+@@ -926,7 +925,7 @@
+ 
+ def main():
+     parser = argparse.ArgumentParser(description=__doc__)
+-    parser.add_argument("--output", type=Path, default=Path("/home/horde/reports/everyday-rom/headphones"))
++    parser.add_argument("--output", type=Path, default=Path("output/headphones"))
+     parser.add_argument("--no-cable", action="store_true")
+     parser.add_argument(
+         "--quick", action="store_true", help="Diagnostic run without negative control or validated status"

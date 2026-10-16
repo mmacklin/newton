@@ -1,0 +1,211 @@
+{
+  "scene": "spatula",
+  "runtime_pin": "8228bf6f690fff4dbb359d5de6447b09cb77c1e7",
+  "published_scene_url": "https://reports.mmacklin.com/everyday-rom/spatula/",
+  "published_provenance": {
+    "scene.json": {
+      "origin": "/home/horde/reports/everyday-rom/spatula/scene.json",
+      "sha256": "5ff3beeec62b1d4833890cb17105cffcdc73f41e0936cf8896b645636e1ac87b"
+    },
+    "metrics.json": {
+      "origin": "/home/horde/reports/everyday-rom/spatula/metrics.json",
+      "sha256": "c440aad9e196ebb6daaecf5c5fba4f8441ea161ece4f8e8984602734ac58b4dc"
+    }
+  },
+  "published_settings": {
+    "substeps": 4,
+    "iterations": 16,
+    "contact_enabled": true,
+    "contact_ke": 40000.0,
+    "contact_kd": 0.03,
+    "contact_gap": 0.00025,
+    "friction": 0.3,
+    "damping_ratio": 0.12,
+    "density": 1100.0,
+    "length": 0.11,
+    "young_modulus": 24000000.0,
+    "poisson_ratio": 0.45,
+    "handle_mass": 0.065,
+    "release_time": 3.2
+  },
+  "local_modules": [
+    "spatula",
+    "straw",
+    "utensil_geometry",
+    "capacity_audit"
+  ],
+  "files": {
+    "capacity_audit.py": {
+      "origin": "/home/horde/reports/everyday-rom/spatula/source/capacity_audit.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/spatula/source/capacity_audit.py",
+      "origin_sha256": "948f514fb2ef7b64a8f36be7ccb732150a55fb0d2c930706017fb731aa6a9c83",
+      "packaged_sha256": "6ae7d1bcd37468a67e65b0d596986f88e3f7fb57cfd8b8d98a4eda517d818848",
+      "bytes": 7483,
+      "exact_copy": false,
+      "published_hash_verified": false,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "observe_collision": "b313a1ea0280644bb94954c182baccfddcd58b46af9d6feddb8e675e0c76f394",
+        "observe_solve": "c5477841a41c40766f9dda51c5c16c17c0d82cbe3bb93e36ca52d396480c9158",
+        "validate": "332c09fc197eb4778af8ce4f3e386b76c6775e7b780e16e4dca4880b6dbaf89d",
+        "CapacityAudit.__init__": "4b811ecf9dc3a9d24fd26779fd1c717e301bf4f298b78905d26da09bf07f3e8b",
+        "CapacityAudit.after_collide": "d0fa1d087913409e490a26bda60d890b00921b57f0dc1d8909f43af6b766d68f",
+        "CapacityAudit.after_solve": "f85a5ea6ea14deeeb724c83e254288a6e95388b55900132e9dc14cf3a488caa3",
+        "CapacityAudit.data": "6ebbea816c3d453af9e0592ef40cfb446eb8ce64724762aebfefabe06603dbfa",
+        "CapacityAudit.check": "f170e08583b50aebe626a56f02b6cdecde4bdc1bdb3723f39c047bd8d24dad50",
+        "CapacityAudit.export": "0568f45f549c61f8ae8064a99d72d1a980bb5b4ab5141d3e5263e1afba1bcc02"
+      }
+    },
+    "render_scene.py": {
+      "origin": "/home/horde/reports/everyday-rom/source/render_scene.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/source/render_scene.py",
+      "origin_sha256": "39b5a070f25b58eaf1e4d9b63262ed3e0cf10011e643fec3656f0b0126cef32d",
+      "packaged_sha256": "39b5a070f25b58eaf1e4d9b63262ed3e0cf10011e643fec3656f0b0126cef32d",
+      "bytes": 15344,
+      "exact_copy": true,
+      "published_hash_verified": false,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "digest": "52233595ef999bad82a3dce633d94dbe5747b8e5bbe9f2c1844557a18fe9a66b",
+        "validate_scene": "11790aff38552a87ba8117c7f99fbe1977f5206b977079e1af44c1c9a9636a47",
+        "normals": "7eeb422d303d4f59295b3893b3dd63f3e4b86540507c088c94dc83f87235bf5f",
+        "look_at": "7f782be9508bc2151bf52697bf93f785475eb695e8b19eb7631bb12c2a2babc9",
+        "camera_path": "52e68a5347e8e9c357c1b3e25b235b9247ba1dbcaf08c74f4e52860bd528c89a",
+        "material": "3175eb7c23c9a07f574a703e2460b10927aa844c14991ab2d26e5c84c7023fc0",
+        "mesh": "c8986bba4f567220db80cb9271ff22a38b94d371d751baa3c9924ce9e0b92e7e",
+        "create_stage": "13d236022996b116e42592851f9807bfaff452db3e478b6c3e67cbc23f6f0e9e",
+        "main": "0fdf88f657551f23329604fe0aff7a4687615bbfac30e25859bf2bd99a374d7a"
+      }
+    },
+    "spatula.py": {
+      "origin": "/home/horde/reports/everyday-rom/spatula/source/spatula.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/spatula/source/spatula.py",
+      "origin_sha256": "0bbb3229fcc4444f57c5fcfb24eeb512a9ccce2f7ddefe20b67a4de2c02529b5",
+      "packaged_sha256": "0bbb3229fcc4444f57c5fcfb24eeb512a9ccce2f7ddefe20b67a4de2c02529b5",
+      "bytes": 24920,
+      "exact_copy": true,
+      "published_hash_verified": true,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "blade_section": "ab612542f3c0245dfe6edfcc5aeaa0f0df5f8b885d889ee60d4ed91aa988fd08",
+        "build_blade": "76b5461ad3940655e99d286d793e494ffa11b2548e970d44ce5be8589c663ea7",
+        "handle_mesh": "ef719574b9ac41c043446fc6f8e6a2e872e3a0806858b79ecde89af787dce67e",
+        "bowl_geometry": "feeea3c2f5d5b57648c0685025b72ddc44b5c2d76d16d87dd5e354da9d9d5037",
+        "bowl_distance": "5d0bd275c4629a3edfe2f4cc9a2774c1f8b51aeedb09e55e77f4c4035bd70edb",
+        "grip_position": "d52f4f699567865317d240cf0bc015b2ffc2096ae8027ebb5c1e4d27ddcde8cb",
+        "drive_grip": "e343fcdfa4c0f8e571cc56e603b8c9f9361059e35690ea1fb283200681b7c312",
+        "Example.__init__": "201b684792ea3f88e1f8a2786975724085314aca586ae12f145fc6dd21b2ce31",
+        "Example.simulate": "f764b474c6dfe728320b1f58bce0de458bd3900d6e92046d715a4b58e1abd3d6",
+        "Example.step": "0f96c2ccb3d21b20e3e5db120c8b5bb4b84db984b37ec10c054635f18341c714",
+        "Example.surface_distance": "08aec83c8f685f6c07fcfc6982481f74c9799b6c429ebb2dc24a6971c2bf087c",
+        "Example.update_metrics": "b1a06cacfc125e1e7412ef28a84e6d9e131ff57e7917d9dc2c83aab926468653",
+        "Example.summary": "c4308f8b27b4f51026b3c4bbf70a010928ea18c487a5583ca79622623e11720a",
+        "Example.test_final": "7d45d1e533806d8eac5ab8355f9add303d88521c61df9b524495b5fca017b4f9",
+        "Example.export": "942290dcb7a3c6ad0318c48fed109a96eda44cf88fcde2a0c95f8d7b9d6fde70"
+      }
+    },
+    "straw.py": {
+      "origin": "/home/horde/reports/everyday-rom/spatula/source/straw.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/spatula/source/straw.py",
+      "origin_sha256": "cdeb083a68d3ef8fac477a1100a6b282b53a540b42db1dab302b2017b1d7d059",
+      "packaged_sha256": "50a93dfbed15ca6e19203862b248c45b9316095d3de871853fd7985cfd6ffedb",
+      "bytes": 38396,
+      "exact_copy": false,
+      "published_hash_verified": false,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "build_straight_straw": "4aade7fa4247a19c04ae7b117c7d2af9df86f16f8daa886c6173ae9fc2f8215f",
+        "centerline": "d0e9d287071a7e20d6274c8182f5a57b44de9a7fbf159cb26148a32afdf13eb3",
+        "beam_quadrature": "0bb0255c00839cca0dea7d3ff86ea1fa0269d7a7bc29ca30977eb6fa8ba10a5a",
+        "rotation_modes": "f835d2e5e898f287525985fb789e4b423bed4fd77c20d0db257307bb8aef6d75",
+        "centerline_modes": "876306bd0d8759a0703f204ea3ac274392086dcbb07d14bd00189286455810f2",
+        "straw_sections": "afcb657c7435ce286f4711801e976421d72853f14d352023529186dafe5831c3",
+        "build_straw": "5ab723a6858d8181d43ec61a23b002c707be7c60d352644a1250297af9e91b67",
+        "project_rigid_fields": "7ce991c962b5faa593e3d18c48368d60954b423d2fd80fac3311d1a4cf2b3984",
+        "projected_root_samples": "79e048840640538cfd73bd73c77f15128b1797843e3e69301e71cc16d4ee81d8",
+        "open_fixture": "aa95b227649831429338875205d81d97e3febfd1a4c7f53ea9898a884b75b686",
+        "Example.__init__": "d1c15f41e6850ce521e9884a5c6424c5d04124d3afa9a1910cfd20ac5037d0b8",
+        "Example.simulate": "9d99f0b8b6fbecf589cd94eb655bf8ec71b8d794c754a350652bb69004f50560",
+        "Example.step": "d3351ca379913272b829e575a383546affe5e5c6526e84dc28078046fbe2ab6a",
+        "Example.surface_distance": "43f917c7230f5f1cb4306bcd2b493e7c644d5df8592348637121742debfde2cc",
+        "Example.update_metrics": "c42127ed8bce1fa3944cc37a1b7466e287a72946ba23d922472f61f28b25b407",
+        "Example.obstacle_endpoints": "65beac7f08ceaaa32dce1009c0783f09a8b9ce66d85a7f568f8b523f4832780b",
+        "Example.summary": "4163b2a6d558f7a511afbe640ef86b3d45ce33a9319dc4a946e7e04828426e75",
+        "Example.test_final": "0c80c9eb6325e8ed25c6841af6cea3e87b29510c528795be1c3f6916da2b48eb",
+        "Example.export": "dfef298aea415918f6f02280a82346b8d16b040117847c32a865c2f385751653"
+      }
+    },
+    "test_utensils.py": {
+      "origin": "/home/horde/reports/everyday-rom/spatula/source/test_utensils.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/spatula/source/test_utensils.py",
+      "origin_sha256": "85b0e7096b6e5b040547bd70eb4a12bf84d49f115a11e225aa69b0079513411b",
+      "packaged_sha256": "76b4faca23509bb51ad3f9adc680dd701099442a9518ccbba5b4b3aba286cc2d",
+      "bytes": 18230,
+      "exact_copy": false,
+      "published_hash_verified": false,
+      "changed_functions": [
+        "check_outputs"
+      ],
+      "unchanged_function_ast_sha256": {
+        "assert_closed": "8b1a261ddbfe9a7cd565fb9628bd5ab99ade0b1f80bf51796d9bc43c9dd9c8d1",
+        "GeometryTests.test_validation_rejects_skipped_assertions_before_warp_init": "d8ad5eb0db87770b88375b12aaaf3cf9fe441798e6890f5ba8143fd2f9f0501c",
+        "GeometryTests.test_straw_is_hollow_closed_wall": "db032d7029c3f25282f3216555d127f0945b23bfeabc6bc708aef21ae9eb4766",
+        "GeometryTests.test_curved_straw_ritz_kinematics": "be4195b36a23c5391b260bb214e7687c1d590326cadba0dfe7b2a28efa480e8f",
+        "GeometryTests.test_straight_straw_baseline": "b773e04e44aebe05de9ba9bb429b4335e2df340f02e49908cf68e3dbb6fbe1ba",
+        "GeometryTests.test_blade_is_tapered_closed_and_clamped": "c7f2904987e43279be274017393cf60875b3a40d4a4c7ea2098ef07c5cc839fd",
+        "GeometryTests.check_basis": "5e1305a497eaa0ebdb48fe85471c3a737a929175f00165936c36b490a0f80bca",
+        "GeometryTests.test_visuals_and_exact_capsule": "07714e16ea73a51803061652ad90bee0bd4c071531cd1fac5bb61a2868453c05",
+        "GeometryTests.test_bowl_is_a_closed_concave_collision_shell": "6e9fd662996ef1ba9f5ca7727f66b91934848bfae4a37d1947148dfcf33c8ba8",
+        "GeometryTests.test_spatula_release_changes_only_the_actuator": "56e8fd3106fa9ca31808e64377e8eb368769767c8ca0357e50c80c3d42bf20c7",
+        "check_straw_camera_and_mouth": "6d4677137ac0f8554c881eb3c01c8aabb5c3f573158b7814bb0d4f4d0d473b8f",
+        "check_spatula_export": "86aac4591046f35aab1e703ad4393c83627cd09bcad213fa7c8398c4a82e97a0"
+      }
+    },
+    "utensil_geometry.py": {
+      "origin": "/home/horde/reports/everyday-rom/spatula/source/utensil_geometry.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/spatula/source/utensil_geometry.py",
+      "origin_sha256": "7c7e39396d0a045b3bf6461a32713118289141f5d1a445c0efc5a4571c009c42",
+      "packaged_sha256": "718e76e174b305f0b4d96a5b66d9af9b1c436c2071b734c9906f9173590be0d4",
+      "bytes": 32231,
+      "exact_copy": false,
+      "published_hash_verified": true,
+      "changed_functions": [
+        "reproduction_command",
+        "run_cli"
+      ],
+      "unchanged_function_ast_sha256": {
+        "shape_config": "0e148971374734fa8b5f81af8a57cec721d541aa2606b9a42908a87cfd27dc9f",
+        "connect_rings": "62961b39ac9d11243bcb49caf48e28e9cabd2be94c3c9844de027214008a7682",
+        "orient_mesh": "80b7f0fa570cc6b8cafad6c41bf47c76f18349a3419dd87de4b32dda3e049e51",
+        "lathe": "72415930fb786224afde9c26738c2dea3be7cbcb2b0641d724ec8f3bec918453",
+        "capsule_mesh": "c11e3abb279a1513a6f8f68283fd869db9e2bcf80bc8f253cce5d2404c261b02",
+        "capsule_sdf": "4d534f50186e8e610a15201b7f9d2e93b015eb30fc3f1a3e5a26251e1bfb8839",
+        "capsule_pose": "10d2f5801948e98ceb1ef3e65ac8dc48d1e8213a1ec532513eb8aba7c764a535",
+        "transform_vertices": "917666c67cd33a021beac1252d5f0a82635a5d765aa0998472b870f8accbc7c1",
+        "mesh_edges": "16d6ec8cae13e6df304a57c9fe2ec14fb1c1b3b89393755ff2ce2424eabd743d",
+        "diagonalize_basis": "30a4292be601e2546c3a4ce7521fec01531a97b4e9acc059170b5dc1e8b072b5",
+        "ramp": "bd6eada9f7ec26c6407f4c5ba234ca9725e3dddc9589e7bccf33ffa446fb6d60",
+        "target_position": "c4e4d745708d1f5372332004a861bc61b0320302cdf6940a93664a3f5b366e07",
+        "drive_frame": "901596ba09f48914ec47ea64f7be24f63592a990c29cbc33a1d757a664b3b843",
+        "tick": "e209f24d32b9b34144e480b7904c647ef8bc3916a4d764323fce462faa565c48",
+        "UtensilExample.finish_setup": "eb861dc55b3d7cf6f7037ff8e2bffe6da1d05f84c4f8114feba3a157c6c3d0e7",
+        "UtensilExample.add_visual": "5907c189452ac8f35503305ada028653aaaa33e7091389efa512d886de8ca4a4",
+        "UtensilExample.simulate": "05acf9fb04fc1425c35ff896664de7a654f7fe5aa64b522e4b06dbde07f1ba54",
+        "UtensilExample.step": "8b79505ca95401df5e4bc2b4d0af3d12659ad96d43118317b31640eee0371586",
+        "UtensilExample.update_metrics": "7cf1767990922832c816d08ad5307871680bb1e935e420de699ccab541487749",
+        "UtensilExample.surface_distance": "d6f202f9bbeb4806b6d0d3823a4f8bd93bb783d5c8288433b0f5a1228c520933",
+        "UtensilExample.render": "dae4c2a8c4cdf2f1647a1df0cda6300c8ca36847269619031c61632c05692110",
+        "UtensilExample.summary": "09b3e4d341b151bf2b35f2a0ab97b660faa350efb64f2c1e4231c57742706ad4",
+        "UtensilExample.test_final": "ccfbb5cd321e4a9d062286ec8caf2cb23d668551afec1d7df5ec36967d8d4333",
+        "UtensilExample.export": "62b3f2d7ee7bf12c386d8779d616935ed14020b9614d8207bbec05213e22cc28",
+        "compare_negative_control": "e11b33a52d472ae3d0c0da473e2d77655e6cb78d3dab063b2a4ad305daa3111d",
+        "verify_export": "597e853f55b1bc52c3bd3ac1d019f2f1d1f1e09ce9ffc68b4dbfddfe0d480e37"
+      }
+    }
+  },
+  "modifications": "Output paths, generated reproduction commands, and test fixture/launcher paths only. See portability.patch.",
+  "runtime_notes": "Uses public newton imports; capacity and modal diagnostics read SolverVBD implementation arrays. No experimental native kernels included.",
+  "excluded": "Saved trajectories, images, videos, HTML, raw private data, performance experiments and archived debug checkpoints.",
+  "validation_scope": "CPU tests and CLI help only; no fresh full GPU trajectory or renderer qualification.",
+  "packaging_hygiene": "Repository-pinned Ruff formatting/lint and Warp array-annotation normalization applied after portability.patch. Original provenance hashes are preserved; packaged hashes describe the final source. No force law or physical threshold changed."
+}

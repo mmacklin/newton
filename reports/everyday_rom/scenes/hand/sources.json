@@ -1,0 +1,37 @@
+{
+  "expressive.py": {
+    "source": "https://reports.mmacklin.com/everyday-rom/hand/source/expressive.py",
+    "source_sha256": "3dbb4730badafca34c0927cbd98b0bfcd8b1cd3cae63e8d90b89943c8ba43683",
+    "bundled_sha256": "7b12d2f7eec06f21ded43c706482b80b447667d9f9cecde3855a6d587fe41842"
+  },
+  "fit_bounded_targets.py": {
+    "source": "https://reports.mmacklin.com/everyday-rom/hand/source/fit_bounded_targets.py",
+    "source_sha256": "e8b90c809f89ba9151e1122d4cb583e07c8549fa24910ea6c86ce9dc7c1a27b9",
+    "bundled_sha256": "e6050d0f643eec73eaf0bd1c5e4f3a7d1bb8703d208f26c9b14a1313b0c77014"
+  },
+  "hand_contact.py": {
+    "source": "https://reports.mmacklin.com/everyday-rom/hand/source/hand_contact.py",
+    "source_sha256": "7c0703d7ea09bbace03f9eb1f3fb430ad11406839806c188888288907810299e",
+    "bundled_sha256": "4bbdd45c657a914555ad85b2d7df1b82bb972a75e75b8e8dcce5d072083a08ee"
+  },
+  "hand_geometry.py": {
+    "source": "https://reports.mmacklin.com/everyday-rom/hand/source/hand_geometry.py",
+    "source_sha256": "e6a293026c12008a85d7ecb16611eb1ba5b1347a44ea866ad1d7fa022edfe85a",
+    "bundled_sha256": "5ebb3a2fb6cf87f8b0d4ad940b679c61b66231578bd3345613ce6ae30e2bbfb3"
+  },
+  "individual.py": {
+    "source": "https://reports.mmacklin.com/everyday-rom/hand/source/individual.py",
+    "source_sha256": "2af3d86d74ad84d58598e7ad7dae030c379177b501819781781412e362dd8df8",
+    "bundled_sha256": "2ec32a48d1b6db0035610f09395951f99b5231d8f58b872ac08983b1e923cff2"
+  },
+  "load_hand_rom.py": {
+    "source": "https://reports.mmacklin.com/everyday-rom/hand/source/load_hand_rom.py",
+    "source_sha256": "dc031071fe77b309b0ffdf32f7ee76eeba9c769c6d041490e3f4a5684fc5f977",
+    "bundled_sha256": "dc031071fe77b309b0ffdf32f7ee76eeba9c769c6d041490e3f4a5684fc5f977"
+  },
+  "test_expressive.py": {
+    "source": "https://reports.mmacklin.com/everyday-rom/hand/source/test_expressive.py",
+    "source_sha256": "c788eeee0da947422f4886dde4dcc30e817b062b050acf9d9be1f801cb971f91",
+    "bundled_sha256": "43882cb0248b273cabbe8677349bbf9634326bd1320adcbf5b86f66d773deca1"
+  }
+}

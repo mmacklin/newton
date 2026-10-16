@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add ten everyday reduced-elastic research examples, their derived assets, and reproducible validation and rendering scripts under `reports/everyday_rom/`.
+
 <!-- towncrier release notes start -->
 
 ## [1.5.1] - 2026-08-27

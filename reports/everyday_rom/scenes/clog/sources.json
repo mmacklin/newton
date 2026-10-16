@@ -1,0 +1,188 @@
+{
+  "scene": "clog",
+  "runtime_pin": "8228bf6f690fff4dbb359d5de6447b09cb77c1e7",
+  "published_scene_url": "https://reports.mmacklin.com/everyday-rom/clog/",
+  "published_provenance": {
+    "scene.json": {
+      "origin": "/home/horde/reports/everyday-rom/clog/scene.json",
+      "sha256": "67abd6bb59993e9dc17f9cff254fe0858eaa6ca9ddc7f1e71216cb979809f4ee"
+    },
+    "metrics.json": {
+      "origin": "/home/horde/reports/everyday-rom/clog/metrics.json",
+      "sha256": "b4d2abf69b4c53ed892e41e6323fe43699314ac7d17eec5b1643cc34e0db0b84"
+    }
+  },
+  "published_settings": {
+    "substeps": 4,
+    "iterations": 24,
+    "contact_enabled": true,
+    "contact_ke": 80000.0,
+    "contact_kd": 0.004,
+    "contact_gap": 0.0004,
+    "friction": 0.5,
+    "damping_ratio": 0.08
+  },
+  "local_modules": [
+    "clog",
+    "cap",
+    "wearable_geometry",
+    "contact_capacity"
+  ],
+  "files": {
+    "cap.py": {
+      "origin": "/home/horde/reports/everyday-rom/clog/cap.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/clog/cap.py",
+      "origin_sha256": "d1bb76bdf3c57a553676d1f9ee0d4013da369f0cece8d9e27b38bcac9d4a8cc8",
+      "packaged_sha256": "d1bb76bdf3c57a553676d1f9ee0d4013da369f0cece8d9e27b38bcac9d4a8cc8",
+      "bytes": 18834,
+      "exact_copy": true,
+      "published_hash_verified": true,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "crown_point": "8202770de3ead142b98c6dd4a8d4ee13fac22da41ef78ee6a36ed901af6db316",
+        "crown_mesh": "9706e9e8a2947e5461a29fda5614e410c02aaa4f9232d57a95cf466435c2d3f5",
+        "brim_point": "2b7785ab2053f9ae3895e10342d34d25a5e44cb84666ec089e554f116ebd9ddb",
+        "modes": "60dd1926227fb93b6c2f89c66cb51ee69ce162c8430bc16807b41c92d82d1e74",
+        "whole_crown_pod": "ae83478371e2403e4fd94b63d21e33be0531e65f48f10980752c5e11e9123a0d",
+        "shell_stiffness_modes": "9e7d62c4086f7460be347cae2bf62a101f52ef68a82f42f0594cc6daf4b5afba",
+        "make_spec": "420e095c6f60e2f59e6fbb7836b1ce5e0fcf7417275580a4a96c1a0613dab968",
+        "Example.__init__": "81bebfd14cd9bd63383fd6487fa1232b98422cb245eec49da683706c491f1864"
+      }
+    },
+    "clog.py": {
+      "origin": "/home/horde/reports/everyday-rom/clog/clog.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/clog/clog.py",
+      "origin_sha256": "c13fb01da30e7f88210def8d4dfe85ae685da1e7a55f7c6d49764bdfcdbb7f2f",
+      "packaged_sha256": "c13fb01da30e7f88210def8d4dfe85ae685da1e7a55f7c6d49764bdfcdbb7f2f",
+      "bytes": 12477,
+      "exact_copy": true,
+      "published_hash_verified": true,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "distal_toe_points": "20c8e10a3a1fb67570a644befd00f601ecef0412f04eec9e8206aa618badc5a8",
+        "distal_toe_mesh": "1603f0b76d6e96366f57c7cab91f18cdb223f150db1a3bc9329ce014defd256f",
+        "outline": "20c6a792482c3f390a2440c488c01cfc0f47b7ad1fe59c3ee969390a40a49fe9",
+        "upper_point": "7c06859d7de3c4d2ea3ac45ab7f0e00ed6961a1d5c5e0a9aa4eaa5057c65bf8b",
+        "retriangulate_upper": "f918bab0f5f2b7400094b479bea7a14a9198c8a6a95e9880003ded5a550c212e",
+        "perforated_upper": "866720ab6e337cc5c033d1fc9773f3b670daaeb1a056e0a86662cb0929f8de42",
+        "sole_mesh": "106a6424e6686b9a1022962287353fbb78c4c17fd058334050637950d60945e4",
+        "modes": "1953f069cb47be2cd2568ab17e726068b2c3202e2ffe4e417f955d299b5a36e0",
+        "make_spec": "41f60e6fb1d74fcf20bb1d4ee42df3568f116b0027cf2e3314c35dc4dce36a24",
+        "Example.__init__": "81bebfd14cd9bd63383fd6487fa1232b98422cb245eec49da683706c491f1864"
+      }
+    },
+    "contact_capacity.py": {
+      "origin": "/home/horde/reports/everyday-rom/clog/contact_capacity.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/clog/contact_capacity.py",
+      "origin_sha256": "c321cb27297dbfe86faacff11f70109d75b621d1aa4e6fa709f6e098df6f753c",
+      "packaged_sha256": "125f2fe7b5e6c5a7b04cae6102c86d8ad9d3e926b4bbd384f7af1073882c3596",
+      "bytes": 5630,
+      "exact_copy": false,
+      "published_hash_verified": true,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "record_collide": "e8698a2af8337692560673b566c29ce07b8bbeb9c54c8762cb232ed043068ff7",
+        "record_solved": "e40f03e89a5db17e9bf8f7a05dd53141b293161884b5d316c410ad0c8a2d8ff0",
+        "validate_counts": "19ddde40d11375d12c2465871bf112bb2fcfbc1fa5be004fc6232309ec2b7a12",
+        "ContactRecorder.__init__": "e648d93365df5f2142c5eb4838d728d78823e54df95af104abf386571ccc5030",
+        "ContactRecorder.collide": "306f93cd3d35a7ba03a3e5acfb781f5c4efbbd7be0cec7d1b9969150753d02c7",
+        "ContactRecorder.solved": "c17475001ad803ef8fd5a5aeec397ccc849580b401764073b3122f2a130272dc",
+        "ContactRecorder.data": "10e81e038a5805affb342acd43718c9016df0847a267791a28a6327c4fe833dc",
+        "ContactRecorder.summary": "3850794aed25cc1dbf5d05c5842ea965fc53dfbe9130494bb2df9933c9aec213",
+        "ContactRecorder.validate": "508fe8d9bdd889f52b10bbbbdd0427d7d910d6070da5a03163518dfff3f8245d",
+        "ContactRecorder.export": "ad118418403a408a593a965f648fee3c100007fbe48675706ff787f9131275fb"
+      }
+    },
+    "render_scene.py": {
+      "origin": "/home/horde/reports/everyday-rom/clog/render_scene.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/clog/render_scene.py",
+      "origin_sha256": "39b5a070f25b58eaf1e4d9b63262ed3e0cf10011e643fec3656f0b0126cef32d",
+      "packaged_sha256": "39b5a070f25b58eaf1e4d9b63262ed3e0cf10011e643fec3656f0b0126cef32d",
+      "bytes": 15344,
+      "exact_copy": true,
+      "published_hash_verified": false,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "digest": "52233595ef999bad82a3dce633d94dbe5747b8e5bbe9f2c1844557a18fe9a66b",
+        "validate_scene": "11790aff38552a87ba8117c7f99fbe1977f5206b977079e1af44c1c9a9636a47",
+        "normals": "7eeb422d303d4f59295b3893b3dd63f3e4b86540507c088c94dc83f87235bf5f",
+        "look_at": "7f782be9508bc2151bf52697bf93f785475eb695e8b19eb7631bb12c2a2babc9",
+        "camera_path": "52e68a5347e8e9c357c1b3e25b235b9247ba1dbcaf08c74f4e52860bd528c89a",
+        "material": "3175eb7c23c9a07f574a703e2460b10927aa844c14991ab2d26e5c84c7023fc0",
+        "mesh": "c8986bba4f567220db80cb9271ff22a38b94d371d751baa3c9924ce9e0b92e7e",
+        "create_stage": "13d236022996b116e42592851f9807bfaff452db3e478b6c3e67cbc23f6f0e9e",
+        "main": "0fdf88f657551f23329604fe0aff7a4687615bbfac30e25859bf2bd99a374d7a"
+      }
+    },
+    "test_wearables.py": {
+      "origin": "/home/horde/reports/everyday-rom/clog/test_wearables.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/clog/test_wearables.py",
+      "origin_sha256": "6833c94a0c2a13011e9cb64391157c5fd424462bfee2831aed6b4313dac5f1a0",
+      "packaged_sha256": "6833c94a0c2a13011e9cb64391157c5fd424462bfee2831aed6b4313dac5f1a0",
+      "bytes": 21136,
+      "exact_copy": true,
+      "published_hash_verified": true,
+      "changed_functions": [],
+      "unchanged_function_ast_sha256": {
+        "verify_export": "8ef442cc5119b18faaa09c98e1fd5c552686d4fbd152f758cda9afbe35c07103",
+        "validate_pair": "77c6f665e3a1195848d8f67708609b286360274130d8e5e6203e4f322480d8bd",
+        "WearableGeometryTests.test_support_capsule_closed_surface_and_poles": "f07a144775f064acf74c978b6d3efcb071972c5bb42664226803aa479da86a74",
+        "WearableGeometryTests.test_principal_stretch_detects_sliver_strain": "38f63c48f6be8cc5ffcb44ac9d9a5ff8bdf5e07d3e0c724b854fe8a4a50aa8a8",
+        "WearableGeometryTests.test_geometry_and_basis": "fda1df06f968ff4fcc0672a65bfed15e01e8c5e0f21dbc02021c8e06277ff6dc",
+        "WearableGeometryTests.test_clog_perforations_are_topological_holes": "26c3dbd0165c3c2fd0c6a07777f88f1e8aa5914671083f3d094eb8c98d0c7894",
+        "WearableGeometryTests.test_clog_offset_skin_retriangulation": "005c774cc417cccf1887d66e9bde4b2d0394ae5ea0494ed665a8de7f35f6d639",
+        "WearableGeometryTests.test_cap_bill_snapshot_root_is_fixed_and_tip_is_flexible": "ef553edbcc7768e4d740e99ea73700d33d848dbdc4c4c29a0452ed24e2afc8c5",
+        "WearableGeometryTests.test_cap_bill_coordinate_round_trip": "b6088cdb7ade0f6743ce558e7dd899b5ca4263e025f4d2c5d6dc94179d3a2d52",
+        "WearableGeometryTests.test_whole_crown_pod": "b7f1b11bd63adc6d7729c3c31f90e21fa685265eaf51cff74e0a718db5150203",
+        "WearableGeometryTests.test_cap_projected_membrane_stiffness": "43502fa3d7bc21008742037b4d92fc88bcd123a5187493e6abaca8b5503c9bea",
+        "WearableGeometryTests.test_cap_bounded_validation_metadata": "09e23e1d269ecef18f1b2deb217adf72989b113c6d9160b765fb3e19a264db3d"
+      }
+    },
+    "wearable_geometry.py": {
+      "origin": "/home/horde/reports/everyday-rom/clog/wearable_geometry.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/clog/wearable_geometry.py",
+      "origin_sha256": "384f304740fbfedb64b5bdf88ba8eeac6083c94d4cca938fb3134ccdf748eb61",
+      "packaged_sha256": "99b000f6aff6ef9a5b696a7c9db2fc57ae00e8cef200d7268ff6beecf9be3fce",
+      "bytes": 47159,
+      "exact_copy": false,
+      "published_hash_verified": true,
+      "changed_functions": [
+        "WearableExample.export",
+        "run_cli"
+      ],
+      "unchanged_function_ast_sha256": {
+        "surface_mass": "6d4a4ffb3060a1242c6bf8ab1a67ab6ce8369468e32a296171dc27b954e40c95",
+        "triangle_reference": "8807a32f6830c49c429f70c302c0f884217fc8b99d87e360b60a0c8ab33fb44e",
+        "triangle_principal_stretches": "882eac4ed2badac74e76ed51c3e8a6fada8a0fb385e61f5b57980805b46e87b7",
+        "thicken": "9fac9bc82770656a61903e38019df49c064a42788f9109a18afa2df4a4ce2450",
+        "grid_mesh": "cb2ec8e605f9bdd2f981e271b96e54d6432ae313410f571561f070483bab532d",
+        "tube_mesh": "39e64628ccff7c3de3485dfa6e74cffa99b4cfe7499a41d46c2582de6c09a25a",
+        "ellipsoid_mesh": "eeaf22db5c7ec644e9ceafe72d6adfae5fdd26372f3ea84a39f30fb13bbc40cf",
+        "capsule_mesh": "9639a849304bf920c4bbf559b792945ea3b3c44ab273a84543ec2e6fd700bb72",
+        "Assembly.__init__": "792979e022c12a6d188b5815a6af4a6a43e9cbf03df63ccf1ce537cacbd7a88b",
+        "Assembly.add": "694c5f1745d44bd5ad8edd3b1d4123f66a95340213ac42a8d17a10929b35c1d2",
+        "Assembly.finish": "c3b79040e0aff7b625c014b4270ccc400b878dd9e26482a131d7373c8b674d64",
+        "mass_properties": "6e17db583076f12ef6dd7dd6a1b9dd62c01b60111c890a9c93d968a8be3ec52b",
+        "remove_rigid_modes": "7098d5a9b4d91487c7d01feb18df64a7f355d46fb10f56920132dd9a26f2b5a5",
+        "orthogonal_basis": "850ba35839c49abd279e8538b2b2d49c8c48ef09827adf3a13645115810a25e0",
+        "ramp": "160724db4fcfc931fac034b3758f07018917c4ca67a286614b0c5c1f5833987d",
+        "press_position": "87ca2ba5b4d80cc238fc755b642cb83d1324e5667ec9874177b4569e2034bca6",
+        "drive_press": "6362b02e47b524b738b558a3a7aed3f00b583fce373ffc3b1b8256137d9c94fe",
+        "tick": "82f00e01d0e9b1b7321ca24d440100fc55be5078c93bc619479c821c02a35c93",
+        "transform_points": "ad005fe9123056a7b2e76bb982654608dfe8efd300b0177e4f60eb910ea7d2d6",
+        "WearableExample.__init__": "7316c5b15c6428207e9257a7cff277d96804e28148e2711109fc22f6187fadf9",
+        "WearableExample.simulate": "6da223b2ad49ef298128a3b8d65308cba27f87e2535edc8d3aa0c6e8cada7193",
+        "WearableExample.step": "67819e8d84ff7d69e28dbbb6fdf2e9a02166e88619df5142f434997269c90c79",
+        "WearableExample.observe": "a58bedf329416f80fd932cccf212a44953f4abbbdad5e8da44aa5ca0532fd040",
+        "WearableExample.render": "dae4c2a8c4cdf2f1647a1df0cda6300c8ca36847269619031c61632c05692110",
+        "WearableExample.summary": "de616ecfd3fa42f4fb236b5b977178633a9310d60435e8872e7bed6398b5c1e2",
+        "WearableExample.test_final": "1b28f0541b7ff6b7d01b715e214b80dea21d2f3394b8ff7e9b01e1f31c4f7aac"
+      }
+    }
+  },
+  "modifications": "Output paths, generated reproduction commands, and test fixture/launcher paths only. See portability.patch.",
+  "runtime_notes": "Uses public newton imports; capacity and modal diagnostics read SolverVBD implementation arrays. No experimental native kernels included.",
+  "excluded": "Saved trajectories, images, videos, HTML, raw private data, performance experiments and archived debug checkpoints.",
+  "validation_scope": "CPU tests and CLI help only; no fresh full GPU trajectory or renderer qualification.",
+  "packaging_hygiene": "Repository-pinned Ruff formatting/lint and Warp array-annotation normalization applied after portability.patch. Original provenance hashes are preserved; packaged hashes describe the final source. No force law or physical threshold changed."
+}

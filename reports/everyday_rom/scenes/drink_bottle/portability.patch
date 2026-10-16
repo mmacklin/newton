@@ -1,0 +1,54 @@
+--- published/bottles.py
++++ packaged/bottles.py
+@@ -762,11 +762,11 @@
+         points = np.asarray([transform_points(platform, poses[shelf]) for poses in body_q])
+         add_mesh(f"retracting-support-shelf-{i}", points, pf, (0.17, 0.20, 0.22), 0.4, 0.15)
+     source = Path(__file__).resolve()
+-    root = source.parents[2]
++    root = Path(newton.__file__).resolve().parents[1]
+     command = (
+         f"flock /tmp/newton-everyday-rom-gpu.lock timeout 5m env PYTHONPATH={shlex.quote(str(root))} "
+         "OPENBLAS_NUM_THREADS=1 PYTHONDONTWRITEBYTECODE=1 WARP_CACHE_PATH=/tmp/newton-everyday-bottles-warp "
+-        "uv run --offline --no-sync --project /home/horde/newton-reduced-pr "
++        f"uv run --project {shlex.quote(str(root))} "
+         f"python {shlex.quote(str(source))} --slug {c.slug} --device cuda:0 "
+         f"--frames {c.frames} --iterations {c.iterations} --substeps {c.substeps} "
+         f"--output {shlex.quote(str(output))}"
+@@ -946,7 +946,7 @@
+     if args.refresh_render:
+         wp.init()
+         wp.set_device("cpu")
+-        output = args.output or Path("/home/horde/reports/everyday-rom") / args.slug
++        output = args.output or Path("output") / args.slug
+         refresh_render(output)
+         if (output / "negative-control" / "scene.json").exists():
+             refresh_render(output / "negative-control")
+@@ -963,7 +963,7 @@
+         compliant_alm=args.compliant_alm,
+         **{key: getattr(args, key) for key in numeric_options},
+     )
+-    output = args.output or Path("/home/horde/reports/everyday-rom") / cfg.slug
++    output = args.output or Path("output") / cfg.slug
+     example = run(cfg)
+     negative = None
+     status = "not_run"
+--- published/test_bottles.py
++++ packaged/test_bottles.py
+@@ -137,7 +137,7 @@
+ 
+ class TestBottleExports(unittest.TestCase):
+     def test_cuda_trajectories_and_surface_recovery(self):
+-        root = Path(os.environ.get("BOTTLE_TEST_ROOT", "/home/horde/reports/everyday-rom"))
++        root = Path(os.environ.get("BOTTLE_TEST_ROOT", "output"))
+         if not all((root / slug / "metrics.json").exists() for slug in SPECS):
+             self.skipTest("Run both --validate CUDA demos first")
+         for slug in SPECS:
+@@ -231,7 +231,7 @@
+ 
+     def test_rejected_runs_fail_principal_stretch_gate(self):
+         for slug in SPECS:
+-            output = Path(os.environ.get("BOTTLE_PRIOR_ROOT", "/home/horde/reports/everyday-rom")) / slug / "rejected-large-strain"
++            output = Path(os.environ.get("BOTTLE_PRIOR_ROOT", "output")) / slug / "rejected-large-strain"
+             if not (output / "trajectory.npz").exists():
+                 self.skipTest("Rejected-run audit artifacts are not available")
+             with (

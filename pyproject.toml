@@ -354,6 +354,8 @@ PN = "PN"
 pnd = "pnd"
 
 [tool.typos.default.extend-identifiers]
+# NumPy's actual ndarray flag name uses this spelling.
+writeable = "writeable"
 PNGs = "PNGs"
 Haa = "Haa"
 iy = "iy"
