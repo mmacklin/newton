@@ -1,5 +1,21 @@
 # Published Toothbrush
 
+Two representations are available. `toothbrush.py` below retains the original
+finite-neck model. The latest gallery uses a fused handle/head frame; the new
+`fused_toothbrush.py` exposes that construction with the public generic solver.
+See [Fused Portability](FUSED_PORTABILITY.md) for commands, physical results and
+the collision-routing limitation. Fresh 450-frame positive/control/repeat CUDA
+arms pass the original physical gates and independent exported-trajectory
+audits. The repeat is **not bitwise identical**; both positives independently
+pass. This public generic path does **not** reproduce the private optimized
+dispatcher or claim its published timing. Trajectories and media are not bundled.
+
+`qualify_fused.py` and `verify_fused.py` provide fresh positive/control/repeat
+collection and independent saved-trajectory verification. See the fused guide
+before running: collection alone is not physical acceptance or a benchmark.
+
+## Original Finite Neck
+
 Run from the repository root at Newton pin `8228bf6f690fff4dbb359d5de6447b09cb77c1e7`:
 
 ```sh
@@ -18,4 +34,4 @@ The output must be absent or empty, separate from the input directory, and must 
 
 `sources.json` binds published origins/hashes and the unchanged subdivision/quaternion function ASTs. `portability.patch` records output/command/fixture changes and the local fresh-export refinement adapter. Public Newton imports are used; graph-safe contact capacity and field audits access SolverVBD implementation contact arrays. The local source entry point replaces only the old machine-bound provenance launcher, not simulation arithmetic.
 
-CPU tests and `--help` are recorded in `validation.json`. Original full positive/control, penetration, coverage, mass/operator and recovery assertions remain unchanged. Fresh GPU physics and RTX output were not tested. Archived trajectory-dependent field-coverage tests and the generic reproduction framework are not included; the copied simulator retains its actual coverage gates. No saved state, videos, HTML or private data is packaged.
+`validation.json` records the original finite-neck bundle's CPU tests and `--help`, not the later fused qualification. Original full positive/control, penetration, coverage, mass/operator and recovery assertions remain unchanged. The fresh public-generic fused physical result is bound in `fused_sources.json` and summarized in the fused guide; no fresh generic-path timing or RTX rendering was performed. Archived trajectory-dependent field-coverage tests and the generic reproduction framework are not included; the copied simulator retains its actual coverage gates. No saved state, videos, HTML or private data is packaged.

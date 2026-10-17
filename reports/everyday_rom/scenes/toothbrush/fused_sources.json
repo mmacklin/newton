@@ -1,0 +1,143 @@
+{
+  "representation": "fused-handle-head-4x16",
+  "implementation": "public generic SolverVBD, public elastic-vertex collision routing",
+  "base_commit": "1daee11b2d4f0d81f61c5a46d55800e12b8331da",
+  "branch": "codex/toothbrush-fused-portable",
+  "original_runtime_pin": "8228bf6f690fff4dbb359d5de6447b09cb77c1e7",
+  "origins": [
+    {
+      "origin": "brush-fused-physical-repeat-profile/source/scene.py",
+      "url": "https://reports.mmacklin.com/everyday-rom/performance/phase2/experiments/brush-fused-physical-repeat-profile/source/scene.py",
+      "sha256": "c83927439065a9d11bc72bb47917edff53bb6beb083bf7b9cb4d5c236f329753",
+      "derivation": "Adapt fused owner/frame/grasp builder through public APIs; replace historical algebra NPZ load with procedural float32-original mass construction. Do not include private routing, setup-only scene or saved-state loader."
+    },
+    {
+      "origin": "brush-fused-physical-repeat-profile/source/base_adapter.py",
+      "url": "https://reports.mmacklin.com/everyday-rom/performance/phase2/experiments/brush-fused-physical-repeat-profile/source/base_adapter.py",
+      "sha256": "0dbf59b1a8621c0f0405034f10587bf77973f087505f28101e41aca23456f397",
+      "derivation": "Retain host-only virtual-handle diagnostics and fused physical semantics. Omit private imports, routing flag and dynamic AST gate execution; share original explicit physical gates through the body-count class attribute."
+    },
+    {
+      "origin": "brush-rigid-frame-fusion/source/audit.py",
+      "sha256": "97af51f38844e2f706b0b1ca8bb4c177693f70c6b4455c9855f016d81f4e0763",
+      "derivation": "Independent locked-mass congruence, energy and virtual-work CPU tests; no saved operator or state included."
+    }
+  ],
+  "physical_reference": {
+    "manifest_sha256": "d8dfb36fb1196b331b7eb7dfb68b734807b6654a23857ef23a1686302074a5bf",
+    "files_independently_verified": 142,
+    "fixture": "fused_reference.json",
+    "scope": "65 finalized model arrays; all 30 coarse meshes; two detailed plastic surfaces and embedding weights. Static data only, not an equilibrium or trajectory comparison."
+  },
+  "shared_changes": {
+    "toothbrush.py": "Add expected_dynamic_body_count=2 and use it for the original body-count gate; fused subclass sets 1. No other gate or arithmetic changes.",
+    "brush_glove_geometry.py": "Allow a per-example exported source inventory, preserving the original list by default. No simulation arithmetic change.",
+    "refine_render.py": "Require fused adapter and subdivision source hashes plus public-generic producer identity for fused exports. Existing original-branch gates and render arithmetic unchanged."
+  },
+  "files": {
+    "fused_toothbrush.py": {
+      "packaged_sha256": "c7229a4c3f286a7786091bd8191f2261d137dcf65d262267bbf1d4f4d14a6215",
+      "bytes": 13352
+    },
+    "test_fused.py": {
+      "packaged_sha256": "aea609430db91f7ece4982328e9df3486fa149cae72ebba92d3715facfbb1a10",
+      "bytes": 13696
+    },
+    "fused_reference.json": {
+      "packaged_sha256": "9673f25a652193d547347d1318aee2cbea73020098fff690f62aa602f318edb9",
+      "bytes": 27770
+    },
+    "FUSED_PORTABILITY.md": {
+      "packaged_sha256": "65f16a14cdf4356fddc61464db94ee866cd86bbee74bcfd7291f2de01407a3fa",
+      "bytes": 10007
+    },
+    "README.md": {
+      "packaged_sha256": "4ebf3268911675de1bfe0a059cd40569ef156fbed1cd8be7550057c722f52e2c",
+      "bytes": 4769
+    },
+    "toothbrush.py": {
+      "packaged_sha256": "7cc37945f6c0d4e11a14ac9791185277f5a785a2d2b7e38922aff718114e693b",
+      "bytes": 22819
+    },
+    "brush_glove_geometry.py": {
+      "packaged_sha256": "c7229150e01fd9358b89645c05b87984bf921f208871fb5bc289b0c40fb2e945",
+      "bytes": 50816
+    },
+    "refine_render.py": {
+      "packaged_sha256": "9557a760d84abd109e218469e7b8e2a0b93e076b1cf05df225bc448c947ecc97",
+      "bytes": 8202
+    },
+    "test_refinement.py": {
+      "packaged_sha256": "742d44281af80cf07c5f23cf656b1d730dbb089bf509841acd2e8d44a6d6324c",
+      "bytes": 7736
+    },
+    "sources.json": {
+      "packaged_sha256": "0e952cf75d691cb25e9e72e991eaf2f2c3b00ffc819f29fc561403d1fee10934",
+      "bytes": 20589
+    },
+    "subdivision.py": {
+      "packaged_sha256": "61c8400266e44bb08b551ee05d9b590fca36b7722984881c5335ac067a31b9e8",
+      "bytes": 3144
+    },
+    "field_coverage.py": {
+      "packaged_sha256": "88341e7e10c0641fc5735ee97917911e31c719e07ceaecac0e315351c1dab18e",
+      "bytes": 4441
+    },
+    "capacity_audit.py": {
+      "packaged_sha256": "143fec5c6d88bff254ac42471f8735af05f88dc6b95e555169920456f9f15213",
+      "bytes": 7549
+    },
+    "presentation.json": {
+      "packaged_sha256": "1ae728e75f47be60eff80d67d0db58fce3e44c2d920c95f2da5e32a50c2f8ff9",
+      "bytes": 261
+    },
+    "verify_fused.py": {
+      "packaged_sha256": "7a3d3cdb54347373054753825928fed46f3f9ed660eb59cfd4f3518f1852b268",
+      "bytes": 24667
+    },
+    "qualify_fused.py": {
+      "packaged_sha256": "a6125588d5c467f3f89631e9c3d914562ed86e82340e34f4b9280c03e4f0a383",
+      "bytes": 7166
+    },
+    "test_fused_trajectory.py": {
+      "packaged_sha256": "b54171c16da8d0d93fa2261337f37869a3961fea5fea5a0b95c9864e1c07bac7",
+      "bytes": 8367
+    },
+    "test_toothbrush_scrub.py": {
+      "packaged_sha256": "65805af87d893390923cd116b6d3fd548cbb4a558fafec168801cf3d68f4fa08",
+      "bytes": 24431
+    }
+  },
+  "validation_scope": "CPU construction/algebra and mutation-sensitive tests plus fresh 450-frame public-generic positive/control/repeat CUDA arms passing the original physical gates and independent exported-trajectory audits. No generic timing or rendering claim; repeat states are not bitwise equal.",
+  "public_generic_physical_qualification": {
+    "date": "2026-10-17",
+    "evidence_stage": "brush-fused-portable-physical",
+    "sealed_files": 257,
+    "manifest_sha256": "f1e902408cee02e5ed4a135bc50f4fffc13c46e58d9ae34286440a3a7ba23124",
+    "handoff_sha256": "85a97325eacc96ad06d6c37910111b23539d2835861b640e549b298141ec0cf8",
+    "result_sha256": "d0d828056b96aa129440a3ec3e9a930a5e11f66a97261810fc32a65b28134376",
+    "tested_fused_toothbrush_sha256": "c7229a4c3f286a7786091bd8191f2261d137dcf65d262267bbf1d4f4d14a6215",
+    "tested_verify_fused_sha256": "7a3d3cdb54347373054753825928fed46f3f9ed660eb59cfd4f3518f1852b268",
+    "tested_qualify_fused_sha256": "a6125588d5c467f3f89631e9c3d914562ed86e82340e34f4b9280c03e4f0a383",
+    "arms": [
+      "positive",
+      "control",
+      "repeat"
+    ],
+    "frames_per_arm": 450,
+    "settling_frames_per_arm": 60,
+    "all_original_gates_passed": true,
+    "independent_export_audits_passed": true,
+    "own_repeat_bitwise_equal": false,
+    "private_trajectory_parity_measured": false,
+    "generic_timing_or_rendering_performed": false,
+    "raw_data_bundled": false
+  },
+  "portability_blockers": [
+    "No public equivalent for the research rigid-attachment collision routing; the public path passes fresh physical qualification but does not claim identical contact sets or trajectories.",
+    "Private optimized dispatcher not included; generic execution cannot claim the published 4.246491822727274 ms timing.",
+    "The original finite-neck verifier is unchanged. verify_fused.py independently audits fused exports; changed source or settings require fresh qualification. Rendering and clean timing of the generic path remain separate work."
+  ],
+  "new_binary_assets": [],
+  "private_runtime_changes": false
+}

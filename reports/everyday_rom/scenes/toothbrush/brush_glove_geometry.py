@@ -1016,13 +1016,17 @@ class CapturedExample:
                 "half_length_m": self.tool_half_length,
             },
             initial_condition="1 s Newton settling from analytic gravity equilibrium K q = S g, tool parked clear; no per-step modal actuation",
-            source_files=[
-                f"{self.slug}.py",
-                "brush_glove_geometry.py",
-                "test_brush_glove.py",
-                "field_coverage.py",
-                "capacity_audit.py",
-            ],
+            source_files=getattr(
+                self,
+                "source_files",
+                [
+                    f"{self.slug}.py",
+                    "brush_glove_geometry.py",
+                    "test_brush_glove.py",
+                    "field_coverage.py",
+                    "capacity_audit.py",
+                ],
+            ),
             reproduce=reproduce(self.slug),
         )
         summary = self.summary()

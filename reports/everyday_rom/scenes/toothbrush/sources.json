@@ -28,20 +28,22 @@
     "capacity_audit",
     "field_coverage",
     "subdivision",
-    "refine_render"
+    "refine_render",
+    "fused_toothbrush"
   ],
   "files": {
     "brush_glove_geometry.py": {
       "origin": "/home/horde/reports/everyday-rom/toothbrush/source/brush_glove_geometry.py",
       "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/brush_glove_geometry.py",
       "origin_sha256": "3ee2d5d54adf9dbd4f59db0fc31048ab213bf8b214ccb36eaca2c74a5993b379",
-      "packaged_sha256": "5b3ebf2b57ccce10b8ffa5c2d40684b3944a483b7a441b49d5346c9b8dfb50c8",
-      "bytes": 50698,
+      "packaged_sha256": "c7229150e01fd9358b89645c05b87984bf921f208871fb5bc289b0c40fb2e945",
+      "bytes": 50816,
       "exact_copy": false,
       "published_hash_verified": true,
       "changed_functions": [
         "reproduce",
-        "run_cli"
+        "run_cli",
+        "CapturedExample.export"
       ],
       "unchanged_function_ast_sha256": {
         "shape_config": "67656bdb165425a8f846b7aa2aacb81cbeb19929357fb864958dbbab97171e4d",
@@ -79,7 +81,9 @@
         "CapturedExample.summary": "f36cf9dcb98cbcaad323f85703e291475a89a6d3cd4bb0c04cda8f1cc7c0a13a",
         "CapturedExample.test_final": "b887c8e929282e8d7cc254251aaa6a46dc69c68117d301963f259319d9421aad",
         "CapturedExample.test_object": "2fc8ab1861cc7b2e57d571584c6e693d9cf2522f7400e50cc1e8ead06f7682b9",
-        "CapturedExample.validate_negative_control": "312357203270421f7e6501d475ebd0e376c00184dfd076a299cb398a10fb65de",
+        "CapturedExample.validate_negative_control": "312357203270421f7e6501d475ebd0e376c00184dfd076a299cb398a10fb65de"
+      },
+      "original_changed_function_ast_sha256": {
         "CapturedExample.export": "d74b2aa78591e8276751a906a2b10d4a4ae6083af4102c28d847c0e797affe03"
       }
     },
@@ -200,11 +204,13 @@
       "origin": "/home/horde/reports/everyday-rom/toothbrush/source/toothbrush.py",
       "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/toothbrush.py",
       "origin_sha256": "b5252c7640c6b349b737cee40fe03ec4f8d15fb07ae668633e3d4011803e98f5",
-      "packaged_sha256": "13f8394094f5b026d9191023294c9446470a7d33ae4f7319bfa7fbf283abb774",
-      "bytes": 22716,
+      "packaged_sha256": "7cc37945f6c0d4e11a14ac9791185277f5a785a2d2b7e38922aff718114e693b",
+      "bytes": 22819,
       "exact_copy": false,
       "published_hash_verified": true,
-      "changed_functions": [],
+      "changed_functions": [
+        "Example.test_final"
+      ],
       "unchanged_function_ast_sha256": {
         "nominal_handle": "8c38848587e42dd8a99b1594409643a7624d4e7200b81a5acb184cd8714ec65f",
         "mechanism_position": "df2ec8270ab81623be7777829beec509378e456dd48a47d397d2dd8aacc899be",
@@ -217,9 +223,11 @@
         "Example.update_metrics": "0bc225fe631c26aa9274bf69c620495c6db8dfacfc6b8b5ba52b46a75986f370",
         "Example.object_metrics": "1057bb01e71e2935db09dec10569cf28c67da8a38fa6d67ba3c425276425493a",
         "Example.summary": "039a5fc34027bf2c1a704222902018ce2ea132047f691f0fbd00c28d43580e6b",
-        "Example.test_final": "6eb08171d5323fc6322a57271d087d5fe243d664b221a7177b893cff06f7501b",
         "Example.validate_negative_control": "8ebc45d159c08531781bcf513baa8a5b1da541e06babe58b1a12cf6cc27f8b1c",
         "Example.scene_metadata": "c145c1d8a3d699070bbb9f4755578de7722b6b990092af4045785842d6360afa"
+      },
+      "original_changed_function_ast_sha256": {
+        "Example.test_final": "6eb08171d5323fc6322a57271d087d5fe243d664b221a7177b893cff06f7501b"
       }
     },
     "subdivision.py": {
@@ -240,14 +248,17 @@
       "origin": "/home/horde/reports/everyday-rom/toothbrush/reproduction/portable_refinement.py",
       "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/reproduction/portable_refinement.py",
       "origin_sha256": "e29238d5e0e1273d1067646b9e8f684689963c60d9c17a285ae52bab039788ee",
-      "packaged_sha256": "213e7584badd79cc44f878a920a51e75f453d592dabbda2c9614f97b690d0a56",
-      "bytes": 7895,
+      "packaged_sha256": "9557a760d84abd109e218469e7b8e2a0b93e076b1cf05df225bc448c947ecc97",
+      "bytes": 8202,
       "exact_copy": false,
       "published_hash_verified": false,
       "unchanged_function_ast_sha256": {
         "transform_points": "59106bf07863c86f3df642990693518b5fbe7b8f2f211a36365aca404da08353"
       },
-      "derivation": "Adapt published CPU refinement to fresh local exports: local imports, source/gate binding instead of archived equilibrium basis hash, local I/O helpers and CLI. Preserve subdivision, quaternion arithmetic, 450-frame checks and 5e-8 m mapping limit."
+      "derivation": "Adapt published CPU refinement to fresh local exports: local imports, source/gate binding instead of archived equilibrium basis hash, local I/O helpers and CLI. Preserve subdivision, quaternion arithmetic, 450-frame checks and 5e-8 m mapping limit.",
+      "changed_functions": [
+        "validate_physical"
+      ]
     },
     "presentation.json": {
       "origin": "/home/horde/reports/everyday-rom/toothbrush/reproduction/assets/presentation.json",
@@ -260,10 +271,10 @@
       "derivation": "Exact published presentation copy."
     }
   },
-  "modifications": "Simulation source changes remain output/command/fixture paths only. Add published render-only subdivision functions and a local fresh-export adapter; no simulation arithmetic, physical gates, materials or discretization changes. See portability.patch.",
+  "modifications": "Retain the original finite-neck example and add a separate fused public-generic adapter. Shared hooks: explicit expected dynamic body count (original 2, fused 1), per-example exported source inventory, and fused-producer binding in render refinement. Original simulation arithmetic and all numerical/physical thresholds remain unchanged. See FUSED_PORTABILITY.md and fused_sources.json; portability.patch remains the historical initial packaging diff.",
   "runtime_notes": "Uses public newton imports; capacity and modal diagnostics read SolverVBD implementation arrays. No experimental native kernels included.",
   "excluded": "Saved trajectories, images, videos, HTML, raw private data, performance experiments and archived debug checkpoints.",
-  "validation_scope": "CPU tests and CLI help only; no fresh full GPU trajectory or renderer qualification.",
+  "validation_scope": "CPU construction, algebra, fixture binding, synthetic refinement, tests and CLI help only. No fused GPU trajectory, renderer or timing qualification in this patch.",
   "refinement_contract": {
     "inputs": "Fresh local 450-frame positive/control export, original passing gates and matching producer source hashes; no saved gallery trajectory required.",
     "render_triangles": {

@@ -117,6 +117,34 @@ class RefinementTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "closed two-manifold"):
             subdivision_embedding(np.eye(3), np.array([[0, 1, 2]]), np.zeros(3, bool))
 
+    def test_fused_producer_binding_and_full_synthetic_refinement(self):
+        """The same 450-frame embedding accepts only the local generic producer."""
+        with tempfile.TemporaryDirectory(dir=HERE) as temp:
+            root = Path(temp)
+            physical, output = root / "physical", root / "smooth"
+            self.fixture(physical)
+            meta = json.loads((physical / "scene.json").read_text())
+            meta["rigid_fusion"] = True
+            write_json(physical / "scene.json", meta)
+            metrics = json.loads((physical / "metrics.json").read_text())
+            metrics["solver_implementation"] = "public generic SolverVBD"
+            write_json(physical / "metrics.json", metrics)
+            with self.assertRaisesRegex(ValueError, "source differs: fused_toothbrush"):
+                validate_physical(physical)
+            metrics["source_sha256"].update(
+                {name: digest(HERE / name) for name in ("fused_toothbrush.py", "subdivision.py")}
+            )
+            write_json(physical / "metrics.json", metrics)
+            audit = refine(physical, output)
+            self.assertTrue(
+                all(row["frames"] == 450 and row["embedding_max_error_m"] < 5e-8 for row in audit["all_frame_checks"])
+            )
+            self.assertEqual(digest(physical / "state.npz"), digest(output / "state.npz"))
+            metrics["solver_implementation"] = "private dispatcher"
+            write_json(physical / "metrics.json", metrics)
+            with self.assertRaisesRegex(ValueError, "public generic fused producer"):
+                validate_physical(physical)
+
 
 if __name__ == "__main__":
     unittest.main()

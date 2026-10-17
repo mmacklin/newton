@@ -72,7 +72,12 @@ def validate_physical(root):
         raise ValueError("Require a fresh positive/control export passing its original simulation gates")
     # Fresh settling coordinates can differ from an archived run. Bind the
     # producer instead of requiring the old run's complete basis container.
-    for name in ("toothbrush.py", "brush_glove_geometry.py", "field_coverage.py", "capacity_audit.py"):
+    producers = ["toothbrush.py", "brush_glove_geometry.py", "field_coverage.py", "capacity_audit.py"]
+    if meta.get("rigid_fusion"):
+        producers += ["fused_toothbrush.py", "subdivision.py"]
+        if metrics.get("solver_implementation") != "public generic SolverVBD":
+            raise ValueError("Require a fresh public generic fused producer, not a private timed export")
+    for name in producers:
         if metrics.get("source_sha256", {}).get(name) != digest(Path(__file__).with_name(name)):
             raise ValueError(f"Fresh simulation source differs: {name}")
     with np.load(root / "basis.npz", allow_pickle=False) as basis:

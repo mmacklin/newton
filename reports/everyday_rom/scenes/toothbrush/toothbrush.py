@@ -101,6 +101,7 @@ class Example(CapturedExample):
     slug = "toothbrush"
     dynamic_assembly = True
     default_iterations = 24
+    expected_dynamic_body_count = 2
 
     def __init__(self, viewer=None, cfg: Config | None = None):
         cfg = replace(cfg or Config(iterations=self.default_iterations), friction=0.20)
@@ -394,7 +395,10 @@ class Example(CapturedExample):
         self.capacity_audit.check((60 + len(self.records)) * self.cfg.substeps)
         assert s["max_modal_solve_residual_ratio"] < 0.05, s
         assert self.model.elastic_body_count == 1 and len(self.elastic) == 1, s
-        assert np.count_nonzero(self.model.body_flags.numpy() == int(newton.BodyFlags.DYNAMIC)) == 2, s
+        assert (
+            np.count_nonzero(self.model.body_flags.numpy() == int(newton.BodyFlags.DYNAMIC))
+            == self.expected_dynamic_body_count
+        ), s
         assert s["mass_audit"]["dimension"] == 46, s
         assert s["mass_audit"]["runtime_spd_passed"], s
         assert s["mass_audit"]["actual_implicit_mass_coupling"] == [True], s

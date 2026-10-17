@@ -5,6 +5,7 @@
 ### Added
 
 - Add ten everyday reduced-elastic research examples, their derived assets, and reproducible validation and rendering scripts under `reports/everyday_rom/`.
+- Add a portable fused-handle/head toothbrush example with the public generic solver, independent trajectory verification, and unchanged physical/control gates; retain the original finite-neck example without claiming private optimized timings.
 
 ### Changed
 

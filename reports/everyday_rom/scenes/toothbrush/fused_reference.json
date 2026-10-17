@@ -1,0 +1,1149 @@
+{
+  "origin": "brush-fused-physical-repeat-profile",
+  "public_origin": "https://reports.mmacklin.com/everyday-rom/performance/phase2/experiments/brush-fused-physical-repeat-profile/",
+  "manifest_sha256": "d8dfb36fb1196b331b7eb7dfb68b734807b6654a23857ef23a1686302074a5bf",
+  "verified_manifest_files": 142,
+  "input_sha256": {
+    "positive/model.npz": "f7c0e712ccdb008307bb7690c381961557a669fa1a85289dd4a9618516ab2580",
+    "positive/bundle/basis.npz": "96a79ab3320a208c0e20a2bd478b18d29173f7c7d947db20c2195bd3f0237ee4",
+    "positive/bundle/scene.json": "e383094ceabe73179b3f919526df02382b2006f3ff9847306cacb75bd11609c8",
+    "positive/render-embedding.npz": "3b3ed033019f51f56215bbc156abf7b221ea514993976e896e7b1b040105f4e6",
+    "positive/dense-scene.npz": "4dcd8c1efd0337944e0aefc75950e26a4b0b9f29517b78154d27d1cb3f9042fd"
+  },
+  "hash_encoding": "SHA256 of C-order array bytes, with dtype and shape checked separately",
+  "model": {
+    "shape_material_ke": {
+      "sha256": "96641b9a9fe400030e6c1a7e476d33e581446e4c16acf0403d6de72a2a570c14",
+      "shape": [
+        12
+      ],
+      "dtype": "float32"
+    },
+    "shape_material_kd": {
+      "sha256": "17b0761f87b081d5cf10757ccc89f12be355c70e2e29df288b65b30710dcbcd1",
+      "shape": [
+        12
+      ],
+      "dtype": "float32"
+    },
+    "shape_material_kf": {
+      "sha256": "981e607d46568c190c14caaa1107406acb7e073007e5b9f527db197a1ad8fa43",
+      "shape": [
+        12
+      ],
+      "dtype": "float32"
+    },
+    "shape_material_ka": {
+      "sha256": "17b0761f87b081d5cf10757ccc89f12be355c70e2e29df288b65b30710dcbcd1",
+      "shape": [
+        12
+      ],
+      "dtype": "float32"
+    },
+    "shape_material_mu": {
+      "sha256": "ed5c599fc33fe31a2fe40f618e11c471c6984a329793473c6a4dc6a8f1a01761",
+      "shape": [
+        12
+      ],
+      "dtype": "float32"
+    },
+    "shape_material_restitution": {
+      "sha256": "17b0761f87b081d5cf10757ccc89f12be355c70e2e29df288b65b30710dcbcd1",
+      "shape": [
+        12
+      ],
+      "dtype": "float32"
+    },
+    "shape_material_mu_torsional": {
+      "sha256": "428171a63b6b45cd5bd46aed072e95309956361d419e3a442d399b8be863c11d",
+      "shape": [
+        12
+      ],
+      "dtype": "float32"
+    },
+    "shape_material_mu_rolling": {
+      "sha256": "403bad7257da5eab6e0037d5f5052f7e8f6e4b7b5df7d5c9b7e0ed26599119ad",
+      "shape": [
+        12
+      ],
+      "dtype": "float32"
+    },
+    "shape_material_kh": {
+      "sha256": "f85e11415224793d909e6b666a899cceffbb0579b85793ff65e85b8e2e3d1f2b",
+      "shape": [
+        12
+      ],
+      "dtype": "float32"
+    },
+    "body_com": {
+      "sha256": "edc50958be0a2d0cded2121ace1cc9d7b460737ad565bcb0a3d050cb623f87c4",
+      "shape": [
+        5,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "body_inertia": {
+      "sha256": "2ecb2383063d84f49b64a70c5649256ca65d6d4df9145cd83dec975b4d35daaa",
+      "shape": [
+        5,
+        3,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "body_inv_inertia": {
+      "sha256": "701f143d8302d0066a947a9d459c0014546a33d0631b598c6c5741786b3a84c6",
+      "shape": [
+        5,
+        3,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "body_mass": {
+      "sha256": "ec391cf3c37565e2ec2e71eb973453369161139ef78e28f74677c76e112d97fd",
+      "shape": [
+        5
+      ],
+      "dtype": "float32"
+    },
+    "body_inv_mass": {
+      "sha256": "e58a12428efef71c60beaa8a6c830c04b7fc7ed5e25ab50dbcc42e25f9035ed9",
+      "shape": [
+        5
+      ],
+      "dtype": "float32"
+    },
+    "body_flags": {
+      "sha256": "0b34ad0511d0a9bb2f8ee6befab4dd933690463abce8935a489305144d6ae693",
+      "shape": [
+        5
+      ],
+      "dtype": "int32"
+    },
+    "body_world": {
+      "sha256": "9a8dcd3f9ff7aa3114e141f03c12989d363ea81fd74c02eea63c5f41489cb17a",
+      "shape": [
+        5
+      ],
+      "dtype": "int32"
+    },
+    "body_elastic_index": {
+      "sha256": "e88dd07f15458e3b15532ca356fd7e6e2379ea170b14a80c0af320c78ba3db9f",
+      "shape": [
+        5
+      ],
+      "dtype": "int32"
+    },
+    "body_world_start": {
+      "sha256": "0a389783af9ac112b6de32eb03659eab9f1ca425fe8ef2b08f60454bc1f7395b",
+      "shape": [
+        3
+      ],
+      "dtype": "int32"
+    },
+    "elastic_body": {
+      "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+      "shape": [
+        1
+      ],
+      "dtype": "int32"
+    },
+    "elastic_joint": {
+      "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+      "shape": [
+        1
+      ],
+      "dtype": "int32"
+    },
+    "elastic_basis": {
+      "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+      "shape": [
+        1
+      ],
+      "dtype": "int32"
+    },
+    "elastic_mode_start": {
+      "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+      "shape": [
+        1
+      ],
+      "dtype": "int32"
+    },
+    "elastic_mode_count": {
+      "sha256": "1a00f51f3029fa4b7e61b9bf7aa9de5a64798857872981f7e056e4f437171955",
+      "shape": [
+        1
+      ],
+      "dtype": "int32"
+    },
+    "elastic_mode_mass": {
+      "sha256": "e61308cc236228f9e854b995a5162ea0691c3cfb77babd53cc2411e9a873822c",
+      "shape": [
+        40
+      ],
+      "dtype": "float32"
+    },
+    "elastic_mode_stiffness": {
+      "sha256": "3682d2daac0d735477bef3b0c921512d77cb3534ecd51019f0bc0869d44c643e",
+      "shape": [
+        40
+      ],
+      "dtype": "float32"
+    },
+    "elastic_mode_damping": {
+      "sha256": "c4f87c5e4b1e021875302a32cbaca5c8ec6e9bae743befba70b3d7cd8ca2a47d",
+      "shape": [
+        40
+      ],
+      "dtype": "float32"
+    },
+    "elastic_mode_coupling_linear": {
+      "sha256": "9437253e4dfaa3d7c51a3d354ae48ddbb4a1648130656a61a31995fd6bdf768f",
+      "shape": [
+        40,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "elastic_mode_coupling_angular": {
+      "sha256": "afbad5525317a5599c6c03cddaf1301eb33f8a806018329bcce0828d7a05252a",
+      "shape": [
+        40,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "elastic_mode_coupling_centrifugal": {
+      "sha256": "c4b6825a575a6d1d38f43234efb7bb51b3735e88b569fd0c8cd04399484fb231",
+      "shape": [
+        40,
+        3,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "elastic_mode_coupling_coriolis": {
+      "sha256": "b1ba608915b1873a4ec488bb7d6b20a74b92b9305552d53c7c765e2ebb31e8a8",
+      "shape": [
+        1600,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "elastic_endpoint_sample": {
+      "sha256": "028285c579b0d70af814eab4cfe2c11238fba0123320968cf14058b854a245d9",
+      "shape": [
+        1
+      ],
+      "dtype": "int32"
+    },
+    "elastic_endpoint_phi": {
+      "sha256": "4b48f21a4b7a02bfbec19ef880a967a02334a3cdcef8ae83de2ef327ba8bc5dd",
+      "shape": [
+        40,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "elastic_endpoint_psi": {
+      "sha256": "4b48f21a4b7a02bfbec19ef880a967a02334a3cdcef8ae83de2ef327ba8bc5dd",
+      "shape": [
+        40,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "elastic_render_point_start": {
+      "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+      "shape": [
+        1
+      ],
+      "dtype": "int32"
+    },
+    "elastic_render_point_count": {
+      "sha256": "9a090610d0aa9445db0890179a9dea330334e3b9086987e93af97dbc978fe311",
+      "shape": [
+        1
+      ],
+      "dtype": "int32"
+    },
+    "elastic_render_point_local": {
+      "sha256": "7df7cf2695b70473c06627f18b6e47a45135c6b3b29d8e454b9075f0b0c9551e",
+      "shape": [
+        33,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "elastic_render_point_sample": {
+      "sha256": "ec14236e37af43a79456416b18230988e82f57613242f803be50357d38e42ead",
+      "shape": [
+        33
+      ],
+      "dtype": "int32"
+    },
+    "elastic_render_point_phi": {
+      "sha256": "f778c974840998161baa69e0de99965cd8765c0ccb729b15317bda711018e746",
+      "shape": [
+        1320,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "elastic_shape_shape": {
+      "sha256": "e528f4309e1413e6bc35aea5d8db8519384d2fcc33f9dd5d1126d73f104cf92a",
+      "shape": [
+        5
+      ],
+      "dtype": "int32"
+    },
+    "elastic_shape_body": {
+      "sha256": "de47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90",
+      "shape": [
+        5
+      ],
+      "dtype": "int32"
+    },
+    "elastic_shape_vertex_start": {
+      "sha256": "7abd825d1f428e3c3cdf0cbd194224956da90c06987899cd28f27458044ac539",
+      "shape": [
+        5
+      ],
+      "dtype": "int32"
+    },
+    "elastic_shape_vertex_count": {
+      "sha256": "a688bd3a6d3de5471d96f018ac2e5ca6680d91d74a14ed78acfea6598fd6d0b1",
+      "shape": [
+        5
+      ],
+      "dtype": "int32"
+    },
+    "elastic_shape_index_start": {
+      "sha256": "470b6bcb2a89a21942a0cd4b5b98b2082668a98fefba29b7b928e11c0f4ed183",
+      "shape": [
+        5
+      ],
+      "dtype": "int32"
+    },
+    "elastic_shape_index_count": {
+      "sha256": "954ff134354ae093df0c1fff9f07915e172cab2fe68edf51a4f159d3dcbf7d78",
+      "shape": [
+        5
+      ],
+      "dtype": "int32"
+    },
+    "elastic_shape_vertex_local": {
+      "sha256": "d82a9065e174abe897c7ed8a8b9a4e4cb41f331dff343e5c094bc4d7f61d6574",
+      "shape": [
+        15010,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "elastic_shape_vertex_sample": {
+      "sha256": "12006caa4f56a7a9d98e73aac2f62944d7b4d7859faae36f52d146da13bdea99",
+      "shape": [
+        15010
+      ],
+      "dtype": "int32"
+    },
+    "elastic_shape_vertex_phi": {
+      "sha256": "c7ed71b56b2b95e1e82442b12da0e42ec9c8659e775b1c485952b86c6326470c",
+      "shape": [
+        600400,
+        3
+      ],
+      "dtype": "float32"
+    },
+    "elastic_shape_indices": {
+      "sha256": "e181c39a01383c5e0763d2331d85e86463caf605bcde2a9b5fc76f73dc3c9819",
+      "shape": [
+        88176
+      ],
+      "dtype": "int32"
+    },
+    "body_colors": {
+      "sha256": "182a81d04fb78045f49dcad72c167d71c1025d360bf8f3b27748578467fb3d0a",
+      "shape": [
+        5
+      ],
+      "dtype": "int32"
+    },
+    "joint_parent": {
+      "sha256": "9771eff7acf8d44d60a5811b05eb14fdf9c420981326cc63ede28a1eb87b5d97",
+      "shape": [
+        6
+      ],
+      "dtype": "int32"
+    },
+    "joint_child": {
+      "sha256": "680feca251bfe0a87058d27250189396d381043095a10d2817551c3adf959f60",
+      "shape": [
+        6
+      ],
+      "dtype": "int32"
+    },
+    "joint_type": {
+      "sha256": "6a41db836f37a597f42a515a9833803b4a5e59b5810a384793676ee643c69b0f",
+      "shape": [
+        6
+      ],
+      "dtype": "int32"
+    },
+    "joint_X_p": {
+      "sha256": "cf70873650159bee111b457763e9ea5d21bb0844a7d50f9fd90498871f47e64f",
+      "shape": [
+        6,
+        7
+      ],
+      "dtype": "float32"
+    },
+    "joint_X_c": {
+      "sha256": "04a30f8d7baa0d26cfebe736afcd196a760f44ca6a37a6df8e2345a2b9c181ea",
+      "shape": [
+        6,
+        7
+      ],
+      "dtype": "float32"
+    },
+    "joint_q_start": {
+      "sha256": "4f6c065d84131d552be9343f52ee3557a7d554cb174b3d90c9804f2dfb954aa3",
+      "shape": [
+        7
+      ],
+      "dtype": "int32"
+    },
+    "joint_qd_start": {
+      "sha256": "dc68b16d974dca0eee12dc30bf1e73a4300ef9afc439d5b052eafbd6dcc2bf81",
+      "shape": [
+        7
+      ],
+      "dtype": "int32"
+    },
+    "joint_parent_elastic_endpoint": {
+      "sha256": "44a5f7891570e5631e8c91c85186e6633f4ab5364f644040b2a00126a07985b6",
+      "shape": [
+        6
+      ],
+      "dtype": "int32"
+    },
+    "joint_child_elastic_endpoint": {
+      "sha256": "666ae538f611798e6c2a0a82b3c30f271e8b190b0b1828f97e035274010e9238",
+      "shape": [
+        6
+      ],
+      "dtype": "int32"
+    },
+    "shape_transform": {
+      "sha256": "75dcb906cd2fa3eafe7e3aee13ca8b5ca83a43e61a345946d8aec2a1d35cb541",
+      "shape": [
+        12,
+        7
+      ],
+      "dtype": "float32"
+    },
+    "shape_body": {
+      "sha256": "0b6675fc4720ed270bf3700cc364f62e5a810c46ffaec50889bdb4ea75b79c0b",
+      "shape": [
+        12
+      ],
+      "dtype": "int32"
+    },
+    "shape_flags": {
+      "sha256": "8247a30f641c2efe5dccc8c8faf263985555ab07b5ea17f58a8104a47ea800a8",
+      "shape": [
+        12
+      ],
+      "dtype": "int32"
+    },
+    "shape_gap": {
+      "sha256": "901eff5ea2db91caa7f6a6ac44c00f02d858892ceecd3407570526bab8fd5121",
+      "shape": [
+        12
+      ],
+      "dtype": "float32"
+    },
+    "shape_margin": {
+      "sha256": "17b0761f87b081d5cf10757ccc89f12be355c70e2e29df288b65b30710dcbcd1",
+      "shape": [
+        12
+      ],
+      "dtype": "float32"
+    },
+    "shape_type": {
+      "sha256": "3eb69708681323e4cf9c7a2f8e806af369deeb6ac84e4e12a7c9675c81da1f30",
+      "shape": [
+        12
+      ],
+      "dtype": "int32"
+    },
+    "shape_contact_pairs": {
+      "sha256": "07ba863970fb31592ae2233bf1bd9b5165bac708691b0f5fccafc9d36fd87b63",
+      "shape": [
+        5,
+        2
+      ],
+      "dtype": "int32"
+    }
+  },
+  "coarse_meshes": {
+    "0": {
+      "name": "ivory_handle",
+      "body": 0,
+      "points": {
+        "sha256": "6a040bb804103d5684e30d591b93d5a3b8520008be9ff6a6f32a8a0da8269e80",
+        "shape": [
+          442,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "375af74438975bf95e75532fb73b757a34f7014362cab57a8b03a2b814501411",
+        "shape": [
+          880,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "1": {
+      "name": "teal_grip",
+      "body": 0,
+      "points": {
+        "sha256": "c1c8eee95c14dbd4b55c6a2270b2c6d4bf88c56fa1cbe427e2ae4e13350a54c4",
+        "shape": [
+          722,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "aa564b7ad4a5f562de7fe69a2c6518c0833917f1e704b82a6622c611de0ea2fb",
+        "shape": [
+          1440,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "2": {
+      "name": "grip_ribs",
+      "body": 0,
+      "points": {
+        "sha256": "65dfbc2f4a21ba5175418f4b3651b4c88babaf167639855b890c92a0f856fa7e",
+        "shape": [
+          2040,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "661fb1673574e746e554e44bae88721e5cd77119d680128bdcd4c63ffa677d46",
+        "shape": [
+          4032,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "3": {
+      "name": "ivory_plastic_head",
+      "body": 0,
+      "points": {
+        "sha256": "e2f58f1bc7361a253fd4617e48b8f802a9c77f22f16d351a3e1e57d36b6c33c1",
+        "shape": [
+          282,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "170b55133725643499466018f67d8f4e590b97e96eb41018d260c23c5b2d5323",
+        "shape": [
+          560,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "4": {
+      "name": "teal_tuft_plate",
+      "body": 0,
+      "points": {
+        "sha256": "9ab456ab2eb5dbb41ddc244f9e351abfcccd310c4c19335f850728b81394a995",
+        "shape": [
+          722,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "aa564b7ad4a5f562de7fe69a2c6518c0833917f1e704b82a6622c611de0ea2fb",
+        "shape": [
+          1440,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "5": {
+      "name": "tuft_0_0",
+      "body": 0,
+      "points": {
+        "sha256": "91bf8f39037b9ebccc349df4cce12cfbce177264bb2c31956398e74252b6bc0d",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "6": {
+      "name": "tuft_0_1",
+      "body": 0,
+      "points": {
+        "sha256": "15bc6939d450644e8886553e9ab6195e03e87f248a52b63a8291eb5e54a87f9c",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "7": {
+      "name": "tuft_0_2",
+      "body": 0,
+      "points": {
+        "sha256": "5d91ab9973eadcdab6885f98ab08222761a9ebd2060131c9fb81ab35cebf6948",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "8": {
+      "name": "tuft_0_3",
+      "body": 0,
+      "points": {
+        "sha256": "87d26c2b1dce165db0662c094d4ca150daac59fcf3572f269746a355377c8801",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "9": {
+      "name": "tuft_1_0",
+      "body": 0,
+      "points": {
+        "sha256": "562292cfde133b1a2bbbacf2c27e0f5a78cc951b702a93b8adc8eba69ee73f67",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "10": {
+      "name": "tuft_1_1",
+      "body": 0,
+      "points": {
+        "sha256": "21a124f465def4c632f2a6a3d5ba8a75d0981eede75c66675e0dd3bff7083a81",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "11": {
+      "name": "tuft_1_2",
+      "body": 0,
+      "points": {
+        "sha256": "4b8a6c7045f4ecbde30a1719234b9472654ea17537cae8a27cf637f5a618c222",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "12": {
+      "name": "tuft_1_3",
+      "body": 0,
+      "points": {
+        "sha256": "98eac3eec0e39f9fc7837b8ea26d4440fc0d3186346382aa6a27c7f01f5ef2b6",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "13": {
+      "name": "tuft_2_0",
+      "body": 0,
+      "points": {
+        "sha256": "58ee7196a1246c96d12542cce98f264a5975dde48e3aef42309b4eb064a15cde",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "14": {
+      "name": "tuft_2_1",
+      "body": 0,
+      "points": {
+        "sha256": "b9aadeb61fc48fc284f1db881c56203e032bb5931fbcbd6c1d6793ef81a7049b",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "15": {
+      "name": "tuft_2_2",
+      "body": 0,
+      "points": {
+        "sha256": "6287976818131f48ffc93487ed5dc7dcbb091792dc88dd78d5d414c12a4e12cc",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "16": {
+      "name": "tuft_2_3",
+      "body": 0,
+      "points": {
+        "sha256": "80a0995c4648ca16a8201dcbfe4fd3525f5e8658343a705362788cbd1eef2946",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "17": {
+      "name": "tuft_3_0",
+      "body": 0,
+      "points": {
+        "sha256": "5ff5d6d0a7ff3c544dbce7c269ef244aa3db524da179be5e0b217135fe456da3",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "18": {
+      "name": "tuft_3_1",
+      "body": 0,
+      "points": {
+        "sha256": "08bc95725b7343e6f2131948e3707883a6a1703f1d75a6fdf2349b784f0475e0",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "19": {
+      "name": "tuft_3_2",
+      "body": 0,
+      "points": {
+        "sha256": "ebf1751070766bdb8a9a1e6d2c12b8185bc65f9ff894d03b44792aa00062d346",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "20": {
+      "name": "tuft_3_3",
+      "body": 0,
+      "points": {
+        "sha256": "262d43e1dab5169582db9dd463e6e62edb6c89da54d14ffa1116a8765e5f6563",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "21": {
+      "name": "tuft_4_0",
+      "body": 0,
+      "points": {
+        "sha256": "7aeadb7dbf3a52fcaf2ef2148f89803dbd67ce381f4ae876d68239617d6a5ee2",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "22": {
+      "name": "tuft_4_1",
+      "body": 0,
+      "points": {
+        "sha256": "2aa570b060e14a1335058afd850ccbd6d2b67775dfd1564ff44aae8b56269600",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "23": {
+      "name": "tuft_4_2",
+      "body": 0,
+      "points": {
+        "sha256": "fa19917f04db06048b4114c15e08aacaf0c15ed8bbc678e90e1bed37d450bbdb",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "24": {
+      "name": "tuft_4_3",
+      "body": 0,
+      "points": {
+        "sha256": "e380c4922b497bdc9cc13679ea53041026faec7495d5f4e9468492ec918d15d9",
+        "shape": [
+          518,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "da999fc882e18dbfcd39787f5be3202ce21c9a00567249cab2dc205b0fa77a9d",
+        "shape": [
+          1008,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "25": {
+      "name": "rounded_contact_tool",
+      "body": 1,
+      "points": {
+        "sha256": "12a4f6d43d475b442283a60de1aece7dafd979d4cea595aa2a10dc4c0b7bb624",
+        "shape": [
+          1250,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "0c73f2590cb8b76eca141d258cd4c0d200bd56c3385d9ce87a6c1908e1cf04e3",
+        "shape": [
+          2496,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "26": {
+      "name": "rigid_floor",
+      "body": -1,
+      "points": {
+        "sha256": "2f63f64e1ecf1986cf6f17954f0c791becd2c41f5a72f8eb51ef18cfefb94be4",
+        "shape": [
+          4,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "fe78c65211dd0b56a97024fb61111e686ef1fe054aa132ba58e2891ac496f1ee",
+        "shape": [
+          2,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "27": {
+      "name": "gripper_part_1",
+      "body": 2,
+      "points": {
+        "sha256": "6f4c5f9e73d1e98a5259caac29733f3270150b9a88b3879aa86f8bb8eb6b0240",
+        "shape": [
+          2212,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "b6e86734f43fcc451d671b83d7ba6dff2ff76356668f8bb8ffde5ab384b67905",
+        "shape": [
+          4416,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "28": {
+      "name": "gripper_part_2",
+      "body": 3,
+      "points": {
+        "sha256": "f739b8488e98185638a15baeaad6383b5a356a6340ef8668af41ece8bf9ba458",
+        "shape": [
+          2212,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "b6e86734f43fcc451d671b83d7ba6dff2ff76356668f8bb8ffde5ab384b67905",
+        "shape": [
+          4416,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "29": {
+      "name": "gripper_part_3",
+      "body": 4,
+      "points": {
+        "sha256": "f739b8488e98185638a15baeaad6383b5a356a6340ef8668af41ece8bf9ba458",
+        "shape": [
+          2212,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "b6e86734f43fcc451d671b83d7ba6dff2ff76356668f8bb8ffde5ab384b67905",
+        "shape": [
+          4416,
+          3
+        ],
+        "dtype": "int32"
+      }
+    }
+  },
+  "detailed_meshes": {
+    "0": {
+      "points": {
+        "sha256": "98b645d764c2990feacf13e1582e86f03c96198ff76e928ee0869b83ead829d1",
+        "shape": [
+          7042,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "799dd56be12bd48548b0f4570ac0cf7dd19f4dcbeb3ac5ce54e3896d1787c823",
+        "shape": [
+          14080,
+          3
+        ],
+        "dtype": "int32"
+      }
+    },
+    "3": {
+      "points": {
+        "sha256": "0683b8799976083d7e3ea2c5dd05d11fbeae3b0dc13fd85f72e8f9da0842b33a",
+        "shape": [
+          4482,
+          3
+        ],
+        "dtype": "float32"
+      },
+      "faces": {
+        "sha256": "9ee86612643b65a1ac07d7e3e726891df31daf18b236e71111b8ffad7e766e67",
+        "shape": [
+          8960,
+          3
+        ],
+        "dtype": "int32"
+      }
+    }
+  },
+  "embedding": {
+    "0": {
+      "sha256": "3c7c63bed11ea3b880688ca4edd2b2e741a75c740f993b52400bd729800ee118",
+      "shape": [
+        7042,
+        442
+      ],
+      "dtype": "float64"
+    },
+    "3": {
+      "sha256": "953459365906c43a80e8b7f6ec500ebf951c76adb15dda1dbd9d61ab73a1c0fe",
+      "shape": [
+        4482,
+        282
+      ],
+      "dtype": "float64"
+    }
+  }
+}
