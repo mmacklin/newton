@@ -61,11 +61,12 @@ they are not evidence of a fresh simulation passing. Each scene README describes
 how to generate and validate those data. Preserve failed runs and use fresh output
 directories. Do not weaken the physical checks to obtain a faster measurement.
 
-Physics settings in the published videos and optimized benchmarks can differ;
-the scene documentation distinguishes them. The 4x real-time target is not yet
-met by every scene. Timings are simulation-only CUDA graph measurements, excluding
-rendering, recording and diagnostic readback. No new performance claim is made
-by this packaging commit.
+The selected gallery's videos and optimized measurements are source/configuration
+bound; the portable example commands in this checkout can differ. As of 2026-10-17,
+all **10/10 selected scenes** meet the scoped 4x real-time timing target. Timings
+are simulation-only CUDA graph measurements, excluding rendering, recording and
+diagnostic readback. These are audited gallery results, not benchmark claims for
+this checkout.
 
 ### Current Gallery And Portable Runtime
 
@@ -84,17 +85,21 @@ physical result, saved trajectory or timing.
 | Cup lid | 4x12 | Same source/configuration; selected combined native overlay |
 | Hand | 48 modes, 2x12, 50 ms release | Same derived assets/motion/configuration; separate optimized runtime |
 | Straw | 4x24, relaxation 0.25 | 4x8, relaxation 0.75; same rest geometry |
-| Spatula | Original motion, 4x16, relaxation 0.6 | 25 mm attached lift, coupled17 4x12, relaxation 0.9 |
+| Spatula | Original motion, 4x16, relaxation 0.6 | 25 mm attached lift, coupled17 4x12/0.9; composed native overlay, pair counters OFF |
 | Banana | 4x16, relaxation 1 | 2x6, relaxation 1; identical ordered ROM |
 | Headphones | 4x20, relaxation 0.8 | 4x2 with selected solver/normal-conditioning overlay; same 12 rods |
 
-In particular, this checkout does **not** yet implement or qualify the selected
-spatula's 25 mm lift from 2.9 to 3.2 seconds before release. Its current selected
-4.520758 ms result also remains above the 4x target of 4.166667 ms; the other nine
-selected scenes meet that scoped timing target. The native pair-counter cost is
-included in that spatula timing, not subtracted. No all-tests-pass or full-history
-equivalence is implied. Use the report's current source/configuration and failure
-disclosures rather than attaching its measurements to these portable commands.
+In particular, this checkout does **not** implement or qualify the selected
+spatula's 25 mm lift from 2.9 to 3.2 seconds before release, nor does it contain
+the selected native overlays. The gallery's audited counter-OFF measurement is
+[4.12058212631579 ms](https://reports.mmacklin.com/everyday-rom/spatula/published-measurement.json),
+below the 4x target of 4.166667 ms, with matching 390-frame normal then 390-frame
+strain media. Native pair-counter outputs are disabled during measurement;
+counter values are unavailable, not reported as zero, and no cost is subtracted.
+Historical numerical/history failures and the contact-free gate passing at exactly
+two unloaded frames remain disclosed. No all-tests-pass or full-history equivalence
+is implied. Use the report's current source/configuration and failure disclosures
+rather than attaching its measurements to these portable commands.
 
 `assets.json` and scene source manifests preserve the original content hashes.
 When a live gallery path has been replaced, a hash-verified archive URL identifies
