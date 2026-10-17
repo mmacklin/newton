@@ -5,11 +5,13 @@
   "published_provenance": {
     "scene.json": {
       "origin": "/home/horde/reports/everyday-rom/headphones/scene.json",
-      "sha256": "ab3f5db92c4daec8c21e000741179e1d55130e52dcaef3a04c1292353cb46169"
+      "sha256": "ab3f5db92c4daec8c21e000741179e1d55130e52dcaef3a04c1292353cb46169",
+      "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/headphones-before-normal-rho-20261017/scene.json"
     },
     "metrics.json": {
       "origin": "/home/horde/reports/everyday-rom/headphones/metrics.json",
-      "sha256": "2b52ca65ad50f162ce3fa34827e36dc893baa8956dfab897426ec9784fd95dde"
+      "sha256": "2b52ca65ad50f162ce3fa34827e36dc893baa8956dfab897426ec9784fd95dde",
+      "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/headphones-before-normal-rho-20261017/metrics.json"
     }
   },
   "published_settings": {
@@ -28,7 +30,7 @@
   "files": {
     "capacity_audit.py": {
       "origin": "/home/horde/reports/everyday-rom/headphones/capacity_audit.py",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/headphones/capacity_audit.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/headphones-before-normal-rho-20261017/capacity_audit.py",
       "origin_sha256": "948f514fb2ef7b64a8f36be7ccb732150a55fb0d2c930706017fb731aa6a9c83",
       "packaged_sha256": "6ae7d1bcd37468a67e65b0d596986f88e3f7fb57cfd8b8d98a4eda517d818848",
       "bytes": 7483,
@@ -45,7 +47,8 @@
         "CapacityAudit.data": "6ebbea816c3d453af9e0592ef40cfb446eb8ce64724762aebfefabe06603dbfa",
         "CapacityAudit.check": "f170e08583b50aebe626a56f02b6cdecde4bdc1bdb3723f39c047bd8d24dad50",
         "CapacityAudit.export": "0568f45f549c61f8ae8064a99d72d1a980bb5b4ab5141d3e5263e1afba1bcc02"
-      }
+      },
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/headphones/capacity_audit.py"
     },
     "headphone_geometry.py": {
       "origin": "/home/horde/reports/everyday-rom/headphones/headphone_geometry.py",

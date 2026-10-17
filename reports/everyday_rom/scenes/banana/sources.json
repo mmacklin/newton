@@ -5,7 +5,8 @@
   "authoritative_metadata": {
     "path": "/home/horde/reports/everyday-rom/banana/scene.json",
     "sha256": "7eda4ad071b7742379d108f9cbeb9b260581ae49f326fa579c129c4793e6232b",
-    "bytes": 5124
+    "bytes": 5124,
+    "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/banana-before-fast-2x6-20261017/scene.json"
   },
   "tested_newton_base": "8228bf6f690fff4dbb359d5de6447b09cb77c1e7",
   "scope": "Current original-runtime scene, required procedural/derived model assets and tests only; no trajectories/videos/HTML/raw NIMBLE/fast runtime.",
@@ -24,7 +25,8 @@
         {
           "path": "/home/horde/reports/everyday-rom/banana/scene.json",
           "sha256": "7eda4ad071b7742379d108f9cbeb9b260581ae49f326fa579c129c4793e6232b",
-          "bytes": 5124
+          "bytes": 5124,
+          "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/banana-before-fast-2x6-20261017/scene.json"
         }
       ],
       "changes": "Portable reproduction commands, unchanged research-extension contract, limitations and package scope.",
@@ -37,7 +39,8 @@
         {
           "path": "/home/horde/reports/everyday-rom/banana/ordered_rom.npz",
           "sha256": "5c7766fe2b931f3cbc06914378484933a451c832dbd7fa7296c248bb25c19f77",
-          "bytes": 5098356
+          "bytes": 5098356,
+          "archived_source_url": "https://reports.mmacklin.com/everyday-rom/banana/provenance/ordered_rom.npz"
         }
       ],
       "changes": "Exact published derived model asset, not a simulation trajectory."
@@ -136,7 +139,8 @@
           "bytes": 3689,
           "symbols": [
             "retained_band_max"
-          ]
+          ],
+          "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/banana-before-fast-2x6-20261017/source/check_path_retention.py"
         },
         {
           "path": "/home/horde/reports/everyday-rom/banana/source/refine_retained_snapshot.py",
@@ -144,7 +148,8 @@
           "bytes": 3744,
           "symbols": [
             "retained_constraints"
-          ]
+          ],
+          "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/banana-before-fast-2x6-20261017/source/refine_retained_snapshot.py"
         }
       ],
       "changes": "Extract unchanged pure helpers for retained tests, without historical full-order drivers."
@@ -156,7 +161,8 @@
         {
           "path": "/home/horde/reports/everyday-rom/banana/source/solver_vbd_modal_path.py",
           "sha256": "3a231be12b49d5a2fce6e49a82345766a9d26ddcd046b09da493694225d817c1",
-          "bytes": 8772
+          "bytes": 8772,
+          "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/banana-before-fast-2x6-20261017/source/solver_vbd_modal_path.py"
         }
       ],
       "changes": "Verified original AST with only Warp argument-annotation call/subscript normalization; kernel bodies and all other syntax are strict. Not a byte-identical copy after the repository hook.",
@@ -172,7 +178,8 @@
         {
           "path": "/home/horde/reports/everyday-rom/banana/source/test_banana_path_overrides.py",
           "sha256": "a8ba51364ec406fd40076ca16af5008ec8454ac21e40234945c2ea41a1f03c8e",
-          "bytes": 1993
+          "bytes": 1993,
+          "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/banana-before-fast-2x6-20261017/source/test_banana_path_overrides.py"
         }
       ],
       "changes": "Unchanged authoritative source copy."
@@ -184,7 +191,8 @@
         {
           "path": "/home/horde/reports/everyday-rom/banana/source/test_modal_path_gpu.py",
           "sha256": "86704eb4458a000725e0b4f9ee4772ed7270708389b12fb786bf820e488df9b0",
-          "bytes": 4132
+          "bytes": 4132,
+          "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/banana-before-fast-2x6-20261017/source/test_modal_path_gpu.py"
         }
       ],
       "changes": "Unchanged authoritative source copy."
@@ -196,7 +204,8 @@
         {
           "path": "/home/horde/reports/everyday-rom/banana/source/test_modal_path_integration.py",
           "sha256": "b131619fd649853d4ba8b39af2ba74efd5cfd55ec1a7b3003c08a8a7f2e5c29e",
-          "bytes": 2849
+          "bytes": 2849,
+          "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/banana-before-fast-2x6-20261017/source/test_modal_path_integration.py"
         }
       ],
       "changes": "Unchanged authoritative source copy."
@@ -208,7 +217,8 @@
         {
           "path": "/home/horde/reports/everyday-rom/banana/source/test_ordered_pod.py",
           "sha256": "36310368682cc3023b0d4f1a52d71ebc8439ea4213ca159a62522f562322e0a1",
-          "bytes": 2154
+          "bytes": 2154,
+          "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/banana-before-fast-2x6-20261017/source/test_ordered_pod.py"
         }
       ],
       "changes": "Unchanged authoritative source copy."
@@ -227,7 +237,8 @@
         {
           "path": "/home/horde/reports/everyday-rom/banana/source/test_peel_case.py",
           "sha256": "4f72e97adf05dd250a68b0c9596a8ce748ef4e1c7f5bca566446ae39f002c636",
-          "bytes": 9145
+          "bytes": 9145,
+          "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/banana-before-fast-2x6-20261017/source/test_peel_case.py"
         }
       ],
       "changes": "Authoritative source with repository formatting and documented lint-only edits.",
@@ -240,7 +251,8 @@
         {
           "path": "/home/horde/reports/everyday-rom/banana/source/test_pod_path_energy.py",
           "sha256": "a845db2e79e2a6dc65b5442a4b674d4f06ea3a2ff5ae7e625234c007f049b3cd",
-          "bytes": 3427
+          "bytes": 3427,
+          "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/banana-before-fast-2x6-20261017/source/test_pod_path_energy.py"
         }
       ],
       "changes": "Unchanged authoritative source copy."
@@ -252,7 +264,8 @@
         {
           "path": "/home/horde/reports/everyday-rom/banana/source/test_retained_snapshot.py",
           "sha256": "719585445ea61eefa29da5e3e28fc351287e05e1d3da1e202f6abb72c9bd804e",
-          "bytes": 2116
+          "bytes": 2116,
+          "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/banana-before-fast-2x6-20261017/source/test_retained_snapshot.py"
         }
       ],
       "changes": "Only helper imports redirected to retained_geometry; all tests unchanged."
@@ -266,7 +279,8 @@
         {
           "path": "/home/horde/reports/everyday-rom/banana/ordered_rom.npz",
           "sha256": "5c7766fe2b931f3cbc06914378484933a451c832dbd7fa7296c248bb25c19f77",
-          "bytes": 5098356
+          "bytes": 5098356,
+          "archived_source_url": "https://reports.mmacklin.com/everyday-rom/banana/provenance/ordered_rom.npz"
         }
       ],
       "changes": "Exact published derived model asset, not a simulation trajectory."

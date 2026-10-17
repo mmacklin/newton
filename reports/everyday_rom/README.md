@@ -67,6 +67,44 @@ met by every scene. Timings are simulation-only CUDA graph measurements, excludi
 rendering, recording and diagnostic readback. No new performance claim is made
 by this packaging commit.
 
+### Current Gallery And Portable Runtime
+
+The selected gallery as of 2026-10-17 uses separately qualified runtime overlays.
+This checkout retains the baseline Newton runtime and the commands documented in
+each scene. The table is a comparison, **not** a set of newly qualified portable
+presets. Changing an iteration count alone does not reproduce a selected solver,
+physical result, saved trajectory or timing.
+
+| Scene | Portable example command | Selected gallery |
+| --- | --- | --- |
+| Clog | 4 substeps x 24 iterations, relaxation 0.6 | Same geometry/budget; canonical-FP32 native overlay |
+| Glasses case | 4x16, relaxation 0.7 | 2x12, relaxation 0.7; same C1/scalloped geometry |
+| Toothbrush | Original 4x24/0.3; qualified generic fused 4x16/0.4 | Fused 4x16/0.4 with private persistent soft-dual optimization |
+| Drink bottle | 4x16 | 2x12; same geometry/materials |
+| Cup lid | 4x12 | Same source/configuration; selected combined native overlay |
+| Hand | 48 modes, 2x12, 50 ms release | Same derived assets/motion/configuration; separate optimized runtime |
+| Straw | 4x24, relaxation 0.25 | 4x8, relaxation 0.75; same rest geometry |
+| Spatula | Original motion, 4x16, relaxation 0.6 | 25 mm attached lift, coupled17 4x12, relaxation 0.9 |
+| Banana | 4x16, relaxation 1 | 2x6, relaxation 1; identical ordered ROM |
+| Headphones | 4x20, relaxation 0.8 | 4x2 with selected solver/normal-conditioning overlay; same 12 rods |
+
+In particular, this checkout does **not** yet implement or qualify the selected
+spatula's 25 mm lift from 2.9 to 3.2 seconds before release. Its current selected
+4.520758 ms result also remains above the 4x target of 4.166667 ms; the other nine
+selected scenes meet that scoped timing target. The native pair-counter cost is
+included in that spatula timing, not subtracted. No all-tests-pass or full-history
+equivalence is implied. Use the report's current source/configuration and failure
+disclosures rather than attaching its measurements to these portable commands.
+
+`assets.json` and scene source manifests preserve the original content hashes.
+When a live gallery path has been replaced, a hash-verified archive URL identifies
+the packaged historical snapshot; it is not relabeled as the new selected source.
+`original_source_url` retains an earlier URL and `archived_source_url` supplements
+an original machine path. The banana ROM now lives under `banana/provenance/`;
+the toothbrush frozen basis is an explicitly historical finite-neck reference.
+Neither asset has been regenerated or replaced. Media and raw trajectories remain
+external generated evidence, not additional Git assets.
+
 ## Rendering And Reports
 
 See [rendering](rendering/README.md) for ovrtx rendering of saved Newton surfaces

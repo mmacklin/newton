@@ -5,11 +5,13 @@
   "published_provenance": {
     "scene.json": {
       "origin": "/home/horde/reports/everyday-rom/straw/scene.json",
-      "sha256": "526d71a20d46a427563dd099d207d15224cb5ad331837de7daff5eaab0abd21b"
+      "sha256": "526d71a20d46a427563dd099d207d15224cb5ad331837de7daff5eaab0abd21b",
+      "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/straw-before-fast-4x8-r075-20261017/scene.json"
     },
     "metrics.json": {
       "origin": "/home/horde/reports/everyday-rom/straw/metrics.json",
-      "sha256": "16badceb78d99bd22b6e5410569aa60cd1b9ca84b053d6ba0fd35bf3fa62c93e"
+      "sha256": "16badceb78d99bd22b6e5410569aa60cd1b9ca84b053d6ba0fd35bf3fa62c93e",
+      "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/straw-before-fast-4x8-r075-20261017/metrics.json"
     }
   },
   "published_settings": {

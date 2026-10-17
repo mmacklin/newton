@@ -5,7 +5,8 @@
   "authoritative_metadata": {
     "path": "/home/horde/reports/everyday-rom/glasses-case/scene.json",
     "sha256": "c338f44aa969609084b24e95daf156e1a6b6dab779ca4362815d82deb19ff4d7",
-    "bytes": 5703
+    "bytes": 5703,
+    "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/glasses-case-before-fast-2x12-20261017/scene.json"
   },
   "tested_newton_base": "8228bf6f690fff4dbb359d5de6447b09cb77c1e7",
   "scope": "Current original-runtime scene, required procedural/derived model assets and tests only; no trajectories/videos/HTML/raw NIMBLE/fast runtime.",
@@ -24,12 +25,14 @@
         {
           "path": "/home/horde/reports/everyday-rom/glasses-case/scene.json",
           "sha256": "c338f44aa969609084b24e95daf156e1a6b6dab779ca4362815d82deb19ff4d7",
-          "bytes": 5703
+          "bytes": 5703,
+          "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/glasses-case-before-fast-2x12-20261017/scene.json"
         },
         {
           "path": "/home/horde/reports/everyday-rom/glasses-case/source/README.md",
           "sha256": "de7a8e16a628f111a924a7f0176ca5251c2197018858dfed4447beff20a7bc8c",
-          "bytes": 1984
+          "bytes": 1984,
+          "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/glasses-case-before-fast-2x12-20261017/source/README.md"
         }
       ],
       "changes": "Portable reproduction commands, unchanged research-extension contract, limitations and package scope.",
@@ -210,7 +213,8 @@
         {
           "path": "/home/horde/reports/everyday-rom/glasses-case/source/solver_vbd_modal_path.py",
           "sha256": "032f0cf95008b330449442c402b6019c006d37c50d2fc154ee66f7ae3febae45",
-          "bytes": 8545
+          "bytes": 8545,
+          "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/glasses-case-before-fast-2x12-20261017/source/solver_vbd_modal_path.py"
         }
       ],
       "changes": "Verified original AST with only Warp argument-annotation call/subscript normalization; kernel bodies and all other syntax are strict. Not a byte-identical copy after the repository hook.",

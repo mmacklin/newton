@@ -1,17 +1,20 @@
 {
   "baseline.py": {
-    "source": "https://reports.mmacklin.com/everyday-rom/cup-lid/reproduction/source/baseline.py",
+    "source": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/cup-lid-before-selected-replay-20261017/reproduction/source/baseline.py",
     "source_sha256": "3c3e29d66bb9f915c95f5f312c0e0415d3583f9b1cacd7378e7018a07677435b",
-    "bundled_sha256": "025f2cb452b9efe7f4fa80d403215c7232dcff771ee92931f73554facd76be3f"
+    "bundled_sha256": "025f2cb452b9efe7f4fa80d403215c7232dcff771ee92931f73554facd76be3f",
+    "original_source_url": "https://reports.mmacklin.com/everyday-rom/cup-lid/reproduction/source/baseline.py"
   },
   "cup_lid.py": {
-    "source": "https://reports.mmacklin.com/everyday-rom/cup-lid/reproduction/source/cup_lid.py",
+    "source": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/cup-lid-before-selected-replay-20261017/reproduction/source/cup_lid.py",
     "source_sha256": "a53516cba043a223a3a9b8a128642781152b9a74a857481a925fdc5c1491af03",
-    "bundled_sha256": "7fc53ec4dfd432e299905a260c7cff6354c4d3ff726d39b4767bf3c61ea720d2"
+    "bundled_sha256": "7fc53ec4dfd432e299905a260c7cff6354c4d3ff726d39b4767bf3c61ea720d2",
+    "original_source_url": "https://reports.mmacklin.com/everyday-rom/cup-lid/reproduction/source/cup_lid.py"
   },
   "test_cup_lid.py": {
-    "source": "https://reports.mmacklin.com/everyday-rom/cup-lid/reproduction/source/test_cup_lid.py",
+    "source": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/cup-lid-before-selected-replay-20261017/reproduction/source/test_cup_lid.py",
     "source_sha256": "135ce1970bb2f29ce743b5225cd062f615c6bd3ad3011f455befecb2f92acb0c",
-    "bundled_sha256": "55cf6e8474be5f889f4c150daa59fc1a836c226c00272ff60c7be2ddb3c68ce6"
+    "bundled_sha256": "55cf6e8474be5f889f4c150daa59fc1a836c226c00272ff60c7be2ddb3c68ce6",
+    "original_source_url": "https://reports.mmacklin.com/everyday-rom/cup-lid/reproduction/source/test_cup_lid.py"
   }
 }

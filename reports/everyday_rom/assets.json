@@ -1,8 +1,9 @@
 {
   "scenes/banana/assets/ordered_rom.npz": {
     "sha256": "5c7766fe2b931f3cbc06914378484933a451c832dbd7fa7296c248bb25c19f77",
-    "source": "https://reports.mmacklin.com/everyday-rom/banana/ordered_rom.npz",
-    "description": "Procedural ordered-POD peel ROM and modal path"
+    "source": "https://reports.mmacklin.com/everyday-rom/banana/provenance/ordered_rom.npz",
+    "description": "Procedural ordered-POD peel ROM and modal path",
+    "original_source_url": "https://reports.mmacklin.com/everyday-rom/banana/ordered_rom.npz"
   },
   "scenes/hand/assets/rom-48.npz": {
     "sha256": "526d8f3d1f9ffc2e2979429036250b7bfaaca6f81923f9c850b3e45d4944daea",
@@ -16,7 +17,8 @@
   },
   "scenes/toothbrush/frozen/basis.npz": {
     "sha256": "857c030c0d0b34f4da0ac2ada0c797523b916e5da20ecbdc1480ee7182a6b974",
-    "source": "https://reports.mmacklin.com/everyday-rom/toothbrush/frozen/basis.npz",
-    "description": "Published frozen render reference; physics geometry remains procedural"
+    "source": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/toothbrush-before-fused-frame-20261016/frozen/basis.npz",
+    "description": "Published frozen render reference; physics geometry remains procedural",
+    "original_source_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/frozen/basis.npz"
   }
 }

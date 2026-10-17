@@ -5,11 +5,13 @@
   "published_provenance": {
     "scene.json": {
       "origin": "/home/horde/reports/everyday-rom/spatula/scene.json",
-      "sha256": "5ff3beeec62b1d4833890cb17105cffcdc73f41e0936cf8896b645636e1ac87b"
+      "sha256": "5ff3beeec62b1d4833890cb17105cffcdc73f41e0936cf8896b645636e1ac87b",
+      "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/spatula-before-coupled17-lift25-20261017/scene.json"
     },
     "metrics.json": {
       "origin": "/home/horde/reports/everyday-rom/spatula/metrics.json",
-      "sha256": "c440aad9e196ebb6daaecf5c5fba4f8441ea161ece4f8e8984602734ac58b4dc"
+      "sha256": "c440aad9e196ebb6daaecf5c5fba4f8441ea161ece4f8e8984602734ac58b4dc",
+      "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/spatula-before-coupled17-lift25-20261017/metrics.json"
     }
   },
   "published_settings": {
@@ -37,7 +39,7 @@
   "files": {
     "capacity_audit.py": {
       "origin": "/home/horde/reports/everyday-rom/spatula/source/capacity_audit.py",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/spatula/source/capacity_audit.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/spatula-before-coupled17-lift25-20261017/source/capacity_audit.py",
       "origin_sha256": "948f514fb2ef7b64a8f36be7ccb732150a55fb0d2c930706017fb731aa6a9c83",
       "packaged_sha256": "6ae7d1bcd37468a67e65b0d596986f88e3f7fb57cfd8b8d98a4eda517d818848",
       "bytes": 7483,
@@ -54,7 +56,8 @@
         "CapacityAudit.data": "6ebbea816c3d453af9e0592ef40cfb446eb8ce64724762aebfefabe06603dbfa",
         "CapacityAudit.check": "f170e08583b50aebe626a56f02b6cdecde4bdc1bdb3723f39c047bd8d24dad50",
         "CapacityAudit.export": "0568f45f549c61f8ae8064a99d72d1a980bb5b4ab5141d3e5263e1afba1bcc02"
-      }
+      },
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/spatula/source/capacity_audit.py"
     },
     "render_scene.py": {
       "origin": "/home/horde/reports/everyday-rom/source/render_scene.py",
@@ -79,7 +82,7 @@
     },
     "spatula.py": {
       "origin": "/home/horde/reports/everyday-rom/spatula/source/spatula.py",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/spatula/source/spatula.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/spatula-before-coupled17-lift25-20261017/source/spatula.py",
       "origin_sha256": "0bbb3229fcc4444f57c5fcfb24eeb512a9ccce2f7ddefe20b67a4de2c02529b5",
       "packaged_sha256": "0bbb3229fcc4444f57c5fcfb24eeb512a9ccce2f7ddefe20b67a4de2c02529b5",
       "bytes": 24920,
@@ -102,11 +105,12 @@
         "Example.summary": "c4308f8b27b4f51026b3c4bbf70a010928ea18c487a5583ca79622623e11720a",
         "Example.test_final": "7d45d1e533806d8eac5ab8355f9add303d88521c61df9b524495b5fca017b4f9",
         "Example.export": "942290dcb7a3c6ad0318c48fed109a96eda44cf88fcde2a0c95f8d7b9d6fde70"
-      }
+      },
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/spatula/source/spatula.py"
     },
     "straw.py": {
       "origin": "/home/horde/reports/everyday-rom/spatula/source/straw.py",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/spatula/source/straw.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/spatula-before-coupled17-lift25-20261017/source/straw.py",
       "origin_sha256": "cdeb083a68d3ef8fac477a1100a6b282b53a540b42db1dab302b2017b1d7d059",
       "packaged_sha256": "50a93dfbed15ca6e19203862b248c45b9316095d3de871853fd7985cfd6ffedb",
       "bytes": 38396,
@@ -133,7 +137,8 @@
         "Example.summary": "4163b2a6d558f7a511afbe640ef86b3d45ce33a9319dc4a946e7e04828426e75",
         "Example.test_final": "0c80c9eb6325e8ed25c6841af6cea3e87b29510c528795be1c3f6916da2b48eb",
         "Example.export": "dfef298aea415918f6f02280a82346b8d16b040117847c32a865c2f385751653"
-      }
+      },
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/spatula/source/straw.py"
     },
     "test_utensils.py": {
       "origin": "/home/horde/reports/everyday-rom/spatula/source/test_utensils.py",
@@ -163,7 +168,7 @@
     },
     "utensil_geometry.py": {
       "origin": "/home/horde/reports/everyday-rom/spatula/source/utensil_geometry.py",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/spatula/source/utensil_geometry.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/spatula-before-coupled17-lift25-20261017/source/utensil_geometry.py",
       "origin_sha256": "7c7e39396d0a045b3bf6461a32713118289141f5d1a445c0efc5a4571c009c42",
       "packaged_sha256": "718e76e174b305f0b4d96a5b66d9af9b1c436c2071b734c9906f9173590be0d4",
       "bytes": 32231,
@@ -200,7 +205,8 @@
         "UtensilExample.export": "62b3f2d7ee7bf12c386d8779d616935ed14020b9614d8207bbec05213e22cc28",
         "compare_negative_control": "e11b33a52d472ae3d0c0da473e2d77655e6cb78d3dab063b2a4ad305daa3111d",
         "verify_export": "597e853f55b1bc52c3bd3ac1d019f2f1d1f1e09ce9ffc68b4dbfddfe0d480e37"
-      }
+      },
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/spatula/source/utensil_geometry.py"
     }
   },
   "modifications": "Output paths, generated reproduction commands, and test fixture/launcher paths only. See portability.patch.",

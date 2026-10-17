@@ -5,11 +5,13 @@
   "published_provenance": {
     "scene.json": {
       "origin": "/home/horde/reports/everyday-rom/drink-bottle/scene.json",
-      "sha256": "93bc491c06f2f2551c9a5f4c99d69e374c56f44576d3763dd1d5a0860bc2a52c"
+      "sha256": "93bc491c06f2f2551c9a5f4c99d69e374c56f44576d3763dd1d5a0860bc2a52c",
+      "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/drink-bottle-before-clear-legend-20261016/scene.json"
     },
     "metrics.json": {
       "origin": "/home/horde/reports/everyday-rom/drink-bottle/metrics.json",
-      "sha256": "84f1a1dee8ed6bc34b3424b60eedc83edc3932a2708d3e970eeace0d148c5021"
+      "sha256": "84f1a1dee8ed6bc34b3424b60eedc83edc3932a2708d3e970eeace0d148c5021",
+      "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/drink-bottle-before-clear-legend-20261016/metrics.json"
     }
   },
   "published_settings": {

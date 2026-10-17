@@ -5,11 +5,13 @@
   "published_provenance": {
     "scene.json": {
       "origin": "/home/horde/reports/everyday-rom/toothbrush/scene.json",
-      "sha256": "f2b875b298707e74edf186d313207d3ca12b750630ec575bc102f7c3084e892f"
+      "sha256": "f2b875b298707e74edf186d313207d3ca12b750630ec575bc102f7c3084e892f",
+      "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/toothbrush-before-fused-frame-20261016/scene.json"
     },
     "metrics.json": {
       "origin": "/home/horde/reports/everyday-rom/toothbrush/metrics.json",
-      "sha256": "d3b23258e82edc2a926aa7c624630359673c6f8bb591cafc66474c76300e443d"
+      "sha256": "d3b23258e82edc2a926aa7c624630359673c6f8bb591cafc66474c76300e443d",
+      "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/toothbrush-before-fused-frame-20261016/metrics.json"
     }
   },
   "published_settings": {
@@ -34,7 +36,7 @@
   "files": {
     "brush_glove_geometry.py": {
       "origin": "/home/horde/reports/everyday-rom/toothbrush/source/brush_glove_geometry.py",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/brush_glove_geometry.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/toothbrush-before-fused-frame-20261016/source/brush_glove_geometry.py",
       "origin_sha256": "3ee2d5d54adf9dbd4f59db0fc31048ab213bf8b214ccb36eaca2c74a5993b379",
       "packaged_sha256": "c7229150e01fd9358b89645c05b87984bf921f208871fb5bc289b0c40fb2e945",
       "bytes": 50816,
@@ -85,11 +87,12 @@
       },
       "original_changed_function_ast_sha256": {
         "CapturedExample.export": "d74b2aa78591e8276751a906a2b10d4a4ae6083af4102c28d847c0e797affe03"
-      }
+      },
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/brush_glove_geometry.py"
     },
     "capacity_audit.py": {
       "origin": "/home/horde/reports/everyday-rom/toothbrush/source/capacity_audit.py",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/capacity_audit.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/toothbrush-before-fused-frame-20261016/source/capacity_audit.py",
       "origin_sha256": "5fe7a44d48b4121b9bf46742395655a88155233ba16702d3fc1f83dbc95fcb53",
       "packaged_sha256": "143fec5c6d88bff254ac42471f8735af05f88dc6b95e555169920456f9f15213",
       "bytes": 7549,
@@ -106,11 +109,12 @@
         "CapacityAudit.data": "6ebbea816c3d453af9e0592ef40cfb446eb8ce64724762aebfefabe06603dbfa",
         "CapacityAudit.check": "f170e08583b50aebe626a56f02b6cdecde4bdc1bdb3723f39c047bd8d24dad50",
         "CapacityAudit.export": "0568f45f549c61f8ae8064a99d72d1a980bb5b4ab5141d3e5263e1afba1bcc02"
-      }
+      },
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/capacity_audit.py"
     },
     "field_coverage.py": {
       "origin": "/home/horde/reports/everyday-rom/toothbrush/source/field_coverage.py",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/field_coverage.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/toothbrush-before-fused-frame-20261016/source/field_coverage.py",
       "origin_sha256": "937f9d8b990fe81db974569e3f4e7ce3eb6be11654ff67e7c92df985e5a1191a",
       "packaged_sha256": "88341e7e10c0641fc5735ee97917911e31c719e07ceaecac0e315351c1dab18e",
       "bytes": 4441,
@@ -125,31 +129,34 @@
         "FieldAudit.observe": "db3ce7f27b242e03c0bf3f0c146084dc6b1054869b930a6b95d0dd4f8a4b7ef8",
         "FieldAudit.last_frame": "9b27ce689ebd8e4e099700f65f7d26e833301a15cdedd690712797ff72ed9530",
         "FieldAudit.export": "7e8b89f379aa3a37f75a4452bffb9aaabc8962c39ba407c7e3f0f47c337a7087"
-      }
+      },
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/field_coverage.py"
     },
     "frozen/basis.npz": {
       "origin": "/home/horde/reports/everyday-rom/toothbrush/frozen/basis.npz",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/frozen/basis.npz",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/toothbrush-before-fused-frame-20261016/frozen/basis.npz",
       "origin_sha256": "857c030c0d0b34f4da0ac2ada0c797523b916e5da20ecbdc1480ee7182a6b974",
       "packaged_sha256": "857c030c0d0b34f4da0ac2ada0c797523b916e5da20ecbdc1480ee7182a6b974",
       "bytes": 472130,
       "exact_copy": true,
       "role": "Archived derived 40-mode reference used only by test_toothbrush_scrub; not a runtime simulation input or current render export.",
       "derivation": "None during packaging: exact file copy, no field trimming or recompression. Do not substitute the different toothbrush/basis.npz current export.",
-      "published_hash_verified": false
+      "published_hash_verified": false,
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/frozen/basis.npz"
     },
     "frozen/scene.json": {
       "origin": "/home/horde/reports/everyday-rom/toothbrush/frozen/scene.json",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/frozen/scene.json",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/toothbrush-before-fused-frame-20261016/frozen/scene.json",
       "origin_sha256": "ea33b1071f653741a0fbaa0539bd5302d8c3307b426d0411a9a40a5fe1898cfe",
       "packaged_sha256": "ea33b1071f653741a0fbaa0539bd5302d8c3307b426d0411a9a40a5fe1898cfe",
       "bytes": 12491,
       "exact_copy": true,
-      "published_hash_verified": false
+      "published_hash_verified": false,
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/frozen/scene.json"
     },
     "test_brush_glove.py": {
       "origin": "/home/horde/reports/everyday-rom/toothbrush/source/test_brush_glove.py",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/test_brush_glove.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/toothbrush/source/test_brush_glove.py",
       "origin_sha256": "219e00bd2b38eb2691337a6d1f996262fb67da0783bef6d078f91cdc7d3f4f4a",
       "packaged_sha256": "219e00bd2b38eb2691337a6d1f996262fb67da0783bef6d078f91cdc7d3f4f4a",
       "bytes": 20844,
@@ -169,11 +176,12 @@
         "GeometryTests.test_glove_gravity_equilibrium": "0acbf1b184b08b0b3f34bfca1d1321bf2a5e17affb94c3bd35af336862f1f9f7",
         "verify_export": "9c2b2a200b9aa45198880998a5e0fa6ec47338f17d59da4f754fa2b19df626d3",
         "verify_dynamic_assembly": "72fed8cbbdc28a635f6d795429faf13a13488bd7863bcffa69fdd3d36c5b116b"
-      }
+      },
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/test_brush_glove.py"
     },
     "test_toothbrush_scrub.py": {
       "origin": "/home/horde/reports/everyday-rom/toothbrush/source/test_toothbrush_scrub.py",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/test_toothbrush_scrub.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/toothbrush-before-fused-frame-20261016/source/test_toothbrush_scrub.py",
       "origin_sha256": "07679781376515f24b02549e5ab00cb6347e56d4dd2c7db13fbdaaaaf7bc413b",
       "packaged_sha256": "65805af87d893390923cd116b6d3fd548cbb4a558fafec168801cf3d68f4fa08",
       "bytes": 24431,
@@ -198,11 +206,12 @@
         "ScrubCPUTests._check_real_cpu_solver_enables_implicit_mass_coupling": "29ff8d4602f8cdf7d1a27bf9a36bff927bfe294ee7ccc3f6f52dd861405b0300",
         "ScrubCPUTests._check_motion_detector_rejects_stationary_and_monotonic_handles": "232511caa142e501d4c92d0e96bffcbd053d73f77dd1eebc027100c5a921f685",
         "verify_export": "c7a840709200be032bf96047f7b112ab11c38f2913b98e1d3db2704b5d53024a"
-      }
+      },
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/test_toothbrush_scrub.py"
     },
     "toothbrush.py": {
       "origin": "/home/horde/reports/everyday-rom/toothbrush/source/toothbrush.py",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/toothbrush.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/toothbrush-before-fused-frame-20261016/source/toothbrush.py",
       "origin_sha256": "b5252c7640c6b349b737cee40fe03ec4f8d15fb07ae668633e3d4011803e98f5",
       "packaged_sha256": "7cc37945f6c0d4e11a14ac9791185277f5a785a2d2b7e38922aff718114e693b",
       "bytes": 22819,
@@ -228,11 +237,12 @@
       },
       "original_changed_function_ast_sha256": {
         "Example.test_final": "6eb08171d5323fc6322a57271d087d5fe243d664b221a7177b893cff06f7501b"
-      }
+      },
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/source/toothbrush.py"
     },
     "subdivision.py": {
       "origin": "/home/horde/reports/everyday-rom/toothbrush/reproduction/assets/refine_render.original.py",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/reproduction/assets/refine_render.original.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/toothbrush-before-fused-frame-20261016/reproduction/assets/refine_render.original.py",
       "origin_sha256": "0fe76a548c2842c5da4bfbcace833b9cb5fb7464baaffe198852a58154239cdd",
       "packaged_sha256": "61c8400266e44bb08b551ee05d9b590fca36b7722984881c5335ac067a31b9e8",
       "bytes": 3144,
@@ -242,11 +252,12 @@
         "subdivision_embedding": "3d5f5dd9921bd7fb68042a97349111e150e35b48ff3e54d7d44c1299087c4169",
         "refined_plastic": "b556349a3247c27473677d96badd0dc265afd76b89ca6c5d33576907278154d1"
       },
-      "derivation": "Extract exactly the two named function definitions; replace the archived absolute-path driver with a local NumPy-only module. Both function ASTs are unchanged."
+      "derivation": "Extract exactly the two named function definitions; replace the archived absolute-path driver with a local NumPy-only module. Both function ASTs are unchanged.",
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/reproduction/assets/refine_render.original.py"
     },
     "refine_render.py": {
       "origin": "/home/horde/reports/everyday-rom/toothbrush/reproduction/portable_refinement.py",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/reproduction/portable_refinement.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/toothbrush-before-fused-frame-20261016/reproduction/portable_refinement.py",
       "origin_sha256": "e29238d5e0e1273d1067646b9e8f684689963c60d9c17a285ae52bab039788ee",
       "packaged_sha256": "9557a760d84abd109e218469e7b8e2a0b93e076b1cf05df225bc448c947ecc97",
       "bytes": 8202,
@@ -258,17 +269,19 @@
       "derivation": "Adapt published CPU refinement to fresh local exports: local imports, source/gate binding instead of archived equilibrium basis hash, local I/O helpers and CLI. Preserve subdivision, quaternion arithmetic, 450-frame checks and 5e-8 m mapping limit.",
       "changed_functions": [
         "validate_physical"
-      ]
+      ],
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/reproduction/portable_refinement.py"
     },
     "presentation.json": {
       "origin": "/home/horde/reports/everyday-rom/toothbrush/reproduction/assets/presentation.json",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/reproduction/assets/presentation.json",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/toothbrush-before-fused-frame-20261016/reproduction/assets/presentation.json",
       "origin_sha256": "1ae728e75f47be60eff80d67d0db58fce3e44c2d920c95f2da5e32a50c2f8ff9",
       "packaged_sha256": "1ae728e75f47be60eff80d67d0db58fce3e44c2d920c95f2da5e32a50c2f8ff9",
       "bytes": 261,
       "exact_copy": true,
       "published_hash_verified": false,
-      "derivation": "Exact published presentation copy."
+      "derivation": "Exact published presentation copy.",
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/toothbrush/reproduction/assets/presentation.json"
     }
   },
   "modifications": "Retain the original finite-neck example and add a separate fused public-generic adapter. Shared hooks: explicit expected dynamic body count (original 2, fused 1), per-example exported source inventory, and fused-producer binding in render refinement. Original simulation arithmetic and all numerical/physical thresholds remain unchanged. See FUSED_PORTABILITY.md and fused_sources.json; portability.patch remains the historical initial packaging diff.",

@@ -5,11 +5,13 @@
   "published_provenance": {
     "scene.json": {
       "origin": "/home/horde/reports/everyday-rom/clog/scene.json",
-      "sha256": "67abd6bb59993e9dc17f9cff254fe0858eaa6ca9ddc7f1e71216cb979809f4ee"
+      "sha256": "67abd6bb59993e9dc17f9cff254fe0858eaa6ca9ddc7f1e71216cb979809f4ee",
+      "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/clog-before-canonical-fp32-20261017/scene.json"
     },
     "metrics.json": {
       "origin": "/home/horde/reports/everyday-rom/clog/metrics.json",
-      "sha256": "b4d2abf69b4c53ed892e41e6323fe43699314ac7d17eec5b1643cc34e0db0b84"
+      "sha256": "b4d2abf69b4c53ed892e41e6323fe43699314ac7d17eec5b1643cc34e0db0b84",
+      "archived_source_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/clog-before-canonical-fp32-20261017/metrics.json"
     }
   },
   "published_settings": {
@@ -95,7 +97,7 @@
     },
     "render_scene.py": {
       "origin": "/home/horde/reports/everyday-rom/clog/render_scene.py",
-      "origin_url": "https://reports.mmacklin.com/everyday-rom/clog/render_scene.py",
+      "origin_url": "https://reports.mmacklin.com/everyday-rom/visual-revisions/archive/clog-before-canonical-fp32-20261017/render_scene.py",
       "origin_sha256": "39b5a070f25b58eaf1e4d9b63262ed3e0cf10011e643fec3656f0b0126cef32d",
       "packaged_sha256": "39b5a070f25b58eaf1e4d9b63262ed3e0cf10011e643fec3656f0b0126cef32d",
       "bytes": 15344,
@@ -112,7 +114,8 @@
         "mesh": "c8986bba4f567220db80cb9271ff22a38b94d371d751baa3c9924ce9e0b92e7e",
         "create_stage": "13d236022996b116e42592851f9807bfaff452db3e478b6c3e67cbc23f6f0e9e",
         "main": "0fdf88f657551f23329604fe0aff7a4687615bbfac30e25859bf2bd99a374d7a"
-      }
+      },
+      "original_source_url": "https://reports.mmacklin.com/everyday-rom/clog/render_scene.py"
     },
     "test_wearables.py": {
       "origin": "/home/horde/reports/everyday-rom/clog/test_wearables.py",
