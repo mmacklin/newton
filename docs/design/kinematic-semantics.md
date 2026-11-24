@@ -5,14 +5,34 @@ Scope: rigid bodies, particles, articulations, collision, coupling, and solver c
 Baseline audited: `newton-physics/newton` `main` at
 [`fddee2be`](https://github.com/newton-physics/newton/commit/fddee2bebe749b5461a596f7624d445fc3d0e57b)
 (2026-08-04)  
+Kamino behavior rechecked on `main` at
+[`108c8a4f`](https://github.com/newton-physics/newton/commit/108c8a4fa753ce332a185cb3817c07f93660e70f)
+(2026-09-10)
+
 Related work: [PR #3659, “Refactor VBD pose baselines”](https://github.com/newton-physics/newton/pull/3659)
+
+## Core semantics
+
+Kinematic bodies and particles have infinite effective inertia. As such, their
+velocity does not change during a timestep. Their pose or position is naturally
+integrated over the timestep from the beginning-of-step state using this
+constant velocity.
+
+```text
+v(t + 1) = v(t)
+q(t + 1) = advance(q(t), v(t), dt) = advance(q(t), v(t + 1), dt)
+```
+
+For particles, `advance` is vector addition. For rigid bodies, it advances the
+world-space center of mass (COM) and integrates the orientation using the
+agreed quaternion update while preserving the body-origin-to-COM offset.
 
 ## Decision summary
 
 Newton should use one rule everywhere:
 
-> **Flags define who owns motion. Mass defines inertia. Inverse mass is derived
-> numerical data.**
+> **Flags define who owns motion. Mass and inertia define dynamic response.
+> Inverse mass and inverse inertia are derived numerical data.**
 
 The concrete contract is:
 
@@ -21,27 +41,36 @@ The concrete contract is:
 2. Add `ParticleFlags.KINEMATIC`. Rename the existing `ParticleFlags.ACTIVE`
    bit to `ParticleFlags.DYNAMIC`, retaining `ACTIVE` as a deprecated alias so
    its numeric value and existing serialized data remain compatible.
-3. A kinematic entity's pose/position **and** velocity are authored inputs.
-   Solvers copy both to the output unchanged. They do not integrate the
-   velocity, infer velocity from pose history, or apply forces to the entity.
+   Particles with neither `DYNAMIC` nor `KINEMATIC` are ignored by the solver:
+   they do not collide, are not rasterized to the grid, and do not participate
+   in constraints. They may serve as capacity reserves or belong to another
+   solver in coupled workflows.
+3. A kinematic entity's beginning-of-step pose or position **and** velocity are
+   authored inputs. Solvers copy the velocity to the output unchanged and do
+   not apply forces to the entity. Poses and positions are
+   **forward-integrated** from the beginning-of-step state and velocity. If the
+   pose or position should remain constant over the step, the input velocity
+   must be zero.
 4. Kinematic entities still participate in contact and constraints as moving,
    infinite-mass boundaries. Their authored velocity contributes to relative
    velocity, damping, restitution, and friction.
 5. A dynamic entity must have valid positive mass. A zero-mass dynamic entity
    is invalid, following a deprecation window.
-6. Static rigid geometry remains a shape attached to world (`shape_body == -1`).
+6. Static rigid geometry remains a shape attached to the world
+   (`shape_body == -1`).
    Newton does not need `BodyFlags.STATIC`; a stationary kinematic body is not
    static because it still has authored state and may move later.
 7. Any link in an articulation may be kinematic at the model level, including
-   an internal link or both tips. A solver must implement the absolute
+   an internal link or both endpoints. A solver must implement the absolute
    world-space boundary condition exactly or reject the model during solver
    construction with a clear capability error.
 
-The direct answer to “does a kinematic body have its velocity integrated?” is
-**no**. If a user authors only velocity, its geometry does not move. If a user
-authors only pose, Newton treats the edit as a teleport and does not invent a
-velocity. Continuous prescribed motion requires a mutually consistent pose and
-velocity on every solver substep.
+The direct answer to “is a kinematic body's pose integrated from its velocity?”
+is **yes**. The user authors the velocity, and the solver follows it exactly
+from the current pose. The velocity itself is copied through unchanged.
+Continuous prescribed motion requires a mutually consistent pose and velocity
+on every solver substep. The authored velocity should be computed from the
+current pose and the target end-of-step pose.
 
 ## Why the current model is ambiguous
 
@@ -62,10 +91,11 @@ second de facto classifier in solver code:
 - MuJoCo and Featherstone approximate some articulated kinematic DOFs with a
   very large armature. That is an implementation technique, not an exact public
   semantic, and it is unsuitable as the definition of kinematic motion.
-- Kamino does not currently consume `BodyFlags.KINEMATIC` as a body motion type.
+- Kamino classifies `BodyFlags.KINEMATIC` and `BodyFlags.PROXY` bodies as
+  immovable and uses their authored input velocity in constraint free-velocity
+  terms. It copies the authored pose and velocity to the output rather than
+  forward-integrating the output pose. 
 
-Particles have no motion-type flag. The builder explicitly documents zero mass
-as the way to create a “kinematic” particle in
 [`builder.py`](https://github.com/newton-physics/newton/blob/fddee2bebe749b5461a596f7624d445fc3d0e57b/newton/_src/sim/builder.py#L8281-L8349),
 but the resulting behavior depends on the solver:
 
@@ -79,6 +109,9 @@ but the resulting behavior depends on the solver:
 - Style3D locally clears `ParticleFlags.ACTIVE` whenever particle mass is zero.
   See
   [`style3d/kernels.py`](https://github.com/newton-physics/newton/blob/fddee2bebe749b5461a596f7624d445fc3d0e57b/newton/_src/solvers/style3d/kernels.py#L9-L16).
+- MPM assumes zero-mass particles are kinematic and prescribe the motion of the
+  grid nodes to which they are rasterized. `~ParticleFlags.ACTIVE` particles are
+  not rasterized to the grid and do not affect other particles.
 
 These are observably different semantics for the same model. They also make
 mass editing a hidden motion-mode switch and make coupling code guess whether
@@ -88,18 +121,18 @@ an endpoint can respond.
 
 “Must” in this section is intended as the solver-independent public contract.
 
-| Entity kind | Motion owner | Solver writes pose? | Solver writes velocity? | Responds to force? | Contact/constraint role |
+| Entity kind | Motion owner | Output pose/position | Output velocity | Responds to force? | Contact/constraint role |
 |---|---|---:|---:|---:|---|
-| Dynamic rigid body | Solver | Yes | Yes | Yes | Finite inertia |
-| Kinematic rigid body | Caller | No; copy-through | No; copy-through | No | Moving infinite-mass boundary |
+| Dynamic rigid body | Solver | Solver-computed | Solver-computed | Yes | Finite inertia |
+| Kinematic rigid body | Caller | Forward-integrated | Copy-through | No | Moving infinite-mass boundary |
 | Static rigid shape (`body=-1`) | Model | No state | No state | No | Fixed world boundary |
-| Dynamic particle | Solver | Yes | Yes | Yes | Finite mass |
-| Kinematic particle | Caller | No; copy-through | No; copy-through | No | Moving infinite-mass boundary |
-| Fixed particle | Caller/model | No; copy-through | Output zero | No | Fixed topology boundary; no point-particle contacts |
+| Dynamic particle | Solver | Solver-computed | Solver-computed | Yes | Finite mass |
+| Kinematic particle | Caller | Forward-integrated | Copy-through | No | Moving infinite-mass boundary |
+| Ignored particle | Caller | Undefined | Undefined | No | None; ignored |
 
-All output rows must be written deterministically even when `state_in` and
-`state_out` are distinct. A solver must not leave inactive, fixed, or kinematic
-rows stale or uninitialized.
+All non-ignored output rows must be written deterministically even when
+`state_in` and `state_out` are distinct. Output rows for `IGNORED` particles may
+remain untouched and are undefined.
 
 ### Rigid flags
 
@@ -121,7 +154,7 @@ dynamic particles:
 
 ```python
 class ParticleFlags(IntEnum):
-    FIXED = 0
+    IGNORED = 0
     DYNAMIC = 1 << 0
     ACTIVE = DYNAMIC       # deprecated compatibility alias
     PROXY = 1 << 1
@@ -133,9 +166,9 @@ The motion mask is `DYNAMIC | KINEMATIC`; a particle must not contain both.
 
 - `DYNAMIC` preserves the numeric value and behavior of today's `ACTIVE` bit.
 - `KINEMATIC` is an explicit moving boundary particle.
-- `FIXED` preserves today's common cloth-pin idiom of clearing `ACTIVE`: the
-  position remains part of structural topology but is not solved and does not
-  generate point-particle contacts.
+- `IGNORED` particles are ignored. They do not generate point-particle contacts.
+  Solvers must not modify their attributes and should consider their state
+  undefined.
 - Collision, viewer, coupling, and topology code must stop using “has the old
   ACTIVE bit” as a proxy for every kind of participation. Each call site must
   ask the narrower question: dynamic, kinematic, motion-bearing, renderable, or
@@ -147,57 +180,60 @@ renumbering the existing dynamic bit.
 
 ## State and time convention
 
-For a kinematic entity, the caller authors the target state used by collision
-and the current solve before calling collision detection and `Solver.step()`.
-For one step:
+For a kinematic entity, the caller authors the beginning-of-step state before
+calling collision detection and `Solver.step()`. The pose or position is the
+current geometry used by collision detection, and the velocity prescribes its
+motion over the step. For one step:
 
 ```text
-q_out  = q_in
+q_out  = advance(q_in, qd_in, dt)
 qd_out = qd_in
 ```
 
 and for a particle:
 
 ```text
-x_out = x_in
+x_out = x_in + dt * v_in
 v_out = v_in
 ```
 
 No force, gravity, damping, constraint impulse, or contact impulse may alter
-those outputs. The authored velocity is still used when computing relative
-motion against dynamic entities.
+those outputs. The authored velocity is used both to advance the kinematic body
+from its input pose to its output pose and to compute relative motion against
+dynamic entities. This yields consistent behavior for velocity-based and
+pose-based constraints involving kinematic objects.
 
-For a target sequence, author velocity from consecutive target states at the
-same cadence as the solver step. For particles:
+For a target sequence, author velocity from the current beginning-of-step state
+and the next target state at the same cadence as the solver step.
+
+For particles:
 
 ```text
-v* = (x*_n - x*_{n-1}) / dt
+v_n = (x*_{n+1} - x_n) / dt
 ```
 
 For rigid bodies, use center-of-mass displacement for the linear component and
 the quaternion delta for angular velocity:
 
 ```text
-v*_com = (com_world(q*_n) - com_world(q*_{n-1})) / dt
-w*     = quat_velocity(rot(q*_n), rot(q*_{n-1}), dt)
+v_com,n = (com_world(q*_{n+1}) - com_world(q_n)) / dt
+w_n     = quat_velocity(rot(q*_{n+1}), rot(q_n), dt)
 ```
 
 The rigid linear component is the world-space COM velocity, matching
-`State.body_qd`.
+`State.body_qd`. `quat_velocity` must invert the same discrete rotation
+convention used by `advance` so that the authored velocity reaches the target
+pose.
 
 The API should document the following edge cases explicitly:
 
 - **Pose changes, velocity does not:** a teleport. The new pose is accepted;
-  velocity and friction are not inferred from pose history.
-- **Velocity changes, pose does not:** no geometric motion. Treat this as an
-  inconsistent kinematic state, not an instruction to integrate. A future
-  debug validator may diagnose it. Conveyor/material surface motion should use
-  an explicit shape/contact surface-velocity API rather than an inconsistent
-  body state.
+  velocity and friction are not inferred from pose history. Contact still uses
+  the retained authored velocity.
+- **Velocity changes, pose does not:** kinematic motion from the current pose.
+  This is the expected prescribed animation workflow.
 - **Dynamic pose edit:** also a teleport. It establishes the dynamic body's new
-  starting pose without changing `qd`. Regenerate contacts and reset affected
-  warm-start history. Do not infer a kick or friction from retained solver
-  history.
+  starting pose.
 - **Substeps:** author a target and matching velocity for every substep. Holding
   an outer-frame pose while replaying a nonzero velocity across substeps is not
   consistent motion.
@@ -206,53 +242,45 @@ The API should document the following edge cases explicitly:
 
 Adopt the core policy in PR #3659:
 
-1. `body_q_prev` is per-step scratch, not hidden cross-step public-state
-   history.
-2. A dynamic body's baseline is the incoming pose. A teleport therefore does
-   not create inferred velocity or friction.
-3. A kinematic body's current geometry remains at the authored pose. VBD
-   reconstructs the motion-only baseline by integrating the authored twist
-   backward:
-
-   ```text
-   body_q_prev = integrate_kinematic(body_q, body_qd, -dt)
-   ```
-
-4. Finalization preserves the authored kinematic `body_qd`; it does not replace
-   it with a finite difference.
-5. Coupling-only accepted/frame-start pose history remains isolated from the
-   standalone step baseline because proxy synchronization genuinely crosses
-   outer-step boundaries.
+1. `body_q_prev` uses `state_in.body_q` as its per-step baseline.
+2. A dynamic body's baseline is the incoming pose, `state_in.body_q`. A teleport
+   therefore does not create inferred velocity or friction.
+3. A kinematic body's geometry follows the authored velocity,
+   `state_in.body_qd`, according to normal forward-integration rules. This
+   naturally accounts for frictional motion due to the authored velocity.
+4. Finalization preserves the authored kinematic `body_qd`.
+5. Dynamic coupling `PROXY` bodies are forward-integrated from their `state_in`
+   pose and velocity during `step()`. They have finite inertia and are subject
+   to reaction impulses. The coupling hooks are responsible for adjusting
+   `body_qd` so that external and coupling forces are not double-counted.
 
 The same rule should be implemented for VBD particles:
 
 ```text
-particle_q_prev = particle_q - particle_qd * dt
-particle_q      = authored position
+particle_q(t + 1)  = particle_q(t) + particle_qd(t) * dt
+particle_qd(t + 1) = particle_qd(t) = authored velocity
 ```
 
-This supplies velocity-dependent elastic/contact terms without advancing the
-authored geometry and removes the present zero-inverse-mass special case.
-
-Backtracking is a solver-internal representation only. Other solvers may use
-`qd` directly. Conformance is judged by public state and physical interaction,
+Here, `particle_q(t)` is the incoming current pose, including any authored
+teleport. This enforces consistency between velocity-dependent and
+pose-dependent elastic and contact terms.
+Conformance is judged by public state and physical interaction,
 not by identical private buffers.
 
 ## Mass and inverse mass
 
-Mass arrays are inertial properties, not state classifiers.
+Mass and inertia arrays are inertial properties, not state classifiers.
 
 ### Required invariants
 
 - Negative mass is always invalid.
-- A `DYNAMIC` body or particle requires finite `mass > 0` and valid inertia for
-  its enabled rigid rotational degrees of freedom.
-- A `KINEMATIC` body or particle may retain positive mass/inertia for metadata,
-  identification, or a future transition to dynamic. It may also omit inertial
-  data and use zero mass because the solver does not consume its physical
-  response.
-- A `FIXED` particle may use zero or positive mass; mass has no response effect
-  while fixed.
+- A `DYNAMIC` body requires finite `mass > 0` and valid inertia for its enabled
+  rotational degrees of freedom. A `DYNAMIC` particle requires finite
+  `mass > 0`.
+- A `KINEMATIC` body may retain positive mass and inertia, and a `KINEMATIC`
+  particle may retain positive mass, for metadata, identification, or a future
+  transition to dynamic. Either may use zero mass because the solver does not
+  consume its physical response.
 - `body_inv_mass`, `body_inv_inertia`, and `particle_inv_mass` are derived from
   the canonical mass/inertia values. Users must not use them to request motion
   modes.
@@ -267,9 +295,9 @@ Mass arrays are inertial properties, not state classifiers.
   must inspect flags, not the effective numerical zero.
 
 Newton should provide indexed inertial-property setters that update mass and
-its inverse atomically. Directly editing one side of a reciprocal pair should
-be documented as unsupported. This avoids contradictory `mass`, `inv_mass`,
-and inertia state during runtime model updates.
+inertia together with their derived inverses. Directly editing one side of a
+reciprocal pair should be documented as unsupported. This avoids contradictory
+mass and inertia state during runtime model updates.
 
 ## Articulations and kinematic links
 
@@ -281,7 +309,7 @@ Therefore:
 - A root link may be kinematic.
 - An internal or tip link may be kinematic.
 - Multiple links may be kinematic.
-- An articulation with both tips kinematic is legal when the remaining
+- An articulation with both endpoint links kinematic is legal when the remaining
   constraints have a solution. This is a normal two-ended boundary-value
   problem for a cable or chain.
 - Two authored kinematic links that violate an enabled joint create an
@@ -312,15 +340,17 @@ accepted by two solvers must have the same meaning in both.
 
 Changing a motion flag is supported only through a model update followed by
 `notify_model_changed` with the corresponding property flag.
+The updated model determines the motion classification, while the next state
+passed to `Solver.step()` supplies the initial pose and velocity.
 
 - Dynamic → kinematic: the current pose and velocity become the first authored
-  target; effective inverse inertia becomes zero; per-entity impulses, duals,
-  sleep state, and motion history are invalidated.
+  beginning-of-step state; effective inverse inertia becomes zero; per-entity
+  impulses, duals, sleep state, and motion history are invalidated.
 - Kinematic → dynamic: current authored pose and velocity become initial dynamic
   state; positive valid inertial properties are required; solver factorizations
   and effective inertia are rebuilt.
-- Fixed particle → kinematic/dynamic: current position is the initial authored
-  or dynamic position. Velocity must be initialized explicitly.
+- Ignored particle → kinematic/dynamic: position and velocity must both be
+  initialized explicitly because ignored particle state is undefined.
 
 Add `ModelFlags.PARTICLE_PROPERTIES` and
 `ModelFlags.PARTICLE_INERTIAL_PROPERTIES`, parallel to the body flags. Particle
@@ -328,7 +358,7 @@ solvers currently lack a precise public notification channel for these changes.
 
 Changing flags or inertial arrays during CUDA graph replay remains unsupported
 unless the solver explicitly advertises capture-safe refresh. The validation
-should fail before capture rather than leave stale effective masses.
+should fail before replay rather than leave stale effective masses.
 
 ## Solver implementation rules
 
@@ -336,62 +366,67 @@ Every solver should use shared predicates or shared effective-response builders
 rather than open-coding mass tests. The rules are:
 
 1. Classify from the public motion flag.
-2. Copy through all caller-owned state rows.
-3. Integrate and solve only dynamic rows.
+2. Write every non-ignored output row according to the ownership contract.
+3. Apply force integration and solver corrections only to dynamic rows;
+   forward-integrate kinematic poses and positions from authored velocities.
 4. Include kinematic rows as infinite-mass moving boundaries in contact and
    constraints.
 5. Use flags for broad-phase “immovable pair” filtering.
 6. Preserve kinematic velocity in restitution/friction/contact evaluation.
 7. Never infer public velocity from private pose history for an authored or
    teleported entity.
-8. Reject unsupported topology or entity kinds at solver construction.
+8. Reject unsupported topology or entity kinds at solver construction or when
+   processing a relevant model update.
 
 ### Backend work list
 
 | Backend | Required work |
 |---|---|
-| Shared/SemiImplicit | Add particle motion classification; use effective rigid response in contacts; deterministic copy-through. |
-| XPBD | Add particle effective inverse mass and kinematic copy-through; audit every ACTIVE check; retain rigid flag-based effective inertia. |
-| VBD | Land the PR #3659 rigid baseline policy; implement the equivalent particle baseline; replace motion classification by inverse mass. |
+| Shared/SemiImplicit | Add particle motion classification; use effective rigid response in contacts; write deterministic outputs. |
+| XPBD | Add particle effective inverse mass, kinematic forward integration, and velocity copy-through; audit every `ACTIVE` check; retain rigid flag-based effective inertia. |
+| VBD | Adapt the PR #3659 rigid baseline policy; implement the equivalent particle baseline; replace inverse-mass motion classification with flag-based classification. |
 | Featherstone | Preserve exact authored root state; remove “large armature” as the semantic guarantee; reject unsupported internal kinematic links; update shared particle path. |
 | MuJoCo CPU/Warp | Preserve exact root kinematic inputs and outputs around mocap/DOF mapping; reject unsupported internal links rather than approximate them; no particle claim. |
-| Kamino | Implement `BodyFlags.KINEMATIC` as an absolute boundary or reject any kinematic body during construction. |
+| Kamino | Retain `KINEMATIC` infinite response and authored velocity in constraint terms; forward-integrate the kinematic output pose; stop treating dynamic `PROXY` bodies as immovable; remove zero inertia as a motion classifier. |
 | Style3D | Stop converting zero mass into inactive state; branch on particle motion flags and support or explicitly reject moving kinematic boundaries. |
-| Implicit MPM | Define whether Newton kinematic particles are prescribed material points or boundary-only points; until then reject the flag explicitly. |
+| Implicit MPM | Classify particle motion from flags, implement the kinematic state contract, and deprecate `mass == 0` as a motion classifier. |
 | Coupled solvers | Preserve ownership and flags through views/proxies; compute effective response from the destination view's motion type; never mutate base model inertia to disable a proxy. |
 
 ## Conformance suite
 
 A single parameterized suite should run against every backend that declares
-support. Unsupported cases must be constructor-error tests.
+support. Unsupported cases must test capability errors during construction or
+a relevant runtime model update.
 
 ### Rigid cases
 
 1. Positive-mass kinematic body under gravity, force, and torque: bitwise or
-   tolerance-equivalent `q_out == q_in`, `qd_out == qd_in`.
+   tolerance-equivalent `q_out == advance(q_in, qd_in, dt)`,
+   `qd_out == qd_in`.
 2. Repeat with zero and large model mass: identical public trajectory and
-   dynamic contact response.
-3. Nonzero authored `qd` with unchanged `q`: pose remains unchanged.
-4. Pose teleport with unchanged `qd`: no inferred velocity or tangential
-   friction; refreshed contacts use the new geometry.
+   identical response of any contacted dynamic body.
+3. Nonzero authored `qd` with unchanged `q`: pose is forward-integrated.
+4. Pose teleport with unchanged `qd`: no velocity or tangential friction is
+   inferred from the pose jump; refreshed contacts use the new geometry and the
+   authored `qd`.
 5. Kinematic–dynamic contact: dynamic body responds, kinematic body does not,
    and reported reaction is equal/opposite where the backend exposes it.
 6. Dynamic body with zero mass: deprecation warning in the transition release,
    then model-validation failure.
 7. Runtime dynamic ↔ kinematic transition invalidates cached solver state.
-8. Root, internal, and two-tip articulation matrices, including an intentionally
-   inconsistent target pair with a diagnostic assertion.
+8. Root, internal, and both-endpoints-kinematic articulation cases, including
+   an intentionally inconsistent target pair with a diagnostic assertion.
 
 ### Particle cases
 
 1. `DYNAMIC`, positive mass: integrates force and gravity.
-2. `KINEMATIC`, positive and zero mass: position and velocity copy through and
-   results are mass-independent.
+2. `KINEMATIC`, positive and zero mass: position is forward-integrated, velocity
+   is copied through, and results are mass-independent.
 3. Kinematic–dynamic contact and elastic adjacency: only the dynamic point
    moves; prescribed velocity affects velocity-dependent terms.
-4. `FIXED`: position copies through, output velocity is zero, topology remains
-   anchored, and point-particle collision participation matches the documented
-   fixed behavior.
+4. `IGNORED`: state remains untouched and undefined. The particle may reserve
+   capacity for dynamic emission or belong to another solver whose state must
+   not be modified.
 5. Invalid `DYNAMIC | KINEMATIC`: model-validation failure.
 6. Runtime transitions and coupled proxy variants.
 
@@ -407,13 +442,13 @@ Newton's no-breaking-change policy requires a staged transition.
 ### Release A: make intent explicit
 
 - Publish this contract.
-- Add `ParticleFlags.DYNAMIC`, `KINEMATIC`, and `FIXED`; retain `ACTIVE` as a
+- Add `ParticleFlags.DYNAMIC`, `KINEMATIC`, and `IGNORED`; retain `ACTIVE` as a
   deprecated alias of `DYNAMIC`.
 - Add common classification/effective-response helpers and the conformance
   suite.
-- Land the PR #3659 VBD baseline direction.
+- Adapt PR #3659 to use forward instead of backward integration.
 - Warn when a dynamic body or particle has zero mass. The warning must say how
-  to migrate: select `KINEMATIC`, select particle `FIXED`, or provide positive
+  to migrate: select `KINEMATIC`, select particle `IGNORED`, or provide positive
   inertial data.
 - Keep legacy unflagged zero-mass particle behavior temporarily, clearly marked
   solver-dependent and deprecated. Explicit `KINEMATIC` uses the new contract
@@ -425,7 +460,7 @@ Newton's no-breaking-change policy requires a staged transition.
 ### Release B: remove mass-as-motion behavior
 
 - Reject zero-mass dynamic entities at finalization.
-- Remove all zero-mass-to-fixed/kinematic compatibility branches.
+- Remove all zero-mass motion-mode compatibility branches.
 - Stop accepting direct inverse-mass edits as a motion control.
 - Remove `ParticleFlags.ACTIVE` after its advertised deprecation period, or keep
   it indefinitely as a documented alias if serialization compatibility is more
@@ -444,21 +479,21 @@ After:
 
 ```python
 p = builder.add_particle(
-    pos=x_target,
-    vel=v_target,
+    pos=x_initial,
+    vel=wp.vec3(0.0, 0.0, 0.0),
     mass=0.0,
     flags=newton.ParticleFlags.KINEMATIC,
 )
 
-# Before every collision/step, author both fields at substep cadence.
-state.particle_q[p] = x_target
-state.particle_qd[p] = v_target
+# Before every collision/step, author velocity at substep cadence.
+state.particle_qd[p] = (x_target - state.particle_q[p]) / dt
 ```
 
-For a fixed cloth pin:
+For a stationary cloth pin:
 
 ```python
-builder.particle_flags[p] = int(newton.ParticleFlags.FIXED)
+builder.particle_flags[p] = int(newton.ParticleFlags.KINEMATIC)
+state.particle_qd[p] = wp.vec3(0.0, 0.0, 0.0)
 ```
 
 For a rigid body, migrate `mass=0` intent to the existing flag:
@@ -491,7 +526,7 @@ The semantic cleanup is complete when:
   kinematic;
 - all accepted solvers pass the same ownership/contact conformance tests;
 - explicit rigid and particle kinematics produce mass-independent results;
-- dynamic zero mass is rejected after deprecation;
+- zero-mass dynamic entities are rejected after deprecation;
 - arbitrary-link kinematic models are accepted by capable solvers and rejected
   explicitly by incapable ones;
 - VBD teleports no longer generate inferred velocity/friction, while consistent
@@ -502,6 +537,6 @@ The semantic cleanup is complete when:
 
 Adopt this contract before adding more solver-specific fixes. PR #3659 is the
 right VBD implementation direction, but it should land as one part of the
-cross-solver contract: explicit flag ownership, authored pose plus authored
-velocity, no kinematic velocity integration, per-step VBD baselines, explicit
-particle motion flags, mass validation, and a shared conformance suite.
+cross-solver contract: explicit flag ownership, forward-integrated kinematic
+poses with copied-through velocities, per-step VBD baselines, explicit particle
+motion flags, mass validation, and a shared conformance suite.
